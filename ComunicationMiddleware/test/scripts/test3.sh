@@ -1,7 +1,16 @@
 #!/bin/bash
 ./docker-compose-generator.sh --p 2 --s 2
 ./run_test.sh  &
-sleep 30
+
+#Espero a que levante al container
+while ! [[ $(docker ps --filter "name=comunicationmiddleware-subscriber1-1" -q) ]]; do
+    sleep 1
+done
+
+#Espero a que termine el container 1
+while [[ $(docker ps --filter "name=comunicationmiddleware-subscriber1-1" -q) ]]; do
+    sleep 1
+done
 
 echo 
 echo ---------------test multiple subscriber miltiple publisher---------------
