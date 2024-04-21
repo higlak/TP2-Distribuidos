@@ -1,6 +1,8 @@
 import pika
 import time
 
+import pika.exceptions
+
 QUEUE_NAME_POSITION = 0
 GENERATOR_POSITION = 1
 
@@ -12,8 +14,14 @@ class SubscribersQueues():
         self.subscribers[exchange_name] = (queue_name, generator)
 
     def recv_from(self, exchange_name):
-        _method_frame, _header_frame, body = next(self.subscribers[exchange_name][GENERATOR_POSITION])
-        return body
+        try:
+            _method_frame, _header_frame, body = next(self.subscribers[exchange_name][GENERATOR_POSITION])
+            return body
+        except (pika.exceptions.ChannelClosed, 
+                pika.exceptions.ChannelClosedByBroker,
+                pika.exceptions.ChannelClosedByClient):
+            print ("se cerro")
+            return None
     
     def get_queue_name(self, exchange_name):
         return self.subscribers.get(exchange_name,(None, None))[QUEUE_NAME_POSITION]
@@ -43,15 +51,12 @@ class Communicator():
         if not exchange_name in self.publisher_exchange_names:
             self.set_publisher_exchange(exchange_name)
         self.channel.basic_publish(exchange=exchange_name, routing_key='', body=message)
-        print(" [x] Sent %r" % message)
-        time.sleep(1)
 
     def receive_subscribed_message(self, exchange_name):
         if not self.subscribers_queues.get_queue_name(exchange_name):
             self.set_subscriber_queue(exchange_name)
             
         message = self.subscribers_queues.recv_from(exchange_name)
-        print("Received message: ", message)
 
         return message
     

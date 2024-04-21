@@ -7,17 +7,31 @@ services:
     ports:
       - 15672:15672
 
-  publisher:
+  publisher1:
     build:
       context: ./
       dockerfile: test/publisher/publisher.dockerfile
     restart: on-failure
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PUBLISHER_ID=1
     depends_on:
       - rabbitmq
     links: 
       - rabbitmq
+
+  publisher2:
+    build:
+      context: ./
+      dockerfile: test/publisher/publisher.dockerfile
+    restart: on-failure
     environment:
       - PYTHONUNBUFFERED=1
+      - PUBLISHER_ID=2
+    depends_on:
+      - rabbitmq
+    links: 
+      - rabbitmq
 
   subscriber1:
     build:

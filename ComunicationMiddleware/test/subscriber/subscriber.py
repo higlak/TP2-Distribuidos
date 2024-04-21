@@ -8,6 +8,7 @@ from middleware import Communicator
 time.sleep(10)
 
 communicator = Communicator()
-message = communicator.receive_subscribed_message('prueba')
-print(message)
+for i in range(10):
+    message = communicator.receive_subscribed_message('prueba')
+    print("", message.decode('utf-8'))
 communicator.close_connection()
