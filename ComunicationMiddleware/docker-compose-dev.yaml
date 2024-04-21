@@ -1,0 +1,46 @@
+version: '3'
+services:
+  rabbitmq:
+    build:
+      context: ./test/rabbitmq
+      dockerfile: rabbitmq.dockerfile
+    ports:
+      - 15672:15672
+
+  publisher:
+    build:
+      context: ./
+      dockerfile: test/publisher/publisher.dockerfile
+    restart: on-failure
+    depends_on:
+      - rabbitmq
+    links: 
+      - rabbitmq
+    environment:
+      - PYTHONUNBUFFERED=1
+
+  subscriber1:
+    build:
+      context: ./
+      dockerfile: test/subscriber/subscriber.dockerfile
+    restart: on-failure
+    depends_on:
+      - rabbitmq
+    links: 
+      - rabbitmq
+    environment:
+      - PYTHONUNBUFFERED=1
+      - SUBSCRIBER_ID=1
+
+  subscriber2:
+    build:
+      context: ./
+      dockerfile: test/subscriber/subscriber.dockerfile
+    restart: on-failure
+    depends_on:
+      - rabbitmq
+    links: 
+      - rabbitmq
+    environment:
+      - PYTHONUNBUFFERED=1
+      - SUBSCRIBER_ID=2

@@ -1,16 +1,13 @@
 #!/usr/bin/env python3
-import pika
 import time
 
-connection = pika.BlockingConnection(
-    pika.ConnectionParameters(host='rabbitmq'))
-channel = connection.channel()
+from middleware import Communicator
 
-channel.queue_declare(queue='hello')
+# Wait for rabbitmq to come up
+time.sleep(10)
 
-for i in range(1):
-    channel.basic_publish(exchange='', routing_key='hello', body='Hello World {}!'.format(i))
-    print(" [x] Sent 'Hello World {}!'".format(i))
-    time.sleep(1)
-
-connection.close()
+communicator = Communicator()
+message = "Hola"
+print(" [x] Sent %r" % message)
+communicator.publish_message('prueba', message)
+communicator.close_connection()

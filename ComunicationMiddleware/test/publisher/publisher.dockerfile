@@ -4,5 +4,7 @@ FROM rabbitmq:latest
 RUN apt-get update && apt-get install -y python3
 RUN apt-get update && apt-get install -y python3-pika
 
-COPY publisher.py /root/publisher.py
+COPY test/publisher/publisher.py /root/publisher.py
+COPY middleware.py /root/middleware.py
+
 CMD /root/publisher.py

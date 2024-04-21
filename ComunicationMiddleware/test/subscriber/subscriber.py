@@ -1,19 +1,13 @@
 #!/usr/bin/env python3
-import pika
 import time
+import sys
 
-connection = pika.BlockingConnection(
-    pika.ConnectionParameters(host='rabbitmq'))
+from middleware import Communicator
 
-channel = connection.channel()
-channel.queue_declare(queue='hello')
+# Wait for rabbitmq to come up
+time.sleep(10)
 
-
-def callback(ch, method, properties, body):
-    print(" [x] Received %r" % body)
-
-channel.basic_consume(
-    queue='hello', on_message_callback=callback, auto_ack=True)
-
-print(' [*] Waiting for messages. To exit press CTRL+C')
-channel.start_consuming()
+communicator = Communicator()
+message = communicator.receive_subscribed_message('prueba')
+print(message)
+communicator.close_connection()
