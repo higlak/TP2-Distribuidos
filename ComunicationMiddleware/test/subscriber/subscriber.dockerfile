@@ -7,5 +7,4 @@ RUN apt-get update && apt-get install -y python3-pika
 COPY test/subscriber/subscriber.py /root/subscriber.py
 COPY ../../middleware.py /root/middleware.py
 
-CMD /root/subscriber.py 
-#> /out.txt
+CMD /root/subscriber.py > /out.txt

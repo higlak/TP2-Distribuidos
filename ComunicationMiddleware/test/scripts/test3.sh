@@ -3,12 +3,12 @@
 ./run_test.sh  &
 
 #Espero a que levante al container
-while ! [[ $(docker ps --filter "name=comunicationmiddleware-subscriber1-1" -q) ]]; do
+while ! [[ $(docker ps --filter "name=comunicationmiddleware-publisher1-1" -q) ]]; do
     sleep 1
 done
 
 #Espero a que termine el container 1
-while [[ $(docker ps --filter "name=comunicationmiddleware-subscriber1-1" -q) ]]; do
+while [[ $(docker ps --filter "name=comunicationmiddleware-publisher1-1" -q) ]]; do
     sleep 1
 done
 
@@ -17,22 +17,30 @@ echo ---------------test multiple subscriber miltiple publisher---------------
 echo
 
 docker cp comunicationmiddleware-subscriber1-1:/out.txt ./test/scripts/out1.txt
-if cmp -s "./test/scripts/out1.txt" "./test/scripts/expected_out_test2.txt"; then
-    echo -e "\e[32mSe recibio correctamente en el subsccriber1\e[0m"
+if cmp -s "./test/scripts/out1.txt" "./test/scripts/expected_out_2_publishers.txt"; then
+    echo
+    echo -e "\e[32mSe recibio correctamente en el subscriber1\e[0m"
 else
-    echo -e "\e[31mFallo la recepcion en el subsccriber1\e[0m"
-    diff "./test/scripts/out1.txt" "./test/scripts/expected_out_test2.txt"
+    echo
+    echo -e "\e[31mFallo la recepcion en el subscriber1\e[0m"
+    diff "./test/scripts/out1.txt" "./test/scripts/expected_out_2_publishers.txt"
 fi
 
 docker cp comunicationmiddleware-subscriber2-1:/out.txt ./test/scripts/out2.txt
-if cmp -s "./test/scripts/out2.txt" "./test/scripts/expected_out_test2.txt"; then
-    echo -e "\e[32mSe recibio correctamente en el subsccriber2\e[0m"
+if cmp -s "./test/scripts/out2.txt" "./test/scripts/expected_out_2_publishers.txt"; then
+    echo
+    echo -e "\e[32mSe recibio correctamente en el subscriber2\e[0m"
 else
+    echo
     echo -e "\e[31mFallo la recepcion en el subsccriber2\e[0m"
-    diff "./test/scripts/out2.txt" "./test/scripts/expected_out_test2.txt"
+    diff "./test/scripts/out2.txt" "./test/scripts/expected_out_2_publishers.txt"
 fi
 
-sleep 10
+echo
+echo
+echo "Para finalizar el test presione enter"
+read
+
 rm ./test/scripts/out1.txt
 rm ./test/scripts/out2.txt
 

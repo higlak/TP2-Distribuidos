@@ -45,3 +45,16 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - SUBSCRIBER_ID=2
+
+  subscriber3:
+    build:
+      context: ./
+      dockerfile: test/subscriber/subscriber.dockerfile
+    restart: on-failure
+    depends_on:
+      - rabbitmq
+    links: 
+      - rabbitmq
+    environment:
+      - PYTHONUNBUFFERED=1
+      - SUBSCRIBER_ID=3

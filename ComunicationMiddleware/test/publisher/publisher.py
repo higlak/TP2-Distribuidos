@@ -1,20 +1,29 @@
 #!/usr/bin/env python3
-import random
 import time
 
 from middleware import Communicator
 
+TEST_MESSAGE = 'prueba'
+ROUTING_KEY = '3'
+SLEEP_TIME = 0.5
+N = 10
+
 # Wait for rabbitmq to come up
 time.sleep(15)
 
-communicator = Communicator()
-for i in range(10):
-    #message = "{}".format(random.randint(1,11))
-    message1 = f"{i}"
-    message2 = f"{i*2}"
-    communicator.publish_message('prueba', message1, '1')
-    communicator.publish_message('prueba', message2, '2')
-    print(" [x] Sent %r" % message1)
-    print(" [x] Sent %r" % message2)
-    time.sleep(1)
-communicator.close_connection()
+# This publisher sends numbers from 0 to 9 to subscribers with default routing key
+# and sends even numbers from 0 to 18 to subscribers with routing key = 3
+def main():
+    communicator = Communicator()
+    for i in range(N):
+        message1 = f"{i}"
+        message2 = f"{i*2}"
+        communicator.publish_message(TEST_MESSAGE, message1)
+        communicator.publish_message(TEST_MESSAGE, message2, ROUTING_KEY)
+        print("Sent: ", message1)
+        print("Sent: ", message2)
+        time.sleep(SLEEP_TIME)
+    communicator.close_connection()
+
+main()
+
