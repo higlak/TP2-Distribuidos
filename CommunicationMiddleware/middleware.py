@@ -28,13 +28,13 @@ class SubscribersQueues():
         return self.subscribers.get((exchange_name, routing_key),(None, None))[QUEUE_NAME_POSITION]
 
 class Communicator():
-    def __init__(self, prefetch_count=1):
+    def __init__(self, prefetch_count=1, routing_keys=[]):
         self.subscribers_queues = SubscribersQueues()
         self.publisher_exchange_names = set()
-
         self.connection = pika.BlockingConnection(pika.ConnectionParameters(host='rabbitmq'))
         self.channel = self.connection.channel()
         self.channel.basic_qos(prefetch_count=prefetch_count)
+        self.routing_key_iterator = RoutingKeyIterator(routing_keys)
 
     def set_publisher_exchange(self, exchange_name):
         self.channel.exchange_declare(exchange=exchange_name, exchange_type='direct')
@@ -53,6 +53,10 @@ class Communicator():
             self.set_publisher_exchange(exchange_name)
         self.channel.basic_publish(exchange=exchange_name, routing_key=routing_key, body=message)
 
+    def publish_message_next_routing_key(self, exchange_name, message):
+        routing_key = self.routing_key_iterator.next()
+        self.publish_message(exchange_name, message, routing_key)
+
     def receive_subscribed_message(self, exchange_name, routing_key=''):
         if not self.subscribers_queues.get_queue_name(exchange_name, routing_key):
             self.set_subscriber_queue(exchange_name, routing_key)
@@ -61,5 +65,22 @@ class Communicator():
 
         return message
     
+    
+
     def close_connection(self):
         self.channel.close()
+
+class RoutingKeyIterator():
+    def __init__(self, list):
+        if len(list) == 0:
+            return None
+        self.routing_keys = list
+        self.actual = 0
+        
+
+    def next(self):
+        routing_key = self.routing_keys[self.actual % len(self.routing_keys)]
+        self.actual += 1
+        return routing_key
+    
+        
