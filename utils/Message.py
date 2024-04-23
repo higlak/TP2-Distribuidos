@@ -1,77 +1,269 @@
 from Date import *
 from big_endian_conversion import *
 import struct
+import unittest
+from unittest import TestCase
 
 BOOK_MSG_TYPE = 0
 REVIEW_MSG_TYPE = 1
 
 SEPARATOR = ","
+MSG_TYPE_BYTES = 1
 TITLE_LEN_BYTES = 2
 AUTHORS_LEN_BYTES = 2
 PUBLISHER_LEN_BYTES = 1
-CATEGORY_LEN_BYTES = 2
+CATEGORIES_LEN_BYTES = 2
+REVIEW_TEXT_LEN_BYTES = 2
 YEAR_BYTES = 2
 RATING_BYTES = 2
 MSP_BYTES = 4
+
 
 TITLE_POSITION = 0
 AUTHOR_POSITION = TITLE_POSITION + TITLE_LEN_BYTES
 PUBLISHER_POSITION = AUTHOR_POSITION + AUTHORS_LEN_BYTES
 CATEGORY_POSITION = PUBLISHER_POSITION + PUBLISHER_LEN_BYTES
-YEAR_POSITION = CATEGORY_POSITION + CATEGORY_LEN_BYTES
+YEAR_POSITION = CATEGORY_POSITION + CATEGORIES_LEN_BYTES
 RATING_POSITION = YEAR_POSITION + YEAR_BYTES
 MSP_POSITION = RATING_POSITION + RATING_BYTES
 HEADER_LEN = MSP_POSITION + MSP_BYTES
 
-
-class BookMessage():
-    def __init__(self, title="", authors=[], publisher="", categories=[], year=None, rating=None, mean_sentiment_polarity= None):
-        self.msg_type = BOOK_MSG_TYPE
+class Message():
+    def __init__(self, msg_type, year=None, rating=None, mean_sentiment_polarity= None, title=None, authors=None, publisher=None, categories=None, review_text=None):
+        self.msg_type = msg_type
+        self.year = year
+        self.rating = rating
+        self.mean_sentiment_polarity = mean_sentiment_polarity
         self.title= title
         self.authors = authors
         self.publisher = publisher
         self.categories = categories
-        self.year = year
-        self.rating = rating
-        self.mean_sentiment_polarity = mean_sentiment_polarity
-
+        self.review_text = review_text
+        
     @classmethod
-    def from_bytes(self, bytes):
-        title_len = byte_array_to_big_endian_integer(bytes[:AUTHOR_POSITION])
-        authors_len = byte_array_to_big_endian_integer(bytes[AUTHOR_POSITION:PUBLISHER_POSITION])
-        publisher_len = byte_array_to_big_endian_integer(bytes[PUBLISHER_POSITION:CATEGORY_POSITION])
-        category_len = byte_array_to_big_endian_integer(bytes[CATEGORY_POSITION:YEAR_POSITION])
-        year = byte_array_to_big_endian_integer(bytes[YEAR_POSITION:HEADER_LEN])
-        rating = byte_array_to_big_endian_integer(bytes[RATING_POSITION:MSP_POSITION])
-        msp = struct.unpack('f',bytes[MSP_POSITION:HEADER_LEN])[0]
-        bytes:bytearray = bytes[HEADER_LEN:]
-        title = bytes[:title_len].decode()
-        bytes:bytearray = bytes[title_len:]
-        authors = bytes[:authors_len].decode().split(SEPARATOR)
-        bytes:bytearray = bytes[authors_len:]
-        publisher = bytes[:publisher_len].decode()
-        bytes:bytearray = bytes[publisher_len:]
-        categories = bytes[:category_len].decode().split(SEPARATOR)
-        return BookMessage(title, 
-                                  authors, 
-                                  publisher,
-                                  categories,
-                                  year,
-                                  rating,
-                                  msp) 
+    def from_bytes(self, byte_array):
+        msg_type = byte_array[0]
+        generator = ParametersGenerator(byte_array[MSG_TYPE_BYTES:])
+        
+        year = generator.next()
+        rating = generator.next()
+        msp = generator.next()
+        title = generator.next()
+        authors = generator.next()
+        publisher = generator.next()
+        categories = generator.next()
+        review_text = generator.next()
+        
+        return Message(msg_type, year, rating, msp, title, authors, publisher, categories, review_text) 
+    
+    def fields_to_list(self):
+        return [self.year, self.rating, self.mean_sentiment_polarity, self.title, self.authors, self.publisher, self.categories, self.review_text]
     
     def to_bytes(self):
-        author_str = f"{SEPARATOR}".join(self.authors)
-        categories_str = f"{SEPARATOR}".join(self.categories)
-        bytes = bytearray()
-        bytes.extend(integer_to_big_endian_byte_array(len(self.title),TITLE_LEN_BYTES))
-        bytes.extend(integer_to_big_endian_byte_array(len(author_str),AUTHORS_LEN_BYTES))
-        bytes.extend(integer_to_big_endian_byte_array(len(self.publisher),PUBLISHER_LEN_BYTES))
-        bytes.extend(integer_to_big_endian_byte_array(len(self.categories),CATEGORY_LEN_BYTES))
-        bytes.extend(integer_to_big_endian_byte_array(self.year, YEAR_BYTES))
-        bytes.extend(integer_to_big_endian_byte_array(self.rating, RATING_BYTES))
-        bytes.extend(struct.pack('f',self.mean_sentiment_polarity))
-        bytes.extend(self.title)
-        bytes.extend(author_str)
-        bytes.extend(self.publisher)
-        bytes.extend(categories_str)
+        byte_array = bytearray([self.msg_type])
+        
+        byte_array.append(self.parameters_to_bytes())
+        byte_array.extend(self.fixed_fields_to_bytes()) 
+        byte_array.extend(self.variable_fields_to_bytes())
+        byte_array.extend(self.variable_len_fields_values_to_bytes())
+       
+        return byte_array
+    
+    def parameters_to_bytes(self):
+        parameters = 0b0
+        mask = 0b1
+        for parameter in self.fields_to_list():
+            if parameter:
+                parameters = parameters | mask
+            mask = mask << 1
+        return parameters
+
+    def fixed_fields_to_bytes(self):
+        byte_array = bytearray()
+        byte_array.extend(integer_to_big_endian_byte_array(self.year, YEAR_BYTES))
+        byte_array.extend(integer_to_big_endian_byte_array(self.rating, RATING_BYTES))
+        if self.mean_sentiment_polarity:
+            byte_array.extend(struct.pack('f',self.mean_sentiment_polarity))
+        return byte_array
+    
+    def variable_fields_to_bytes(self):
+        byte_array = bytearray()
+        byte_array.extend(integer_to_big_endian_byte_array(length(self.title), TITLE_LEN_BYTES))
+
+        if self.authors:
+            authors_str = f"{SEPARATOR}".join(self.authors)
+            byte_array.extend(integer_to_big_endian_byte_array(length(authors_str), AUTHORS_LEN_BYTES))
+        byte_array.extend(integer_to_big_endian_byte_array(length(self.publisher), PUBLISHER_LEN_BYTES))
+        if self.categories:
+            categories_str = f"{SEPARATOR}".join(self.categories)
+            byte_array.extend(integer_to_big_endian_byte_array(length(categories_str), CATEGORIES_LEN_BYTES))
+        byte_array.extend(integer_to_big_endian_byte_array(length(self.review_text), REVIEW_TEXT_LEN_BYTES))
+        return byte_array
+    
+    def variable_len_fields_values_to_bytes(self):
+        byte_array = bytearray()
+        if self.title:
+            byte_array.extend(self.title.encode())
+        if self.authors:
+            authors_str = f"{SEPARATOR}".join(self.authors)
+            byte_array.extend(authors_str.encode())
+        if self.publisher:
+            byte_array.extend(self.publisher.encode())
+        if self.categories:
+            categories_str = f"{SEPARATOR}".join(self.categories)
+            byte_array.extend(categories_str.encode())
+        if self.review_text:
+            byte_array.extend(self.review_text.encode())  
+        return byte_array
+    
+class ParametersGenerator():
+    def __init__(self, byte_array):
+        self.parameters = byte_array[0]
+        self.byte_array = byte_array[1:]
+        self.interprete_later = []
+        self.generator = self.loop()
+
+    def next(self):
+        return next(self.generator)
+
+    def loop(self):
+        mask = 0b1
+        
+        # handle fix length fields: year, rating and mean sentiment polarity 
+        for _ in range(3):
+            parameter = self.parameters & mask
+            if parameter:
+                yield self.interprete(parameter)
+            else:
+                yield None 
+            mask = mask << 1
+
+        # handle variable length fields: title, authors, publisher, categories and review text
+        for _ in range(5):
+            parameter = self.parameters & mask
+            if parameter:
+                self.interprete(parameter)
+            else:
+                self.interprete_later.append((None, None))
+            mask = mask << 1
+        
+        # handle variable length fields values
+        for (length, method) in self.interprete_later:
+            if not length:
+                yield None
+            else:
+                yield method(length)
+    
+    def interprete(self, parameter):
+        switch = {
+            0b1: self.interprete_year, 
+            0b10: self.interprete_rating,
+            0b100: self.interprete_mean_sentiment_polarity,
+            0b1000: self.interprete_len_title,
+            0b10000: self.interprete_len_authors,
+            0b100000: self.interprete_len_publisher,
+            0b1000000: self.interprete_len_categories,
+            0b10000000: self.interprete_len_review_text,
+        }
+        method = switch.get(parameter, None)
+        if not method:
+            return None
+        return method()
+
+    def interprete_big_endian_integer(self, end):
+        length = byte_array_to_big_endian_integer(self.byte_array[:end])
+        self.byte_array = self.byte_array[end:]
+        return length
+
+    def interprete_year(self):
+        return self.interprete_big_endian_integer(YEAR_BYTES)
+    
+    def interprete_rating(self):
+        return self.interprete_big_endian_integer(RATING_BYTES)
+
+    def interprete_mean_sentiment_polarity(self):
+        msp = struct.unpack('f',self.byte_array[:MSP_BYTES])[0]
+        self.byte_array = self.byte_array[MSP_BYTES:] 
+        return msp
+    
+    def interprete_variable_field(self, len_bytes, later_method):
+        length = self.interprete_big_endian_integer(len_bytes)
+        self.interprete_later.append((length, later_method))
+        return length
+    
+    def interprete_len_title(self):
+        return self.interprete_variable_field(TITLE_LEN_BYTES, self.interprete_string)
+
+    def interprete_len_authors(self):
+        return self.interprete_variable_field(AUTHORS_LEN_BYTES, self.interprete_list)
+
+    def interprete_len_publisher(self):
+        return self.interprete_variable_field(PUBLISHER_LEN_BYTES, self.interprete_string)
+
+    def interprete_len_categories(self):
+        return self.interprete_variable_field(CATEGORIES_LEN_BYTES, self.interprete_list)
+
+    def interprete_len_review_text(self):
+        return self.interprete_variable_field(REVIEW_TEXT_LEN_BYTES, self.interprete_string)
+       
+    def interprete_string(self, length):
+        text = self.byte_array[:length].decode()
+        self.byte_array = self.byte_array[length:]        
+        return text
+    
+    def interprete_list(self, length):
+        list = self.byte_array[:length].decode().split(SEPARATOR)
+        self.byte_array = self.byte_array[length:]  
+        return list
+
+def length(iterable):
+    """
+    Receives and iterable and returns its length
+    If fails, returns None
+    """
+    try:
+        return len(iterable)
+    except:
+        return None
+        
+class TestMessage(TestCase):
+    def test_book_message_to_bytes(self):
+        # Message = [year:1990, rating: None, msp: 0,8, titulo:'titulo', authors:['autor1, autor2'], publisher: None, categories: None, review_text:'review del texto']
+
+        byte_array = bytearray([BOOK_MSG_TYPE])
+        byte_array.append(0b10011101)
+        byte_array.extend(integer_to_big_endian_byte_array(1990, 2))
+        byte_array.extend(struct.pack('f',0.8))
+        byte_array.extend(integer_to_big_endian_byte_array(len('titulo'), TITLE_LEN_BYTES))
+        authors_text = 'autor1'+SEPARATOR+'autor2'
+        byte_array.extend(integer_to_big_endian_byte_array(len(authors_text), AUTHORS_LEN_BYTES))
+        byte_array.extend(integer_to_big_endian_byte_array(len('review del texto'), REVIEW_TEXT_LEN_BYTES))
+        byte_array.extend('titulo'.encode())
+        byte_array.extend(authors_text.encode())
+        byte_array.extend('review del texto'.encode())
+        return byte_array
+
+    def test_empty_message_to_bytes(self):
+        msg = Message(BOOK_MSG_TYPE)
+        msg_bytes = msg.to_bytes()
+        expected = bytearray([BOOK_MSG_TYPE, 0b0])
+        self.assertEqual(msg_bytes, expected)
+
+    def test_message_to_bytes(self):
+        expected_bytes = self.test_book_message_to_bytes()
+        msg = Message(BOOK_MSG_TYPE, 
+                      year=1990, 
+                      mean_sentiment_polarity=0.8, 
+                      title='titulo', 
+                      authors=['autor1', 'autor2'], 
+                      review_text='review del texto')
+        msg_bytes = msg.to_bytes()
+        self.assertEqual(msg_bytes, expected_bytes)
+
+    def test_message_from_bytes(self):
+        msg_bytes = self.test_book_message_to_bytes()
+        msg = Message.from_bytes(msg_bytes)
+        self.assertEqual(msg.to_bytes(), msg_bytes)
+
+if __name__ == '__main__':
+    unittest.main()

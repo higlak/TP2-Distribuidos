@@ -6,7 +6,8 @@ def byte_array_to_big_endian_integer(bytes):
 
 def integer_to_big_endian_byte_array(number, amount_of_bytes):
     byte_array = bytearray()
-    for i in range(amount_of_bytes):
-        byte = (number >> (8 * (amount_of_bytes-i-1))) & 0xff
-        byte_array.append(byte)
+    if number:
+        for i in range(amount_of_bytes):
+            byte = (number >> (8 * (amount_of_bytes-i-1))) & 0xff
+            byte_array.append(byte)
     return byte_array
