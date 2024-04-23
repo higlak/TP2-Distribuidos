@@ -18,15 +18,15 @@ YEAR_BYTES = 2
 RATING_BYTES = 2
 MSP_BYTES = 4
 
-
-TITLE_POSITION = 0
-AUTHOR_POSITION = TITLE_POSITION + TITLE_LEN_BYTES
-PUBLISHER_POSITION = AUTHOR_POSITION + AUTHORS_LEN_BYTES
-CATEGORY_POSITION = PUBLISHER_POSITION + PUBLISHER_LEN_BYTES
-YEAR_POSITION = CATEGORY_POSITION + CATEGORIES_LEN_BYTES
-RATING_POSITION = YEAR_POSITION + YEAR_BYTES
-MSP_POSITION = RATING_POSITION + RATING_BYTES
-HEADER_LEN = MSP_POSITION + MSP_BYTES
+MSG_TYPE_FIELD = 'msg_type' 
+YEAR_FIELD = 'year'
+RATING_FIELD = 'rating'
+MSP_FIELD = 'mean_sentiment_polarity'
+TITLE_FIELD = 'title'
+AUTHOR_FIELD = 'authors'
+PUBLISHER_FIELD = 'publisher'
+CATEGORIES_FIELD = 'categories'
+REVIEW_TEXT_FIELD = 'review_text'
 
 class Message():
     def __init__(self, msg_type, year=None, rating=None, mean_sentiment_polarity= None, title=None, authors=None, publisher=None, categories=None, review_text=None):
@@ -116,6 +116,18 @@ class Message():
             byte_array.extend(self.review_text.encode())  
         return byte_array
     
+    def contains_category(self, category):
+        return category in self.categories
+    
+    def copy_droping_fields(self, fields_to_drop):
+        fields = vars(self)
+        for field_to_drop in fields_to_drop:
+            fields[field_to_drop] = None
+        return Message(**fields)
+    
+    def __eq__(self, other):
+        return self.fields_to_list() == other.fields_to_list()
+
 class ParametersGenerator():
     def __init__(self, byte_array):
         self.parameters = byte_array[0]
