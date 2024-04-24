@@ -1,5 +1,5 @@
-from Date import *
-from big_endian_conversion import *
+from utils.Date import Date
+from utils.big_endian_conversion import *
 import struct
 import unittest
 from unittest import TestCase
@@ -42,8 +42,8 @@ class Message():
         
     @classmethod
     def from_bytes(self, byte_array):
-        msg_type = byte_array[0]
-        generator = ParametersGenerator(byte_array[MSG_TYPE_BYTES:])
+        msg_type = remove_bytes(byte_array, 1)[0]
+        generator = ParametersGenerator(byte_array)
         
         year = generator.next()
         rating = generator.next()
@@ -117,6 +117,8 @@ class Message():
         return byte_array
     
     def contains_category(self, category):
+        if not self.categories:
+            return False 
         return category in self.categories
     
     def copy_droping_fields(self, fields_to_drop):
@@ -130,8 +132,8 @@ class Message():
 
 class ParametersGenerator():
     def __init__(self, byte_array):
-        self.parameters = byte_array[0]
-        self.byte_array = byte_array[1:]
+        self.parameters = remove_bytes(byte_array,1)[0]
+        self.byte_array = byte_array
         self.interprete_later = []
         self.generator = self.loop()
 
@@ -183,8 +185,7 @@ class ParametersGenerator():
         return method()
 
     def interprete_big_endian_integer(self, end):
-        length = byte_array_to_big_endian_integer(self.byte_array[:end])
-        self.byte_array = self.byte_array[end:]
+        length = byte_array_to_big_endian_integer(self.remove_bytes(end))
         return length
 
     def interprete_year(self):
@@ -194,8 +195,7 @@ class ParametersGenerator():
         return self.interprete_big_endian_integer(RATING_BYTES)
 
     def interprete_mean_sentiment_polarity(self):
-        msp = struct.unpack('f',self.byte_array[:MSP_BYTES])[0]
-        self.byte_array = self.byte_array[MSP_BYTES:] 
+        msp = struct.unpack('f',self.remove_bytes(MSP_BYTES))[0]
         return msp
     
     def interprete_variable_field(self, len_bytes, later_method):
@@ -219,14 +219,15 @@ class ParametersGenerator():
         return self.interprete_variable_field(REVIEW_TEXT_LEN_BYTES, self.interprete_string)
        
     def interprete_string(self, length):
-        text = self.byte_array[:length].decode()
-        self.byte_array = self.byte_array[length:]        
+        text = self.remove_bytes(length).decode()        
         return text
     
     def interprete_list(self, length):
-        list = self.byte_array[:length].decode().split(SEPARATOR)
-        self.byte_array = self.byte_array[length:]  
+        list = self.remove_bytes(length).decode().split(SEPARATOR)  
         return list
+
+    def remove_bytes(self, finish, start=0):
+        return remove_bytes(self.byte_array, finish, start)
 
 def length(iterable):
     """
@@ -238,6 +239,11 @@ def length(iterable):
     except:
         return None
         
+def remove_bytes(array, finish, start=0):
+    elements = array[start:finish]
+    del array[start:finish]
+    return elements
+
 class TestMessage(TestCase):
     def test_book_message_to_bytes(self):
         # Message = [year:1990, rating: None, msp: 0,8, titulo:'titulo', authors:['autor1, autor2'], publisher: None, categories: None, review_text:'review del texto']
@@ -275,7 +281,13 @@ class TestMessage(TestCase):
     def test_message_from_bytes(self):
         msg_bytes = self.test_book_message_to_bytes()
         msg = Message.from_bytes(msg_bytes)
-        self.assertEqual(msg.to_bytes(), msg_bytes)
+        self.assertEqual(msg.to_bytes(), self.test_book_message_to_bytes())
+        self.assertEqual(len(msg_bytes), 0)
+
+    def test_copy_dropping_fields(self):
+        msg = Message(BOOK_MSG_TYPE, year=1990, title='titulo')
+        expected_msg = Message(BOOK_MSG_TYPE, year=1990)
+        self.assertEqual(msg.copy_droping_fields([TITLE_FIELD]), expected_msg)
 
 if __name__ == '__main__':
     unittest.main()

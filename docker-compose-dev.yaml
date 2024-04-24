@@ -1,0 +1,45 @@
+version: '3'
+services:
+  rabbitmq:
+    build:
+      context: ./rabbitmq
+      dockerfile: rabbitmq.dockerfile
+    ports:
+      - 15672:15672
+
+  category_filter1:
+    build:
+      context: ./
+      dockerfile: CategoryFilter/CategoryFilter.dockerfile
+    depends_on:
+      - rabbitmq
+    links: 
+      - rabbitmq
+    environment:
+      - PYTHONUNBUFFERED=1
+      - WORKER_ID=1.1.1
+      - NEXT_POOL_WORKERS=1
+
+  category_filter2:
+    build:
+      context: ./
+      dockerfile: CategoryFilter/CategoryFilter.dockerfile
+    depends_on:
+      - rabbitmq
+    links: 
+      - rabbitmq
+    environment:
+      - PYTHONUNBUFFERED=1
+      - WORKER_ID=1.2.1
+      - NEXT_POOL_WORKERS=1
+
+  gateway:
+    build:
+      context: ./
+      dockerfile: Gateway/Gateway.dockerfile
+    depends_on:
+      - rabbitmq
+    links: 
+      - rabbitmq
+    environment:
+      - PYTHONUNBUFFERED=1

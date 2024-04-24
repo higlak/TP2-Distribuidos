@@ -1,5 +1,5 @@
-from big_endian_conversion import *
-from Message import Message
+from utils.big_endian_conversion import *
+from utils.Message import Message
 import unittest
 from unittest import TestCase
 
@@ -13,6 +13,8 @@ class Batch():
     @classmethod
     def from_bytes(cls, byte_array):
         amount_of_messages = byte_array[0]
+        if amount_of_messages == 0:
+            return Batch([])
         byte_array = byte_array[1:]
         messages = []
         for _ in range(amount_of_messages):
@@ -40,24 +42,35 @@ class Batch():
     def __next__(self):
         return next(self.messages)
             
-class TestMessage(TestCase):
-    def test_book_message(self):
+class TestBatch(TestCase):
+    def test_book_message1(self):
         return Message(BOOK_MSG_TYPE, 
                       year=1990, 
                       mean_sentiment_polarity=0.8, 
                       title='titulo', 
                       authors=['autor1', 'autor2'], 
                       review_text='review del texto')
+    
+    def test_book_message2(self):
+        return Message(BOOK_MSG_TYPE, title='tiutlante')
 
     def test_expected_batch_bytes(self):
         byte_array = bytearray([2])
-        byte_array.extend(self.test_book_message().to_bytes())
-        byte_array.extend(self.test_book_message().to_bytes())
+        byte_array.extend(self.test_book_message1().to_bytes())
+        byte_array.extend(self.test_book_message2().to_bytes())
         return byte_array
+
+    def test_empty_batch_to_bytes(self):
+        batch = Batch([])
+        self.assertEqual(batch.to_bytes(), bytearray([0]))
+
+    def test_empty_batch_from_bytes(self):
+        batch = Batch.from_bytes(bytearray([0]))
+        self.assertEqual(batch.to_bytes(), bytearray([0]))
         
     def test_batch_to_bytes(self):
         batch_bytes = self.test_expected_batch_bytes()
-        batch = Batch([self.test_book_message(), self.test_book_message()])
+        batch = Batch([self.test_book_message1(), self.test_book_message2()])
         self.assertEqual(batch.to_bytes(), batch_bytes)
 
     def test_batch_from_bytes(self):

@@ -1,8 +1,12 @@
 import os
-from CommunicationMiddleware.middleware import Communicator
+import sys 
+#sys.path.append("..")
+
 from abc import ABC, abstractmethod
-#from utils.Message import Message
-#from utils.Batch import Batch
+
+from CommunicationMiddleware.middleware import Communicator
+from utils.Batch import Batch
+from utils.Message import Message
 
 ID_SEPARATOR = '.'
 GATEWAY_EXCHANGE_NAME = 'GATEWAY_EXCHANGE'
@@ -14,8 +18,11 @@ class Worker_ID():
         self.routing_key = routing_key
     
     @classmethod
-    def from_env(env_var):
-        query, pool_id, id = os.getenv(env_var).split(ID_SEPARATOR)
+    def from_env(cls, env_var):
+        env_id = os.getenv(env_var)
+        if not env_id:
+            return None
+        query, pool_id, id = env_id.split(ID_SEPARATOR)
         return Worker_ID(query, pool_id, id)
 
     def get_query(self):
@@ -34,10 +41,13 @@ class Worker(ABC):
     def __init__(self):
         self.id = Worker_ID.from_env('WORKER_ID')
         self.next_pool_workers = os.getenv('NEXT_POOL_WORKERS')
+        if (not self.id) or (not self.next_pool_workers):
+            print("Missing env variables")
+            return None
 
         routing_keys = []
         for i in range(int(self.next_pool_workers)):
-            routing_keys.append(str(i))
+            routing_keys.append(str(i+1))
         self.communicator = Communicator(routing_keys=routing_keys)
 
     @abstractmethod
@@ -47,14 +57,17 @@ class Worker(ABC):
     def process_batch(self, batch):
         results = []
         for message in batch:
+            print(f"\n\nEs {message}\n\n")
             result = self.process_message(message)
             if result:
-                results.append()
+                results.append(result)
         return Batch(results)
     
     def receive_message(self):
         exchange_name = self.id.get_exchange_name()
         routing_key = self.id.get_routing_key()
+        print("Exchange_name: ", exchange_name)
+        print("routing_key: ", routing_key)
         return self.communicator.receive_subscribed_message(exchange_name, routing_key)
         
     def start(self):
@@ -66,13 +79,14 @@ class Worker(ABC):
             print(f"[Worker {self.id}] Received batch with {batch.size()} elements")
             
             if batch.is_empty():
-                self.send_message(batch)
+                self.send_message(batch.to_bytes())
+                print("Received Eof")
                 return    
             
-            result_batch = self.process_batch(batch_bytes)
+            result_batch = self.process_batch(batch)
             print(f"[Worker {self.id}] Message proccesed")
             if not result_batch.is_empty():
-                self.send_message(result_batch)
+                self.send_message(result_batch.to_bytes())
                 print(f"[Worker {self.id}] Message sending batch with {result_batch.size()}", )
 
     def send_message(self, message):

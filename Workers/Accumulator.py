@@ -1,4 +1,4 @@
-from Worker import Worker
+from Workers import Worker
 
 class Accumulator(Worker):
     def __init__(self):

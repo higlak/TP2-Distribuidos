@@ -63,7 +63,7 @@ class Communicator():
             
         message = self.subscribers_queues.recv_from(exchange_name, routing_key)
 
-        return message
+        return bytearray(message)
     
     
 
