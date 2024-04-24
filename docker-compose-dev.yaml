@@ -10,7 +10,7 @@ services:
   category_filter1:
     build:
       context: ./
-      dockerfile: CategoryFilter/CategoryFilter.dockerfile
+      dockerfile: Filter/Filter.dockerfile
     depends_on:
       - rabbitmq
     links: 
@@ -19,11 +19,13 @@ services:
       - PYTHONUNBUFFERED=1
       - WORKER_ID=1.1.1
       - NEXT_POOL_WORKERS=1
+      - FILTER_TYPE=categories
+      - FILTER_VALUE=fiction
 
   category_filter2:
     build:
       context: ./
-      dockerfile: CategoryFilter/CategoryFilter.dockerfile
+      dockerfile: Filter/Filter.dockerfile
     depends_on:
       - rabbitmq
     links: 
@@ -32,6 +34,8 @@ services:
       - PYTHONUNBUFFERED=1
       - WORKER_ID=1.2.1
       - NEXT_POOL_WORKERS=1
+      - FILTER_TYPE=year
+      - FILTER_VALUE=1990,1999
 
   gateway:
     build:

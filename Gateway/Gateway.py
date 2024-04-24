@@ -8,7 +8,7 @@ def main():
     com = Communicator(routing_keys=['1'])
     messages = []
     for i in range(10):
-        msg = Message(BOOK_MSG_TYPE, title=str(i))
+        msg = Message(BOOK_MSG_TYPE, title=str(i), year=1995+i)
         if i%2:
             msg.categories = ['fiction']  
         messages.append(msg)

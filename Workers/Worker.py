@@ -57,7 +57,6 @@ class Worker(ABC):
     def process_batch(self, batch):
         results = []
         for message in batch:
-            print(f"\n\nEs {message}\n\n")
             result = self.process_message(message)
             if result:
                 results.append(result)

@@ -27,6 +27,7 @@ AUTHOR_FIELD = 'authors'
 PUBLISHER_FIELD = 'publisher'
 CATEGORIES_FIELD = 'categories'
 REVIEW_TEXT_FIELD = 'review_text'
+ALL_MESSAGE_FIELDS = (MSG_TYPE_FIELD, YEAR_FIELD, RATING_FIELD, MSP_FIELD, TITLE_FIELD, AUTHOR_FIELD, PUBLISHER_FIELD, CATEGORIES_FIELD, REVIEW_TEXT_FIELD)
 
 class Message():
     def __init__(self, msg_type, year=None, rating=None, mean_sentiment_polarity= None, title=None, authors=None, publisher=None, categories=None, review_text=None):
@@ -120,6 +121,12 @@ class Message():
         if not self.categories:
             return False 
         return category in self.categories
+    
+    def between_years(self, year_range):
+        #tiene que ser == none, si tuvieras el 0 te lo tomaria como none si no
+        if self.year == None:
+            return False
+        return self.year >= year_range[0] and self.year <= year_range[1]
     
     def copy_droping_fields(self, fields_to_drop):
         fields = vars(self)

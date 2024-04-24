@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y python3-pika
 COPY ./CommunicationMiddleware /root/CommunicationMiddleware
 COPY ./Workers /root/Workers
 COPY ./utils /root/utils
-COPY ./CategoryFilter/CategoryFilter.py /root/main.py
+COPY ./Filter/Filter.py /root/main.py
 RUN chmod +x /root/main.py
 
 CMD python3 /root/main.py
