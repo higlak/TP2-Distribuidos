@@ -3,6 +3,7 @@ import sys
 #sys.path.append("..")
 
 from abc import ABC, abstractmethod
+from time import sleep
 
 from CommunicationMiddleware.middleware import Communicator
 from utils.Batch import Batch
@@ -40,15 +41,24 @@ class Worker_ID():
 class Worker(ABC):
     def __init__(self):
         self.id = Worker_ID.from_env('WORKER_ID')
-        self.next_pool_workers = os.getenv('NEXT_POOL_WORKERS')
-        if (not self.id) or (not self.next_pool_workers):
+        if not self.id:
             print("Missing env variables")
             return None
+        
+        try:
+            self.next_pool_workers = int(os.getenv('NEXT_POOL_WORKERS'))
+        except:
+            print("Attempted to use non int value for NEXT_POOL_WORKERS")
+            return None
+        
+        if self.next_pool_workers == 0:
+            self.communicator = Communicator()
+        else:
+            routing_keys = []
+            for i in range(self.next_pool_workers):
+                routing_keys.append(str(i+1))
+            self.communicator = Communicator(routing_keys=routing_keys)
 
-        routing_keys = []
-        for i in range(int(self.next_pool_workers)):
-            routing_keys.append(str(i+1))
-        self.communicator = Communicator(routing_keys=routing_keys)
 
     @abstractmethod
     def process_message(self, message):
@@ -90,7 +100,9 @@ class Worker(ABC):
 
     def send_message(self, message):
         if self.next_pool_workers == 0:
+            sleep(5) #p esto es horrible
             self.communicator.publish_message(GATEWAY_EXCHANGE_NAME, message)
         else:
             exchange_name = self.id.next_exchange_name()
             self.communicator.publish_message_next_routing_key(exchange_name, message)
+

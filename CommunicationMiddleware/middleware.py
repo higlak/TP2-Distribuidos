@@ -58,6 +58,7 @@ class Communicator():
         self.publish_message(exchange_name, message, routing_key)
 
     def receive_subscribed_message(self, exchange_name, routing_key=''):
+        print(f"Exchange_name: {exchange_name}, routing_key: {routing_key}")
         if not self.subscribers_queues.get_queue_name(exchange_name, routing_key):
             self.set_subscriber_queue(exchange_name, routing_key)
             

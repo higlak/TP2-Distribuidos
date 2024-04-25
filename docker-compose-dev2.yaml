@@ -7,7 +7,22 @@ services:
     ports:
       - 15672:15672
 
-  category_filter1:
+  worker1.0.1:
+    build:
+      context: ./
+      dockerfile: Filter/Filter.dockerfile
+    depends_on:
+      - rabbitmq
+    links: 
+      - rabbitmq
+    environment:
+      - PYTHONUNBUFFERED=1
+      - WORKER_ID=1.0.1
+      - NEXT_POOL_WORKERS=1
+      - WORKER_TYPE=Filter
+      - WORKER_VALUE=Computers
+
+  worker1.1.1:
     build:
       context: ./
       dockerfile: Filter/Filter.dockerfile
@@ -19,10 +34,10 @@ services:
       - PYTHONUNBUFFERED=1
       - WORKER_ID=1.1.1
       - NEXT_POOL_WORKERS=1
-      - FILTER_TYPE=categories
-      - FILTER_VALUE=fiction
+      - WORKER_TYPE=Filter
+      - WORKER_VALUE=2000,2023
 
-  category_filter2:
+  worker1.2.1:
     build:
       context: ./
       dockerfile: Filter/Filter.dockerfile
@@ -33,24 +48,9 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - WORKER_ID=1.2.1
-      - NEXT_POOL_WORKERS=1
-      - FILTER_TYPE=year
-      - FILTER_VALUE=1990,1999
-
-  category_filter3:
-    build:
-      context: ./
-      dockerfile: Filter/Filter.dockerfile
-    depends_on:
-      - rabbitmq
-    links: 
-      - rabbitmq
-    environment:
-      - PYTHONUNBUFFERED=1
-      - WORKER_ID=1.3.1
       - NEXT_POOL_WORKERS=0
-      - FILTER_TYPE=title
-      - FILTER_VALUE=1
+      - WORKER_TYPE=Filter
+      - WORKER_VALUE=distributed
 
   gateway:
     build:

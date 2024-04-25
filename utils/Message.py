@@ -128,6 +128,9 @@ class Message():
             return False
         return self.year >= year_range[0] and self.year <= year_range[1]
     
+    def contains_in_title(self, word):
+        return word in self.title
+
     def copy_droping_fields(self, fields_to_drop):
         fields = vars(self)
         for field_to_drop in fields_to_drop:

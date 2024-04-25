@@ -4,14 +4,14 @@ from utils.Message import ALL_MESSAGE_FIELDS, YEAR_FIELD, CATEGORIES_FIELD, TITL
 import os
 
 def get_env_filter_type():
-    filter_type = os.getenv('FILTER_TYPE')
+    filter_type = os.getenv('WORKER_TYPE')
     if not (filter_type in ALL_MESSAGE_FIELDS):
         print("invalid FILTER_TYPE env var: ", filter_type)
         return None
     return filter_type
 
 def get_env_filter_value(filter_type):
-    filter_value = os.getenv('FILTER_VALUE')
+    filter_value = os.getenv('FILT_VALUE')
     if filter_type == YEAR_FIELD:
         filter_value = tuple(map(int, filter_value.split(',')))
     return filter_value

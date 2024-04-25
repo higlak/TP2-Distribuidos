@@ -1,5 +1,5 @@
 from .Worker import Worker
-from utils.Message import Message, CATEGORIES_FIELD, YEAR_FIELD
+from utils.Message import Message, CATEGORIES_FIELD, YEAR_FIELD, TITLE_FIELD
 import unittest
 from unittest import TestCase
 
@@ -37,7 +37,8 @@ class Filter(Worker):
     def filter_msg(self, msg:Message):
         switch = {
             CATEGORIES_FIELD: msg.contains_category,
-            YEAR_FIELD: msg.between_years
+            YEAR_FIELD: msg.between_years,
+            TITLE_FIELD: msg.contains_in_title,
         }
         method = switch.get(self.field, None)
         if not method:
