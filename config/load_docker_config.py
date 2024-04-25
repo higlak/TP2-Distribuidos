@@ -5,7 +5,7 @@ CONFIG_FILE = "config/config_query"
 FILTER_TYPE = 'Filter'
 ACCUMULATOR_TYPE = 'Accumulator'
 
-FILENAME = 'docker-compose-dev2.yaml'
+FILENAME = 'docker-compose-dev.yaml'
 RABBIT = """  rabbitmq:
     build:
       context: ./rabbitmq
@@ -30,7 +30,7 @@ class Pool():
         self.pool_number = pool_number
         self.worker_amount = int(config_pool["WORKER_AMOUNT"])
         self.worker_type = config_pool["WORKER_TYPE"]
-        self.worke_field = config_pool["WORKER_FIELD"]
+        self.worker_field = config_pool["WORKER_FIELD"]
         self.worker_value = config_pool["WORKER_VALUE"]
 
     def worker_type_dokerfile_path(self):
@@ -53,7 +53,7 @@ class QueryConfig():
         result = ""
         for p, pool in enumerate(self.query_pools):
             for i in range(pool.worker_amount):
-                worker_id = f"{self.query_number}.{pool.pool_number}.{i+1}"
+                worker_id = f"{self.query_number}.{pool.pool_number}.{i}"
                 result += f"""  worker{worker_id}:
     build:
       context: ./
@@ -66,7 +66,7 @@ class QueryConfig():
       - PYTHONUNBUFFERED=1
       - WORKER_ID={worker_id}
       - NEXT_POOL_WORKERS={0 if p == len(self.query_pools) - 1 else self.query_pools[p].worker_amount}
-      - WORKER_TYPE={pool.worker_type}
+      - WORKER_FIELD={pool.worker_field}
       - WORKER_VALUE={pool.worker_value}\n\n"""
                 
         return result

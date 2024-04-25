@@ -7,7 +7,7 @@ services:
     ports:
       - 15672:15672
 
-  category_filter1:
+  worker1.0.0:
     build:
       context: ./
       dockerfile: Filter/Filter.dockerfile
@@ -17,12 +17,12 @@ services:
       - rabbitmq
     environment:
       - PYTHONUNBUFFERED=1
-      - WORKER_ID=1.1.1
+      - WORKER_ID=1.0.0
       - NEXT_POOL_WORKERS=1
-      - FILTER_TYPE=categories
-      - FILTER_VALUE=fiction
+      - WORKER_FIELD=categories
+      - WORKER_VALUE=fiction
 
-  category_filter2:
+  worker1.1.0:
     build:
       context: ./
       dockerfile: Filter/Filter.dockerfile
@@ -32,12 +32,12 @@ services:
       - rabbitmq
     environment:
       - PYTHONUNBUFFERED=1
-      - WORKER_ID=1.2.1
+      - WORKER_ID=1.1.0
       - NEXT_POOL_WORKERS=1
-      - FILTER_TYPE=year
-      - FILTER_VALUE=1990,1999
+      - WORKER_FIELD=year
+      - WORKER_VALUE=1990,1999
 
-  category_filter3:
+  worker1.2.0:
     build:
       context: ./
       dockerfile: Filter/Filter.dockerfile
@@ -47,10 +47,10 @@ services:
       - rabbitmq
     environment:
       - PYTHONUNBUFFERED=1
-      - WORKER_ID=1.3.1
+      - WORKER_ID=1.2.0
       - NEXT_POOL_WORKERS=0
-      - FILTER_TYPE=title
-      - FILTER_VALUE=1
+      - WORKER_FIELD=title
+      - WORKER_VALUE=1
 
   gateway:
     build:

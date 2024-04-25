@@ -56,7 +56,7 @@ class Worker(ABC):
         else:
             routing_keys = []
             for i in range(self.next_pool_workers):
-                routing_keys.append(str(i+1))
+                routing_keys.append(str(i))
             self.communicator = Communicator(routing_keys=routing_keys)
 
 
