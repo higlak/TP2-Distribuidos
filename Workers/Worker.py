@@ -69,7 +69,7 @@ class Worker(ABC):
         for message in batch:
             result = self.process_message(message)
             if result:
-                results.append(result)
+                append_extend(results, result)
         return Batch(results)
     
     def receive_message(self):
@@ -105,4 +105,10 @@ class Worker(ABC):
         else:
             exchange_name = self.id.next_exchange_name()
             self.communicator.publish_message_next_routing_key(exchange_name, message)
+
+def append_extend(l, element_or_list):
+    if isinstance(element_or_list, list):
+        l.extend(element_or_list)
+    else:
+        l.append(element_or_list)
 

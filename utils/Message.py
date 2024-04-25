@@ -6,6 +6,11 @@ from unittest import TestCase
 
 BOOK_MSG_TYPE = 0
 REVIEW_MSG_TYPE = 1
+QUERY1_RESULT = 2
+QUERY2_RESULT = 3
+QUERY3_RESULT = 4
+QUERY4_RESULT = 5
+QUERY5_RESULT = 6
 
 SEPARATOR = ","
 MSG_TYPE_BYTES = 1
@@ -130,6 +135,11 @@ class Message():
     
     def contains_in_title(self, word):
         return word in self.title
+    
+    def decade(self):
+        if self.year == None:
+            return None
+        return (self.year // 10) * 10
 
     def copy_droping_fields(self, fields_to_drop):
         fields = vars(self)

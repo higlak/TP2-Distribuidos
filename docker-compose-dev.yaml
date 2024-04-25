@@ -7,50 +7,21 @@ services:
     ports:
       - 15672:15672
 
-  worker1.0.0:
+  accumulator2.0.0:
     build:
       context: ./
-      dockerfile: Filter/Filter.dockerfile
+      dockerfile: Accumulator/Accumulator.dockerfile
     depends_on:
       - rabbitmq
     links: 
       - rabbitmq
     environment:
       - PYTHONUNBUFFERED=1
-      - WORKER_ID=1.0.0
-      - NEXT_POOL_WORKERS=1
-      - WORKER_FIELD=categories
-      - WORKER_VALUE=fiction
-
-  worker1.1.0:
-    build:
-      context: ./
-      dockerfile: Filter/Filter.dockerfile
-    depends_on:
-      - rabbitmq
-    links: 
-      - rabbitmq
-    environment:
-      - PYTHONUNBUFFERED=1
-      - WORKER_ID=1.1.0
-      - NEXT_POOL_WORKERS=1
-      - WORKER_FIELD=year
-      - WORKER_VALUE=1990,1999
-
-  worker1.2.0:
-    build:
-      context: ./
-      dockerfile: Filter/Filter.dockerfile
-    depends_on:
-      - rabbitmq
-    links: 
-      - rabbitmq
-    environment:
-      - PYTHONUNBUFFERED=1
-      - WORKER_ID=1.2.0
+      - WORKER_ID=2.0.0
       - NEXT_POOL_WORKERS=0
-      - WORKER_FIELD=title
-      - WORKER_VALUE=1
+      - WORKER_FIELD=year
+      - WORKER_VALUE=10
+      - ACCUMULATE_BY=authors
 
   gateway:
     build:

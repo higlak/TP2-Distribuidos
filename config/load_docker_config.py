@@ -1,9 +1,10 @@
 from configparser import ConfigParser
 import os
+import sys
 
 CONFIG_FILE = "config/config_query"
-FILTER_TYPE = 'Filter'
-ACCUMULATOR_TYPE = 'Accumulator'
+FILTER_TYPE = 'filter'
+ACCUMULATOR_TYPE = 'accumulator'
 
 FILENAME = 'docker-compose-dev.yaml'
 RABBIT = """  rabbitmq:
@@ -32,6 +33,9 @@ class Pool():
         self.worker_type = config_pool["WORKER_TYPE"]
         self.worker_field = config_pool["WORKER_FIELD"]
         self.worker_value = config_pool["WORKER_VALUE"]
+        self.accumulate_by = None
+        if self.worker_type == ACCUMULATOR_TYPE:
+          self.accumulate_by = config_pool["ACCUMULATE_BY"]
 
     def worker_type_dokerfile_path(self):
         print(f"{self.worker_type},{FILTER_TYPE}")
@@ -54,7 +58,7 @@ class QueryConfig():
         for p, pool in enumerate(self.query_pools):
             for i in range(pool.worker_amount):
                 worker_id = f"{self.query_number}.{pool.pool_number}.{i}"
-                result += f"""  worker{worker_id}:
+                result += f"""  {pool.worker_type}{worker_id}:
     build:
       context: ./
       dockerfile: {pool.worker_type_dokerfile_path()}
@@ -67,29 +71,48 @@ class QueryConfig():
       - WORKER_ID={worker_id}
       - NEXT_POOL_WORKERS={0 if p == len(self.query_pools) - 1 else self.query_pools[p].worker_amount}
       - WORKER_FIELD={pool.worker_field}
-      - WORKER_VALUE={pool.worker_value}\n\n"""
+      - WORKER_VALUE={pool.worker_value}"""
+                if pool.worker_type == ACCUMULATOR_TYPE:
+                    result += f"\n      - ACCUMULATE_BY={pool.accumulate_by}"
+                result += "\n\n"
                 
         return result
 
+def proccess_all_queries(file):
+    i=1 
+    while True:
+        filename = f'{CONFIG_FILE}{i}.ini'
+        if not proccess_query(file,filename, i):
+            break
+        i+=1
+    
+def proccess_query(file, query_filename, query_number):
+    if not os.path.exists(query_filename):
+        return
+    q = QueryConfig(query_number, query_filename)
+    file.write(q.to_docker_string())
+    print("Processed query: ", query_number)
+
 def main(): 
 
-    with open(FILENAME, "w") as file:
-        file.write("version: '3'\nservices:\n")
-        file.write(RABBIT)
-        
-        i=1 
-        while True:
-            filename = f'{CONFIG_FILE}{i}.ini'
-            if not os.path.exists(filename):
-                print("Last query processed: ", i-1)
-                break
-            q = QueryConfig(i, filename)
-            file.write(q.to_docker_string())
-            i+=1
-        file.write(GATEWAY)
+	with open(FILENAME, "w") as file:
+		file.write("version: '3'\nservices:\n")
+		file.write(RABBIT)
+		if len(sys.argv) < 2:
+			individual_query = 0
+		else:
+			individual_query = int(sys.argv[1])
+
+		if not individual_query:
+			proccess_all_queries(file)
+		else:
+			filename = f'{CONFIG_FILE}{individual_query}.ini'
+			proccess_query(file, filename, individual_query)
+
+		file.write(GATEWAY)
             
 
-    print("hola")
+	print("hola")
         
         
 
