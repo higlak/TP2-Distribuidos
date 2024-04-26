@@ -1,5 +1,5 @@
 from .Worker import Worker
-from utils.Message import Message, CATEGORIES_FIELD, YEAR_FIELD, TITLE_FIELD
+from utils.QueryMessage import QueryMessage, CATEGORIES_FIELD, YEAR_FIELD, TITLE_FIELD
 import unittest
 from unittest import TestCase
 
@@ -10,7 +10,7 @@ class Filter(Worker):
         self.valid_values = valid_values
         self.droping_fields = droping_fields
 
-    def process_message(self, msg: Message):
+    def process_message(self, msg: QueryMessage):
         #if msg.contains_category(self.category):
         if self.filter_msg(msg):
             print(f"fowarded {msg.title}")
@@ -18,7 +18,7 @@ class Filter(Worker):
         print(f"dropped {msg.title}")
         return None
     
-    def filter_msg(self, msg:Message):
+    def filter_msg(self, msg:QueryMessage):
         switch = {
             CATEGORIES_FIELD: msg.contains_category,
             YEAR_FIELD: msg.between_years,

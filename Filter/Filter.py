@@ -1,6 +1,6 @@
 from time import sleep
 from Workers.Filters import Filter
-from utils.Message import ALL_MESSAGE_FIELDS, YEAR_FIELD, CATEGORIES_FIELD, TITLE_FIELD
+from utils.QueryMessage import ALL_MESSAGE_FIELDS, YEAR_FIELD, CATEGORIES_FIELD, TITLE_FIELD
 import os
 
 def get_env_worker_field():

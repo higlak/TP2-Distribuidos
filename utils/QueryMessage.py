@@ -1,5 +1,5 @@
 from utils.Date import Date
-from utils.big_endian_conversion import *
+from utils.auxiliar_functions import *
 import struct
 import unittest
 from unittest import TestCase
@@ -34,7 +34,7 @@ CATEGORIES_FIELD = 'categories'
 REVIEW_TEXT_FIELD = 'review_text'
 ALL_MESSAGE_FIELDS = (MSG_TYPE_FIELD, YEAR_FIELD, RATING_FIELD, MSP_FIELD, TITLE_FIELD, AUTHOR_FIELD, PUBLISHER_FIELD, CATEGORIES_FIELD, REVIEW_TEXT_FIELD)
 
-class Message():
+class QueryMessage():
     def __init__(self, msg_type, year=None, rating=None, mean_sentiment_polarity= None, title=None, authors=None, publisher=None, categories=None, review_text=None):
         self.msg_type = msg_type
         self.year = year
@@ -60,7 +60,7 @@ class Message():
         categories = generator.next()
         review_text = generator.next()
         
-        return Message(msg_type, year, rating, msp, title, authors, publisher, categories, review_text) 
+        return QueryMessage(msg_type, year, rating, msp, title, authors, publisher, categories, review_text) 
     
     def fields_to_list(self):
         return [self.year, self.rating, self.mean_sentiment_polarity, self.title, self.authors, self.publisher, self.categories, self.review_text]
@@ -133,6 +133,9 @@ class Message():
             return False
         return self.year >= year_range[0] and self.year <= year_range[1]
     
+    def is_sync_message():
+        return False
+
     def contains_in_title(self, word):
         return word in self.title
     
@@ -145,7 +148,7 @@ class Message():
         fields = vars(self)
         for field_to_drop in fields_to_drop:
             fields[field_to_drop] = None
-        return Message(**fields)
+        return QueryMessage(**fields)
     
     def __eq__(self, other):
         return self.fields_to_list() == other.fields_to_list()
@@ -249,21 +252,6 @@ class ParametersGenerator():
     def remove_bytes(self, finish, start=0):
         return remove_bytes(self.byte_array, finish, start)
 
-def length(iterable):
-    """
-    Receives and iterable and returns its length
-    If fails, returns None
-    """
-    try:
-        return len(iterable)
-    except:
-        return None
-        
-def remove_bytes(array, finish, start=0):
-    elements = array[start:finish]
-    del array[start:finish]
-    return elements
-
 class TestMessage(TestCase):
     def test_book_message_to_bytes(self):
         # Message = [year:1990, rating: None, msp: 0,8, titulo:'titulo', authors:['autor1, autor2'], publisher: None, categories: None, review_text:'review del texto']
@@ -282,14 +270,14 @@ class TestMessage(TestCase):
         return byte_array
 
     def test_empty_message_to_bytes(self):
-        msg = Message(BOOK_MSG_TYPE)
+        msg = QueryMessage(BOOK_MSG_TYPE)
         msg_bytes = msg.to_bytes()
         expected = bytearray([BOOK_MSG_TYPE, 0b0])
         self.assertEqual(msg_bytes, expected)
 
     def test_message_to_bytes(self):
         expected_bytes = self.test_book_message_to_bytes()
-        msg = Message(BOOK_MSG_TYPE, 
+        msg = QueryMessage(BOOK_MSG_TYPE, 
                       year=1990, 
                       mean_sentiment_polarity=0.8, 
                       title='titulo', 
@@ -300,13 +288,13 @@ class TestMessage(TestCase):
 
     def test_message_from_bytes(self):
         msg_bytes = self.test_book_message_to_bytes()
-        msg = Message.from_bytes(msg_bytes)
+        msg = QueryMessage.from_bytes(msg_bytes)
         self.assertEqual(msg.to_bytes(), self.test_book_message_to_bytes())
         self.assertEqual(len(msg_bytes), 0)
 
     def test_copy_dropping_fields(self):
-        msg = Message(BOOK_MSG_TYPE, year=1990, title='titulo')
-        expected_msg = Message(BOOK_MSG_TYPE, year=1990)
+        msg = QueryMessage(BOOK_MSG_TYPE, year=1990, title='titulo')
+        expected_msg = QueryMessage(BOOK_MSG_TYPE, year=1990)
         self.assertEqual(msg.copy_droping_fields([TITLE_FIELD]), expected_msg)
 
 if __name__ == '__main__':

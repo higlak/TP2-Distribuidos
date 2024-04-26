@@ -7,21 +7,101 @@ services:
     ports:
       - 15672:15672
 
-  accumulator2.0.0:
+  filter1.0.0:
     build:
       context: ./
-      dockerfile: Accumulator/Accumulator.dockerfile
+      dockerfile: Filter/Filter.dockerfile
     depends_on:
       - rabbitmq
     links: 
       - rabbitmq
     environment:
       - PYTHONUNBUFFERED=1
-      - WORKER_ID=2.0.0
-      - NEXT_POOL_WORKERS=0
+      - WORKER_ID=1.0.0
+      - NEXT_POOL_WORKERS=2
+      - PREVIOUS_POOL_WORKERS=0
+      - WORKER_FIELD=categories
+      - WORKER_VALUE=fiction
+
+  filter1.0.1:
+    build:
+      context: ./
+      dockerfile: Filter/Filter.dockerfile
+    depends_on:
+      - rabbitmq
+    links: 
+      - rabbitmq
+    environment:
+      - PYTHONUNBUFFERED=1
+      - WORKER_ID=1.0.1
+      - NEXT_POOL_WORKERS=2
+      - PREVIOUS_POOL_WORKERS=0
+      - WORKER_FIELD=categories
+      - WORKER_VALUE=fiction
+
+  filter1.1.0:
+    build:
+      context: ./
+      dockerfile: Filter/Filter.dockerfile
+    depends_on:
+      - rabbitmq
+    links: 
+      - rabbitmq
+    environment:
+      - PYTHONUNBUFFERED=1
+      - WORKER_ID=1.1.0
+      - NEXT_POOL_WORKERS=2
+      - PREVIOUS_POOL_WORKERS=2
       - WORKER_FIELD=year
-      - WORKER_VALUE=10
-      - ACCUMULATE_BY=authors
+      - WORKER_VALUE=1990,1999
+
+  filter1.1.1:
+    build:
+      context: ./
+      dockerfile: Filter/Filter.dockerfile
+    depends_on:
+      - rabbitmq
+    links: 
+      - rabbitmq
+    environment:
+      - PYTHONUNBUFFERED=1
+      - WORKER_ID=1.1.1
+      - NEXT_POOL_WORKERS=2
+      - PREVIOUS_POOL_WORKERS=2
+      - WORKER_FIELD=year
+      - WORKER_VALUE=1990,1999
+
+  filter1.2.0:
+    build:
+      context: ./
+      dockerfile: Filter/Filter.dockerfile
+    depends_on:
+      - rabbitmq
+    links: 
+      - rabbitmq
+    environment:
+      - PYTHONUNBUFFERED=1
+      - WORKER_ID=1.2.0
+      - NEXT_POOL_WORKERS=0
+      - PREVIOUS_POOL_WORKERS=2
+      - WORKER_FIELD=title
+      - WORKER_VALUE=1
+
+  filter1.2.1:
+    build:
+      context: ./
+      dockerfile: Filter/Filter.dockerfile
+    depends_on:
+      - rabbitmq
+    links: 
+      - rabbitmq
+    environment:
+      - PYTHONUNBUFFERED=1
+      - WORKER_ID=1.2.1
+      - NEXT_POOL_WORKERS=0
+      - PREVIOUS_POOL_WORKERS=2
+      - WORKER_FIELD=title
+      - WORKER_VALUE=1
 
   gateway:
     build:

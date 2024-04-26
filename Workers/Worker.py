@@ -7,7 +7,7 @@ from time import sleep
 
 from CommunicationMiddleware.middleware import Communicator
 from utils.Batch import Batch
-from utils.Message import Message
+from utils.QueryMessage import QueryMessage
 
 ID_SEPARATOR = '.'
 GATEWAY_EXCHANGE_NAME = 'GATEWAY_EXCHANGE'
@@ -38,6 +38,9 @@ class Worker_ID():
     def next_exchange_name(self):
         return f'{self.query}.{int(self.pool_id)+1}'
     
+    def __repr__(self):
+        return f'{self.query}.{self.pool_id}.{self.routing_key}'
+    
 class Worker(ABC):
     def __init__(self):
         self.id = Worker_ID.from_env('WORKER_ID')
@@ -47,8 +50,9 @@ class Worker(ABC):
         
         try:
             self.next_pool_workers = int(os.getenv('NEXT_POOL_WORKERS'))
+            self.previous_pool_workers = int(os.getenv('PREVIOUS_POOL_WORKERS'))
         except:
-            print("Attempted to use non int value for NEXT_POOL_WORKERS")
+            print("Attempted to use non int value for NEXT_POOL_WORKERS or PREVIOUS_POOL_WORKERS")
             return None
         
         if self.next_pool_workers == 0:
@@ -67,9 +71,10 @@ class Worker(ABC):
     def process_batch(self, batch):
         results = []
         for message in batch:
-            result = self.process_message(message)
-            if result:
-                append_extend(results, result)
+            if not message.is_sync_message():        
+                result = self.process_message(message)
+                if result:
+                    append_extend(results, result)
         return Batch(results)
     
     def receive_message(self):
@@ -80,6 +85,18 @@ class Worker(ABC):
         return self.communicator.receive_subscribed_message(exchange_name, routing_key)
         
     def start(self):
+        #self.syncronice()
+        self.loop()
+
+    def syncronice(self):
+        initialized = {}
+        while len(initialized) < self.previous_pool_workers:
+            #receive con timeout
+            #if recibis algo
+            # insertar al set
+            pass
+
+    def loop(self):
         while True:
             print(f"[Worker {self.id}] Waiting for message...")
             batch_bytes = self.receive_message()
@@ -88,23 +105,26 @@ class Worker(ABC):
             print(f"[Worker {self.id}] Received batch with {batch.size()} elements")
             
             if batch.is_empty():
-                self.send_message(batch.to_bytes())
-                print("Received Eof")
+                print(f"[Worker {self.id}] Received Eof")
+                self.send_batch(batch)
                 return    
             
             result_batch = self.process_batch(batch)
             print(f"[Worker {self.id}] Message proccesed")
             if not result_batch.is_empty():
-                self.send_message(result_batch.to_bytes())
+                self.send_batch(result_batch)
                 print(f"[Worker {self.id}] Message sending batch with {result_batch.size()}", )
 
-    def send_message(self, message):
+    def send_batch(self, batch):
         if self.next_pool_workers == 0:
             sleep(5) #p esto es horrible
-            self.communicator.publish_message(GATEWAY_EXCHANGE_NAME, message)
+            self.communicator.publish_message(GATEWAY_EXCHANGE_NAME, batch.to_bytes())
         else:
             exchange_name = self.id.next_exchange_name()
-            self.communicator.publish_message_next_routing_key(exchange_name, message)
+            if batch.is_empty():
+                self.communicator.publish_to_all_routing_keys(exchange_name, batch.to_bytes())
+            else:
+                self.communicator.publish_message_next_routing_key(exchange_name, batch.to_bytes())
 
 def append_extend(l, element_or_list):
     if isinstance(element_or_list, list):

@@ -1,5 +1,5 @@
 from .Worker import Worker
-from utils.Message import Message, CATEGORIES_FIELD, YEAR_FIELD, TITLE_FIELD, AUTHOR_FIELD
+from utils.QueryMessage import QueryMessage, CATEGORIES_FIELD, YEAR_FIELD, TITLE_FIELD, AUTHOR_FIELD
 import unittest
 from unittest import TestCase
 
@@ -11,7 +11,7 @@ class Accumulator(Worker):
         self.accumulate_by = accumulate_by
         self.context = {}
 
-    def process_message(self, msg: Message):
+    def process_message(self, msg: QueryMessage):
         switch = {
             (YEAR_FIELD, AUTHOR_FIELD): self.accumulate_decade_by_authors,
         }
@@ -44,14 +44,3 @@ class Accumulator(Worker):
             self.context[author] = self.context.get(author, []) + [msg_decade]
             if len(self.context.get(author, [])) == self.values:
                 return True
-    
-    def accumulate_msg(self, msg:Message):
-        switch = {
-            CATEGORIES_FIELD: msg.contains_category,
-            YEAR_FIELD: msg.between_years,
-            TITLE_FIELD: msg.contains_in_title,
-        }
-        method = switch.get(self.field, None)
-        if not method:
-            return False
-        return method(self.valid_values)

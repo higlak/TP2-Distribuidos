@@ -1,9 +1,9 @@
-from utils.big_endian_conversion import *
-from utils.Message import Message
+from utils.auxiliar_functions import integer_to_big_endian_byte_array
+from utils.QueryMessage import QueryMessage
+from utils.SyncMessage import SyncMessage, SYNC_DONE_MSG_TYPE, SYNC_MSG_TYPE
 import unittest
 from unittest import TestCase
 
-BOOK_MSG_TYPE = 0
 AMOUNT_OF_MESSAGES_BYTES = 1
 
 class Batch():
@@ -20,10 +20,10 @@ class Batch():
         for _ in range(amount_of_messages):
             if len(byte_array) == 0:
                 break
-            message = Message.from_bytes(byte_array)
+            message = message_from_bytes()
             messages.append(message) 
         return Batch(messages)
-
+    
     def to_bytes(self):
         byte_array = integer_to_big_endian_byte_array(len(self.messages), AMOUNT_OF_MESSAGES_BYTES)
         for message in self.messages:
@@ -41,10 +41,15 @@ class Batch():
 
     def __next__(self):
         return next(self.messages)
-            
+
+def message_from_bytes(byte_array):
+        if byte_array[0] == SYNC_MSG_TYPE or byte_array[0] == SYNC_DONE_MSG_TYPE:
+            return SyncMessage.from_bytes(byte_array)
+        return QueryMessage.from_bytes(byte_array)
+                 
 class TestBatch(TestCase):
     def test_book_message1(self):
-        return Message(BOOK_MSG_TYPE, 
+        return QueryMessage(BOOK_MSG_TYPE, 
                       year=1990, 
                       mean_sentiment_polarity=0.8, 
                       title='titulo', 
@@ -52,7 +57,7 @@ class TestBatch(TestCase):
                       review_text='review del texto')
     
     def test_book_message2(self):
-        return Message(BOOK_MSG_TYPE, title='tiutlante')
+        return QueryMessage(BOOK_MSG_TYPE, title='tiutlante')
 
     def test_expected_batch_bytes(self):
         byte_array = bytearray([2])
@@ -79,4 +84,5 @@ class TestBatch(TestCase):
         self.assertEqual(batch.to_bytes(), batch_bytes)
 
 if __name__ == '__main__':
+    from utils.QueryMessage import BOOK_MSG_TYPE
     unittest.main()

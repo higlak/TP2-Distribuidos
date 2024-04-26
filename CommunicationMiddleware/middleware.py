@@ -16,7 +16,9 @@ class SubscribersQueues():
     def recv_from(self, exchange_name, routing_key):
         try:
             generator = self.subscribers[(exchange_name, routing_key)][GENERATOR_POSITION]
-            _method_frame, _header_frame, body = next(generator)
+            method_frame, header_frame, body = self.channel.consume(queue=queue_name, auto_ack=True)
+            self.channel.consume(queue=queue_name, auto_ack=True)
+            #_method_frame, _header_frame, body = next(generator)
             return body
         except (pika.exceptions.ChannelClosed, 
                 pika.exceptions.ChannelClosedByBroker,
@@ -39,6 +41,13 @@ class Communicator():
     def set_publisher_exchange(self, exchange_name):
         self.channel.exchange_declare(exchange=exchange_name, exchange_type='direct')
         self.publisher_exchange_names.add(exchange_name)
+        time.sleep(5)
+        # Obtener una lista de las colas asociadas a ese exchange
+        #queue_list = self.channel.queue_declare(passive=True, arguments={'x-exchange': exchange_name})
+
+        # Obtener el número de colas
+        #num_queues = queue_list.method.message_count
+        #print("\n\nAAAAAAAAAAAAAAAAAAAAAAAAA: {num_queues}\n\n")
     
     def set_subscriber_queue(self, exchange_name, routing_key):
         self.channel.exchange_declare(exchange=exchange_name, exchange_type='direct')
@@ -66,7 +75,9 @@ class Communicator():
 
         return bytearray(message)
     
-    
+    def publish_to_all_routing_keys(self, exchange_name, message):
+        for routing_key in self.routing_key_iterator.routing_keys:
+            self.publish_message(exchange_name, message, routing_key)
 
     def close_connection(self):
         self.channel.close()

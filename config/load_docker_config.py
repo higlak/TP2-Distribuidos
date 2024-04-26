@@ -38,7 +38,6 @@ class Pool():
           self.accumulate_by = config_pool["ACCUMULATE_BY"]
 
     def worker_type_dokerfile_path(self):
-        print(f"{self.worker_type},{FILTER_TYPE}")
         if self.worker_type == FILTER_TYPE:
             return "Filter/Filter.dockerfile"
         return "Accumulator/Accumulator.dockerfile"
@@ -70,6 +69,7 @@ class QueryConfig():
       - PYTHONUNBUFFERED=1
       - WORKER_ID={worker_id}
       - NEXT_POOL_WORKERS={0 if p == len(self.query_pools) - 1 else self.query_pools[p].worker_amount}
+      - PREVIOUS_POOL_WORKERS={0 if p == 0 else self.query_pools[p-1].worker_amount}
       - WORKER_FIELD={pool.worker_field}
       - WORKER_VALUE={pool.worker_value}"""
                 if pool.worker_type == ACCUMULATOR_TYPE:
@@ -88,32 +88,28 @@ def proccess_all_queries(file):
     
 def proccess_query(file, query_filename, query_number):
     if not os.path.exists(query_filename):
-        return
+        return False
     q = QueryConfig(query_number, query_filename)
     file.write(q.to_docker_string())
     print("Processed query: ", query_number)
+    return True
 
 def main(): 
 
-	with open(FILENAME, "w") as file:
-		file.write("version: '3'\nservices:\n")
-		file.write(RABBIT)
-		if len(sys.argv) < 2:
-			individual_query = 0
-		else:
-			individual_query = int(sys.argv[1])
+  with open(FILENAME, "w") as file:
+    file.write("version: '3'\nservices:\n")
+    file.write(RABBIT)
+    if len(sys.argv) < 2:
+      individual_query = 0
+    else:
+      individual_query = int(sys.argv[1])
+    print(individual_query)
+    if not individual_query:
+      proccess_all_queries(file)
+    else:
+      filename = f'{CONFIG_FILE}{individual_query}.ini'
+      proccess_query(file, filename, individual_query)
 
-		if not individual_query:
-			proccess_all_queries(file)
-		else:
-			filename = f'{CONFIG_FILE}{individual_query}.ini'
-			proccess_query(file, filename, individual_query)
-
-		file.write(GATEWAY)
-            
-
-	print("hola")
-        
-        
+    file.write(GATEWAY)      
 
 main()
