@@ -71,10 +71,10 @@ class Worker(ABC):
     def process_batch(self, batch):
         results = []
         for message in batch:
-            if not message.is_sync_message():        
-                result = self.process_message(message)
-                if result:
-                    append_extend(results, result)
+            #if not message.is_sync_message(): 
+            result = self.process_message(message)
+            if result:
+                append_extend(results, result)
         return Batch(results)
     
     def receive_message(self):

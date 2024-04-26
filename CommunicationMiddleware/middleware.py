@@ -16,9 +16,9 @@ class SubscribersQueues():
     def recv_from(self, exchange_name, routing_key):
         try:
             generator = self.subscribers[(exchange_name, routing_key)][GENERATOR_POSITION]
-            method_frame, header_frame, body = self.channel.consume(queue=queue_name, auto_ack=True)
-            self.channel.consume(queue=queue_name, auto_ack=True)
-            #_method_frame, _header_frame, body = next(generator)
+            #method_frame, header_frame, body = self.channel.consume(queue=queue_name, auto_ack=True)
+            #self.channel.consume(queue=queue_name, auto_ack=True)
+            _method_frame, _header_frame, body = next(generator)
             return body
         except (pika.exceptions.ChannelClosed, 
                 pika.exceptions.ChannelClosedByBroker,
@@ -30,7 +30,7 @@ class SubscribersQueues():
         return self.subscribers.get((exchange_name, routing_key),(None, None))[QUEUE_NAME_POSITION]
 
 class Communicator():
-    def __init__(self, prefetch_count=1, routing_keys=[]):
+    def __init__(self, prefetch_count=1, routing_keys=['']):
         self.subscribers_queues = SubscribersQueues()
         self.publisher_exchange_names = set()
         self.connection = pika.BlockingConnection(pika.ConnectionParameters(host='rabbitmq'))
@@ -41,18 +41,17 @@ class Communicator():
     def set_publisher_exchange(self, exchange_name):
         self.channel.exchange_declare(exchange=exchange_name, exchange_type='direct')
         self.publisher_exchange_names.add(exchange_name)
-        time.sleep(5)
-        # Obtener una lista de las colas asociadas a ese exchange
-        #queue_list = self.channel.queue_declare(passive=True, arguments={'x-exchange': exchange_name})
-
-        # Obtener el número de colas
-        #num_queues = queue_list.method.message_count
-        #print("\n\nAAAAAAAAAAAAAAAAAAAAAAAAA: {num_queues}\n\n")
+        for routing_key in self.routing_key_iterator.routing_keys:
+            if routing_key == '':
+                queue_name = exchange_name
+            else:
+                queue_name = f'{exchange_name}.{routing_key}'
+            self.channel.queue_declare(queue=queue_name, durable=True)
     
     def set_subscriber_queue(self, exchange_name, routing_key):
         self.channel.exchange_declare(exchange=exchange_name, exchange_type='direct')
-        result = self.channel.queue_declare(queue='', durable=True)
-        queue_name = result.method.queue
+        queue_name = f'{exchange_name}.{routing_key}'
+        self.channel.queue_declare(queue=queue_name, durable=True)
         generator = self.channel.consume(queue=queue_name, auto_ack=True)
         self.subscribers_queues.add_subscriber(exchange_name, routing_key, queue_name, generator)
         self.channel.queue_bind(exchange=exchange_name, queue=queue_name, routing_key=routing_key)

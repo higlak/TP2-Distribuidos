@@ -20,7 +20,7 @@ class Batch():
         for _ in range(amount_of_messages):
             if len(byte_array) == 0:
                 break
-            message = message_from_bytes()
+            message = message_from_bytes(byte_array)
             messages.append(message) 
         return Batch(messages)
     
@@ -43,8 +43,8 @@ class Batch():
         return next(self.messages)
 
 def message_from_bytes(byte_array):
-        if byte_array[0] == SYNC_MSG_TYPE or byte_array[0] == SYNC_DONE_MSG_TYPE:
-            return SyncMessage.from_bytes(byte_array)
+        #if byte_array[0] == SYNC_MSG_TYPE or byte_array[0] == SYNC_DONE_MSG_TYPE:
+        #    return SyncMessage.from_bytes(byte_array)
         return QueryMessage.from_bytes(byte_array)
                  
 class TestBatch(TestCase):

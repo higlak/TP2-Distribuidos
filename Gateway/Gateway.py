@@ -5,7 +5,7 @@ from utils.Batch import Batch
 
 GATEWAY_EXCHANGE_NAME = 'GATEWAY_EXCHANGE'
 
-sleep(16)
+sleep(20)
 def messages_for_query1():
     messages = []
     for i in range(30):
