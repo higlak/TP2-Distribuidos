@@ -20,7 +20,6 @@ services:
       - PYTHONUNBUFFERED=1
       - WORKER_ID=1.0.0
       - NEXT_POOL_WORKERS=2
-      - PREVIOUS_POOL_WORKERS=0
       - WORKER_FIELD=categories
       - WORKER_VALUE=fiction
 
@@ -37,7 +36,6 @@ services:
       - PYTHONUNBUFFERED=1
       - WORKER_ID=1.0.1
       - NEXT_POOL_WORKERS=2
-      - PREVIOUS_POOL_WORKERS=0
       - WORKER_FIELD=categories
       - WORKER_VALUE=fiction
 
@@ -54,7 +52,6 @@ services:
       - PYTHONUNBUFFERED=1
       - WORKER_ID=1.1.0
       - NEXT_POOL_WORKERS=2
-      - PREVIOUS_POOL_WORKERS=2
       - WORKER_FIELD=year
       - WORKER_VALUE=1990,1999
 
@@ -71,7 +68,6 @@ services:
       - PYTHONUNBUFFERED=1
       - WORKER_ID=1.1.1
       - NEXT_POOL_WORKERS=2
-      - PREVIOUS_POOL_WORKERS=2
       - WORKER_FIELD=year
       - WORKER_VALUE=1990,1999
 
@@ -88,7 +84,6 @@ services:
       - PYTHONUNBUFFERED=1
       - WORKER_ID=1.2.0
       - NEXT_POOL_WORKERS=0
-      - PREVIOUS_POOL_WORKERS=2
       - WORKER_FIELD=title
       - WORKER_VALUE=1
 
@@ -105,9 +100,25 @@ services:
       - PYTHONUNBUFFERED=1
       - WORKER_ID=1.2.1
       - NEXT_POOL_WORKERS=0
-      - PREVIOUS_POOL_WORKERS=2
       - WORKER_FIELD=title
       - WORKER_VALUE=1
+
+  accumulator2.0.0:
+    build:
+      context: ./
+      dockerfile: Accumulator/Accumulator.dockerfile
+    restart: on-failure
+    depends_on:
+      - rabbitmq
+    links: 
+      - rabbitmq
+    environment:
+      - PYTHONUNBUFFERED=1
+      - WORKER_ID=2.0.0
+      - NEXT_POOL_WORKERS=0
+      - WORKER_FIELD=year
+      - WORKER_VALUE=10
+      - ACCUMULATE_BY=authors
 
   gateway:
     build:

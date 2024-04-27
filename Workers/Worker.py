@@ -47,9 +47,8 @@ class Worker(ABC):
         
         try:
             self.next_pool_workers = int(os.getenv('NEXT_POOL_WORKERS'))
-            self.previous_pool_workers = int(os.getenv('PREVIOUS_POOL_WORKERS'))
         except:
-            print("Attempted to use non int value for NEXT_POOL_WORKERS or PREVIOUS_POOL_WORKERS")
+            print("Attempted to use non int value for NEXT_POOL_WORKERS")
             return None
         
         self.communicator = Communicator()

@@ -71,7 +71,6 @@ class QueryConfig():
       - PYTHONUNBUFFERED=1
       - WORKER_ID={worker_id}
       - NEXT_POOL_WORKERS={0 if p == len(self.query_pools) - 1 else self.query_pools[p].worker_amount}
-      - PREVIOUS_POOL_WORKERS={0 if p == 0 else self.query_pools[p-1].worker_amount}
       - WORKER_FIELD={pool.worker_field}
       - WORKER_VALUE={pool.worker_value}"""
                 if pool.worker_type == ACCUMULATOR_TYPE:
