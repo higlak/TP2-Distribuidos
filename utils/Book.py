@@ -1,6 +1,12 @@
+import csv
 from unittest import TestCase
-from Date import Date
+from utils.Date import Date
+from utils.auxiliar_functions import integer_to_big_endian_byte_array, byte_array_to_big_endian_integer, remove_bytes
 import unittest
+import pprint
+
+CSV_HEADER = "Title,description,authors,image,previewLink,publisher,publishedDate,infoLink,categories,ratingsCount"
+BOOK_AS_CSV_LEN_BYTES = 2
 
 class Book():
     def __init__(self, title, description, authors, image, previewLink, publisher, publishedDate, infoLink, categories, ratingsCount):
@@ -10,7 +16,7 @@ class Book():
         self.image = image
         self.previewLink = previewLink
         self.publisher = publisher
-        self.publishedDate = Date.from_str(publishedDate)
+        self.publishedDate = publishedDate
         self.infoLink = infoLink
         self.categories = categories
         self.ratingsCount = ratingsCount
@@ -28,7 +34,7 @@ class Book():
         if not attributes['authors']:
             authors = []
         else:
-            authors = attributes['authors'].strip('[').strip(']').split(',')
+            authors = attributes['authors'].strip('"').strip('[').strip(']').split(',')
             authors = [author.strip(' ').strip('\'') for author in authors]
         image = attributes['image'] 
         previewLink = attributes['previewLink']
@@ -38,7 +44,7 @@ class Book():
         if not attributes['categories']:
             categories = []
         else:
-            categories = attributes['categories'].strip('[').strip(']').split(',')
+            categories = attributes['categories'].strip('"').strip('[').strip(']').split(',')
             categories = [category.strip(' ').strip('\'') for category in categories]
         if not attributes['ratingsCount']:
             ratingsCount = None
@@ -55,7 +61,7 @@ class TestBook(TestCase):
         self.assertEqual(book, expected)
 
     def test_full_book(self):
-        attributes = {'Title': 'Murdocca', 'description': 'Libro de estructura del computador', 'authors': "['Autor1', 'Autor2']", 'image': 'imagen.png', 'previewLink': 'link.com', 'publisher': 'Mazzeo', 'publishedDate': '1840-04', 'infoLink': 'infolink.com', 'categories': "['Computacion']", 'ratingsCount': '4397.0'}
+        attributes = {'Title': 'Murdocca', 'description': 'Libro de estructura del computador', 'authors': "\"['Autor1', 'Autor2']\"", 'image': 'imagen.png', 'previewLink': 'link.com', 'publisher': 'Mazzeo', 'publishedDate': '1840-04', 'infoLink': 'infolink.com', 'categories': "['Computacion']", 'ratingsCount': '4397.0'}
         book = Book.from_csv(attributes)
         expected = Book('Murdocca', 'Libro de estructura del computador', ['Autor1', 'Autor2'], 'imagen.png', 'link.com', 'Mazzeo', "1840-04", 'infolink.com', ['Computacion'], 4397)
         self.assertEqual(book, expected)

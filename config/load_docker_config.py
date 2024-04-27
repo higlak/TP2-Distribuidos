@@ -25,6 +25,14 @@ GATEWAY = """  gateway:
     links: 
       - rabbitmq
     environment:
+      - PYTHONUNBUFFERED=1\n\n"""
+
+CLIENT = """  client:
+    build:
+      context: ./
+      dockerfile: Client/Client.dockerfile
+    restart: on-failure
+    environment:
       - PYTHONUNBUFFERED=1"""
 
 class Pool():
@@ -112,5 +120,6 @@ def main():
       proccess_query(file, filename, individual_query)
 
     file.write(GATEWAY)      
+    file.write(CLIENT)      
 
 main()

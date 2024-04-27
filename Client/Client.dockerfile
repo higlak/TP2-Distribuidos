@@ -1,13 +1,13 @@
 FROM rabbitmq:latest
-
 # Instalar Python 3 y pika
 RUN apt-get update && apt-get install -y python3
 RUN apt-get update && apt-get install -y python3-pika
 
-COPY ./CommunicationMiddleware /root/CommunicationMiddleware
 COPY ./utils /root/utils
-COPY ./Gateway/Gateway.py /root/main.py
+COPY ./Client/Client.py /root/main.py
+COPY ./data/test.csv /root/book.csv
+COPY ./data/test.csv /root/review.csv
 #COPY ./__init__.py /root/__init__.py
 #ENV PYTHONPATH "${PYTHONPATH}:/root"
 
-CMD python3 /root/main.py
+CMD python3 /root/main.py /root/book.csv /root/review.csv

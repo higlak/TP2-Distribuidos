@@ -98,9 +98,12 @@ class Worker(ABC):
         else:
             exchange_name = self.id.next_exchange_name()
             if batch.is_empty():
-                self.communicator.produce_message_n_times(exchange_name, batch.to_bytes(), self.next_pool_workers)
+                self.propagate_eof(exchange_name)
             else:
                 self.communicator.produce_message(exchange_name, batch.to_bytes())
+
+    def propagate_eof(self, exchange_name):
+        self.communicator.produce_message_n_times(exchange_name, Batch([]).to_bytes(), self.next_pool_workers)
 
 def append_extend(l, element_or_list):
     if isinstance(element_or_list, list):

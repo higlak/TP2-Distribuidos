@@ -132,9 +132,6 @@ class QueryMessage():
         if self.year == None:
             return False
         return self.year >= year_range[0] and self.year <= year_range[1]
-    
-    def is_sync_message():
-        return False
 
     def contains_in_title(self, word):
         return word in self.title

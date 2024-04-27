@@ -19,6 +19,9 @@ class Review():
     def __eq__(self, other):
         return vars(self) == vars(other)
 
+    def __repr__(self) -> str:
+        return f"{self.id}\n{self.title}\n{self.price}\n{self.user_id}\n{self.profileName}\n{self.helpfulness}\n{self.score}\n{self.time}\n{self.summary}\n{self.text}"
+
     @classmethod
     def from_csv(cls, attributes):
         if not attributes['Id']:

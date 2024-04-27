@@ -1,3 +1,21 @@
+# Receives bytes until n bytes have been received. If cannot receive n bytes None is returned
+def recv_exactly(socket, n):
+    buffer = bytes()
+    while n > 0:
+        received = socket.recv(n)
+        if len(received) == 0:
+            return None
+        buffer += received
+        n -= len(received)
+    return buffer 
+
+# Sends bytes until all of them are sent, or a failure occurs
+def send_all(socket, byte_array):
+    while len(byte_array) > 0:
+        sent = socket.send(byte_array)
+        byte_array = byte_array[sent:]
+    return
+
 def byte_array_to_big_endian_integer(bytes):
     number = 0
     for i in range(0, len(bytes)):

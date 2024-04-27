@@ -1,32 +1,67 @@
 from unittest import TestCase
 import csv
+from utils.auxiliar_functions import integer_to_big_endian_byte_array, byte_array_to_big_endian_integer, remove_bytes, recv_exactly
+import pprint
+from utils.QueryMessage import MSG_TYPE_BYTES
+
+DATASET_LINE_LEN_BYTES = 2
+
+class DatasetLine():
+    def __init__(self, string, object_type):
+        self.datasetLine = string
+        self.datasetLineType = object_type
+        
+    def to_bytes(self):
+        byte_array = integer_to_big_endian_byte_array(self.datasetLineType, MSG_TYPE_BYTES)
+        byte_array.extend(integer_to_big_endian_byte_array(len(self.datasetLine), DATASET_LINE_LEN_BYTES))
+        byte_array.extend(self.datasetLine.encode())
+        return byte_array
+
+    def __len__(self):
+        return len(self.datasetLine)
+
+    def __repr__(self) -> str:
+        return str(self.datasetLineType) + ' ' + self.datasetLine
+
+    @classmethod
+    def from_bytes(cls, byte_array):
+        msg_type = byte_array_to_big_endian_integer(remove_bytes(byte_array, MSG_TYPE_BYTES))
+        length = byte_array_to_big_endian_integer(remove_bytes(byte_array, DATASET_LINE_LEN_BYTES))
+        string = remove_bytes(byte_array, length).decode()
+        return DatasetLine(string, msg_type)
+    
+    @classmethod
+    def from_socket(cls, sock):
+        byte_array = recv_exactly(sock, MSG_TYPE_BYTES + DATASET_LINE_LEN_BYTES)
+        if not byte_array:
+            return None
+        datasetLineType = byte_array[0]
+        datasetLineLen = byte_array_to_big_endian_integer(byte_array[1:])
+        datasetLine_bytes = recv_exactly(sock, datasetLineLen)
+        if not datasetLine_bytes:
+            return None
+        
+        return DatasetLine(datasetLine_bytes.decode(), datasetLineType)
+    
+
 
 class DatasetReader():
     def __init__(self, path):
-        self.file = open(path, 'r', encoding='Utf-8')
-        self.reader = csv.DictReader(self.file)
-        
-    def read_objects_of_class(self, object_class, n):
-        """
-        Reads lines and transforms them into objects of type object_class. 
-        In order for this to work object_class must implement from_csv
-        """
-        objects = []
-        for _ in range(n):
-            try: 
-                attributes = next(self.reader)
-                objects.append(object_class.from_csv(attributes))
-            except StopIteration:
-                break
-        return objects
+        try:
+            self.file = open(path, 'r', encoding='Utf-8')
+            self.file.readline()
+        except:
+            print(f"Unable to open path {path}")
+            return None
 
-    def append_objects(self, objects):
-        """""
-        Appends objects into a file. 
-        In order for this to work object must implent to_csv
-        """
-        for object in objects:
-            self.append_line(object.to_csv())
+    def read_lines(self, n, object_type):
+        lines = []
+        for _ in range(n):
+            line  = self.file.readline().rstrip("\n")
+            if line == '':
+                break
+            lines.append(DatasetLine(line, object_type))
+        return lines
 
     def close(self):
         """
@@ -69,58 +104,27 @@ class DatasetWriter():
 if __name__ == '__main__':
     import unittest
     import time
-    from Book import Book 
-    from QueryResult import QueryResult
+    from utils.Book import Book 
+    from utils.QueryResult import QueryResult
+    from utils.QueryMessage import BOOK_MSG_TYPE
 
     class TestDatasetReader(TestCase):
-        def test_book1(self):
-            return Book('Its Only Art If Its Well Hung!', 
-                            '', 
-                            ['Julie Strain'], 
-                            'http://books.google.com/books/content?id=DykPAAAACAAJ&printsec=frontcover&img=1&zoom=1&source=gbs_api', 
-                            'http://books.google.nl/books?id=DykPAAAACAAJ&dq=Its+Only+Art+If+Its+Well+Hung!&hl=&cd=1&source=gbs_api', 
-                            '', 
-                            '1996', 
-                            'http://books.google.nl/books?id=DykPAAAACAAJ&dq=Its+Only+Art+If+Its+Well+Hung!&hl=&source=gbs_api', 
-                            ['Comics & Graphic Novels'], 
-                            None)
-        
-        def test_book2(self):
-            return Book('Dr. Seuss: American Icon',
-                        "Philip Nel takes a fascinating look into the key aspects of Seuss's career - his poetry, politics, art, marketing, and place in the popular imagination.\" \"Nel argues convincingly that Dr. Seuss is one of the most influential poets in America. His nonsense verse, like that of Lewis Carroll and Edward Lear, has changed language itself, giving us new words like \"nerd.\" And Seuss's famously loopy artistic style - what Nel terms an \"energetic cartoon surrealism\" - has been equally important, inspiring artists like filmmaker Tim Burton and illustrator Lane Smith. --from back cover",
-                        ['Philip Nel'],
-                        'http://books.google.com/books/content?id=IjvHQsCn_pgC&printsec=frontcover&img=1&zoom=1&edge=curl&source=gbs_api',
-                        'http://books.google.nl/books?id=IjvHQsCn_pgC&printsec=frontcover&dq=Dr.+Seuss:+American+Icon&hl=&cd=1&source=gbs_api',
-                        'A&C Black',
-                        '2005-01-01',
-                        'http://books.google.nl/books?id=IjvHQsCn_pgC&dq=Dr.+Seuss:+American+Icon&hl=&source=gbs_api',
-                        ['Biography & Autobiography'],
-                        None)
+        def test_line(self):
+            return "Its Only Art If Its Well Hung!,,['Julie Strain'],http://books.google.com/books/content?id=DykPAAAACAAJ&printsec=frontcover&img=1&zoom=1&source=gbs_api,http://books.google.nl/books?id=DykPAAAACAAJ&dq=Its+Only+Art+If+Its+Well+Hung!&hl=&cd=1&source=gbs_api,,1996,http://books.google.nl/books?id=DykPAAAACAAJ&dq=Its+Only+Art+If+Its+Well+Hung!&hl=&source=gbs_api,['Comics & Graphic Novels'],"
 
-        def test_books(self):
-            return [self.test_book1(), self.test_book2()]
+        def test_read_lines(self):
+            dh = DatasetReader('./utils/test.csv')
+            line = dh.read_lines(1, BOOK_MSG_TYPE)[0]
+            expected = DatasetLine(self.test_line(), BOOK_MSG_TYPE)
+            print(line)
+            print(expected)
+            self.assertEqual(line.to_bytes(), expected.to_bytes())
         
-        def test_read_one_object_of_class(self):
-            dh = DatasetReader('test.csv')
-            objects = dh.read_objects_of_class(Book, 1)
-            expected = [self.test_book1()]
-            dh.close()
-            self.assertEqual(objects, expected)
+        def test_datasetLine_from_bytes(self):
+            line = DatasetLine(self.test_line(), BOOK_MSG_TYPE)
+            line_bytes = line.to_bytes()
+            self.assertEqual(line.to_bytes(), DatasetLine.from_bytes(line_bytes).to_bytes())
 
-        def test_read_multiple_objects_of_class(self):
-            dh = DatasetReader('test.csv')
-            objects = dh.read_objects_of_class(Book, 2)
-            expected = self.test_books()       
-            dh.close()
-            self.assertEqual(objects, expected)
-            
-        def test_read_more_than_available_object_of_class(self):
-            dh = DatasetReader('test.csv')
-            objects = dh.read_objects_of_class(Book, 3)
-            expected = self.test_books()
-            dh.close()
-            self.assertEqual(objects, expected)
-    
     class TestDatasetWriter(TestCase):
         def test_write_query_result(self):
             columns = ["Title", "author"]
