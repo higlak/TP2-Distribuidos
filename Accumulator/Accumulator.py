@@ -35,7 +35,6 @@ def get_env_accumulator_vars():
         return (None, None, None)
     return worker_field, worker_value, accumulate_by
 
-sleep(15)
 def main():
     worker_field, worker_value, accumulate_by = get_env_accumulator_vars() 
     print(f"inciando con :{worker_field} {worker_value} {accumulate_by}")

@@ -11,7 +11,6 @@ class Filter(Worker):
         self.droping_fields = droping_fields
 
     def process_message(self, msg: QueryMessage):
-        #if msg.contains_category(self.category):
         if self.filter_msg(msg):
             print(f"fowarded {msg.title}")
             return msg.copy_droping_fields(self.droping_fields)

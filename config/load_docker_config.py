@@ -19,6 +19,7 @@ GATEWAY = """  gateway:
     build:
       context: ./
       dockerfile: Gateway/Gateway.dockerfile
+    restart: on-failure
     depends_on:
       - rabbitmq
     links: 
@@ -61,6 +62,7 @@ class QueryConfig():
     build:
       context: ./
       dockerfile: {pool.worker_type_dokerfile_path()}
+    restart: on-failure
     depends_on:
       - rabbitmq
     links: 

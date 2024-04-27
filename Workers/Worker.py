@@ -13,10 +13,10 @@ ID_SEPARATOR = '.'
 GATEWAY_EXCHANGE_NAME = 'GATEWAY_EXCHANGE'
 
 class Worker_ID():
-    def __init__(self, query, pool_id, routing_key):
+    def __init__(self, query, pool_id, worker_num):
         self.query = query
         self.pool_id = pool_id
-        self.routing_key = routing_key
+        self.worker_num = worker_num
     
     @classmethod
     def from_env(cls, env_var):
@@ -32,14 +32,11 @@ class Worker_ID():
     def get_exchange_name(self):
         return f'{self.query}.{self.pool_id}'
     
-    def get_routing_key(self):
-        return self.routing_key
-    
     def next_exchange_name(self):
         return f'{self.query}.{int(self.pool_id)+1}'
     
     def __repr__(self):
-        return f'{self.query}.{self.pool_id}.{self.routing_key}'
+        return f'{self.query}.{self.pool_id}.{self.worker_num}'
     
 class Worker(ABC):
     def __init__(self):
@@ -55,14 +52,7 @@ class Worker(ABC):
             print("Attempted to use non int value for NEXT_POOL_WORKERS or PREVIOUS_POOL_WORKERS")
             return None
         
-        if self.next_pool_workers == 0:
-            self.communicator = Communicator()
-        else:
-            routing_keys = []
-            for i in range(self.next_pool_workers):
-                routing_keys.append(str(i))
-            self.communicator = Communicator(routing_keys=routing_keys)
-
+        self.communicator = Communicator()
 
     @abstractmethod
     def process_message(self, message):
@@ -71,7 +61,6 @@ class Worker(ABC):
     def process_batch(self, batch):
         results = []
         for message in batch:
-            #if not message.is_sync_message(): 
             result = self.process_message(message)
             if result:
                 append_extend(results, result)
@@ -79,22 +68,11 @@ class Worker(ABC):
     
     def receive_message(self):
         exchange_name = self.id.get_exchange_name()
-        routing_key = self.id.get_routing_key()
-        print("Exchange_name: ", exchange_name)
-        print("routing_key: ", routing_key)
-        return self.communicator.receive_subscribed_message(exchange_name, routing_key)
+        return self.communicator.consume_message(exchange_name)
         
     def start(self):
-        #self.syncronice()
         self.loop()
-
-    def syncronice(self):
-        initialized = {}
-        while len(initialized) < self.previous_pool_workers:
-            #receive con timeout
-            #if recibis algo
-            # insertar al set
-            pass
+        self.communicator.close_connection()
 
     def loop(self):
         while True:
@@ -105,7 +83,7 @@ class Worker(ABC):
             print(f"[Worker {self.id}] Received batch with {batch.size()} elements")
             
             if batch.is_empty():
-                print(f"[Worker {self.id}] Received Eof")
+                print(f"[Worker {self.id}] Received EOf")
                 self.send_batch(batch)
                 return    
             
@@ -117,14 +95,13 @@ class Worker(ABC):
 
     def send_batch(self, batch):
         if self.next_pool_workers == 0:
-            sleep(5) #p esto es horrible
-            self.communicator.publish_message(GATEWAY_EXCHANGE_NAME, batch.to_bytes())
+            self.communicator.produce_message(GATEWAY_EXCHANGE_NAME, batch.to_bytes())
         else:
             exchange_name = self.id.next_exchange_name()
             if batch.is_empty():
-                self.communicator.publish_to_all_routing_keys(exchange_name, batch.to_bytes())
+                self.communicator.produce_message_n_times(exchange_name, batch.to_bytes(), self.next_pool_workers)
             else:
-                self.communicator.publish_message_next_routing_key(exchange_name, batch.to_bytes())
+                self.communicator.produce_message(exchange_name, batch.to_bytes())
 
 def append_extend(l, element_or_list):
     if isinstance(element_or_list, list):

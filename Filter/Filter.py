@@ -33,12 +33,12 @@ def get_env_filter_vars():
     drop_fields = get_drop_fields_of_filter_type(filter_type)
     return filter_type, filter_value, drop_fields
 
-sleep(15)
 def main():
     filter_field, filter_value, drop_fields = get_env_filter_vars() 
     print(f"inciando con :{filter_field} {filter_value} {drop_fields}")
     if not filter_field:
         return
+    sleep(2)
     worker = Filter(filter_field,filter_value, drop_fields)
     worker.start()
     print("hola")
