@@ -1,0 +1,34 @@
+version: '3'
+services:
+  rabbitmq:
+    build:
+      context: ./test/rabbitmq
+      dockerfile: rabbitmq.dockerfile
+    ports:
+      - 15672:15672
+
+  producer1:
+    build:
+      context: ./
+      dockerfile: test/producer/producer.dockerfile
+    restart: on-failure
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PRODUCER_ID=1
+    depends_on:
+      - rabbitmq
+    links: 
+      - rabbitmq
+
+  consumer1:
+    build:
+      context: ./
+      dockerfile: test/consumer/consumer.dockerfile
+    restart: on-failure
+    depends_on:
+      - rabbitmq
+    links: 
+      - rabbitmq
+    environment:
+      - PYTHONUNBUFFERED=1
+      - CONSUMER_ID=1
