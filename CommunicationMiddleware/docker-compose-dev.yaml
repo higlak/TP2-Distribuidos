@@ -7,23 +7,23 @@ services:
     ports:
       - 15672:15672
 
-  publisher1:
+  producer1:
     build:
       context: ./
-      dockerfile: test/publisher/publisher.dockerfile
+      dockerfile: test/producer/producer.dockerfile
     restart: on-failure
     environment:
       - PYTHONUNBUFFERED=1
-      - PUBLISHER_ID=1
+      - PRODUCER_ID=1
     depends_on:
       - rabbitmq
     links: 
       - rabbitmq
 
-  subscriber1:
+  consumer1:
     build:
       context: ./
-      dockerfile: test/subscriber/subscriber.dockerfile
+      dockerfile: test/consumer/consumer.dockerfile
     restart: on-failure
     depends_on:
       - rabbitmq
@@ -31,30 +31,4 @@ services:
       - rabbitmq
     environment:
       - PYTHONUNBUFFERED=1
-      - SUBSCRIBER_ID=1
-
-  subscriber2:
-    build:
-      context: ./
-      dockerfile: test/subscriber/subscriber.dockerfile
-    restart: on-failure
-    depends_on:
-      - rabbitmq
-    links: 
-      - rabbitmq
-    environment:
-      - PYTHONUNBUFFERED=1
-      - SUBSCRIBER_ID=2
-
-  subscriber3:
-    build:
-      context: ./
-      dockerfile: test/subscriber/subscriber.dockerfile
-    restart: on-failure
-    depends_on:
-      - rabbitmq
-    links: 
-      - rabbitmq
-    environment:
-      - PYTHONUNBUFFERED=1
-      - SUBSCRIBER_ID=3
+      - CONSUMER_ID=1

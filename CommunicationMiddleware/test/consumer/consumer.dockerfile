@@ -4,7 +4,7 @@ FROM rabbitmq:latest
 RUN apt-get update && apt-get install -y python3
 RUN apt-get update && apt-get install -y python3-pika
 
-COPY test/subscriber/subscriber.py /root/subscriber.py
+COPY test/consumer/consumer.py /root/consumer.py
 COPY ../../middleware.py /root/middleware.py
 
-CMD /root/subscriber.py > /out.txt
+CMD /root/consumer.py > /out.txt

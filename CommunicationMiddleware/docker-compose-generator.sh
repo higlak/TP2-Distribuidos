@@ -1,6 +1,6 @@
 #!/bin/bash
-publishers="1"
-subscribers="2"
+producers="1"
+consumers="2"
 
 echo $0, $1, $2
 
@@ -8,21 +8,21 @@ while [[ $# -gt 0 ]]; do #cantidad de argumentos >= 0
     key="$1"
     case $key in
         --p)
-            publishers="$2"
+            producers="$2"
             shift 2       #move los argumentos 2 posiciones
             ;;
-        --s)
-            subscribers="$2"
+        --c)
+            consumers="$2"
             shift 2
             ;;
         *)
-            echo "--p x --s son los args donde x es # de publishers y S # de subscribers"
+            echo "--p P --c C son los args donde P es # de producers y C # de consumers"
             exit
             ;;
     esac
 done
 
-echo "Se levantaran $publishers producers y subscriber $subscribers"
+echo "Se levantaran $producers producers y consumer $consumers"
 
 rabbit_mq_text="version: '3'
 services:
@@ -35,16 +35,16 @@ services:
 
 echo "$rabbit_mq_text" > docker-compose-dev.yaml
 
-for ((i = 1; i <= $publishers; i++)); do
+for ((i = 1; i <= $producers; i++)); do
   client_text="
-  publisher$i:
+  producer$i:
     build:
       context: ./
-      dockerfile: test/publisher/publisher.dockerfile
+      dockerfile: test/producer/producer.dockerfile
     restart: on-failure
     environment:
       - PYTHONUNBUFFERED=1
-      - PUBLISHER_ID=$i
+      - PRODUCER_ID=$i
     depends_on:
       - rabbitmq
     links: 
@@ -52,12 +52,12 @@ for ((i = 1; i <= $publishers; i++)); do
   echo "$client_text" >> docker-compose-dev.yaml
 done
 
-for ((i = 1; i <= $subscribers; i++)); do
-  subscriber_text="
-  subscriber$i:
+for ((i = 1; i <= $consumers; i++)); do
+  consumer_text="
+  consumer$i:
     build:
       context: ./
-      dockerfile: test/subscriber/subscriber.dockerfile
+      dockerfile: test/consumer/consumer.dockerfile
     restart: on-failure
     depends_on:
       - rabbitmq
@@ -65,6 +65,6 @@ for ((i = 1; i <= $subscribers; i++)); do
       - rabbitmq
     environment:
       - PYTHONUNBUFFERED=1
-      - SUBSCRIBER_ID=$i"
-  echo "$subscriber_text" >> docker-compose-dev.yaml
+      - CONSUMER_ID=$i"
+  echo "$consumer_text" >> docker-compose-dev.yaml
 done

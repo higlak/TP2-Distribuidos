@@ -1,23 +1,16 @@
 import pika
-import time
-
 import pika.exceptions
 
-QUEUE_NAME_POSITION = 0
-GENERATOR_POSITION = 1
-
-class SubscribersQueues():
+class ConsumerQueues():
     def __init__(self):
-        self.subscribers = {}
+        self.queues = {}
 
-    def add_subscriber(self, exchange_name, routing_key, queue_name, generator):
-        self.subscribers[(exchange_name, routing_key)] = (queue_name, generator)
+    def add_queue(self, exchange_name, generator):
+        self.queues[exchange_name] = generator
 
-    def recv_from(self, exchange_name, routing_key):
+    def recv_from(self, exchange_name):
         try:
-            generator = self.subscribers[(exchange_name, routing_key)][GENERATOR_POSITION]
-            #method_frame, header_frame, body = self.channel.consume(queue=queue_name, auto_ack=True)
-            #self.channel.consume(queue=queue_name, auto_ack=True)
+            generator = self.queues[exchange_name]
             _method_frame, _header_frame, body = next(generator)
             return body
         except (pika.exceptions.ChannelClosed, 
@@ -26,72 +19,44 @@ class SubscribersQueues():
             print ("se cerro")
             return None
     
-    def get_queue_name(self, exchange_name, routing_key):
-        return self.subscribers.get((exchange_name, routing_key),(None, None))[QUEUE_NAME_POSITION]
+    def contains(self, exchange_name):
+        return exchange_name in self.queues
 
 class Communicator():
-    def __init__(self, prefetch_count=1, routing_keys=['']):
-        self.subscribers_queues = SubscribersQueues()
-        self.publisher_exchange_names = set()
+    def __init__(self, prefetch_count=1):
+        self.consumer_queues = ConsumerQueues()
+        self.producer_exchange_names = set()
         self.connection = pika.BlockingConnection(pika.ConnectionParameters(host='rabbitmq'))
         self.channel = self.connection.channel()
         self.channel.basic_qos(prefetch_count=prefetch_count)
-        self.routing_key_iterator = RoutingKeyIterator(routing_keys)
-
-    def set_publisher_exchange(self, exchange_name):
-        self.channel.exchange_declare(exchange=exchange_name, exchange_type='direct')
-        self.publisher_exchange_names.add(exchange_name)
-        for routing_key in self.routing_key_iterator.routing_keys:
-            if routing_key == '':
-                queue_name = exchange_name
-            else:
-                queue_name = f'{exchange_name}.{routing_key}'
-            self.channel.queue_declare(queue=queue_name, durable=True)
     
-    def set_subscriber_queue(self, exchange_name, routing_key):
-        self.channel.exchange_declare(exchange=exchange_name, exchange_type='direct')
-        queue_name = f'{exchange_name}.{routing_key}'
-        self.channel.queue_declare(queue=queue_name, durable=True)
-        generator = self.channel.consume(queue=queue_name, auto_ack=True)
-        self.subscribers_queues.add_subscriber(exchange_name, routing_key, queue_name, generator)
-        self.channel.queue_bind(exchange=exchange_name, queue=queue_name, routing_key=routing_key)
-    
-    def publish_message(self, exchange_name, message, routing_key=''):
-        if not exchange_name in self.publisher_exchange_names:
-            self.set_publisher_exchange(exchange_name)
-        self.channel.basic_publish(exchange=exchange_name, routing_key=routing_key, body=message)
+    def set_producer_exchange(self, exchange_name):
+        self.channel.exchange_declare(exchange=exchange_name, exchange_type='fanout')
+        self.producer_exchange_names.add(exchange_name)
+        self.channel.queue_declare(queue=exchange_name)
+        self.channel.queue_bind(exchange=exchange_name, queue=exchange_name)
 
-    def publish_message_next_routing_key(self, exchange_name, message):
-        routing_key = self.routing_key_iterator.next()
-        self.publish_message(exchange_name, message, routing_key)
+    def set_consumer_queue(self, exchange_name):
+        self.channel.exchange_declare(exchange=exchange_name, exchange_type='fanout')
+        self.channel.queue_declare(queue=exchange_name)
+        generator = self.channel.consume(queue=exchange_name, auto_ack=True)
+        self.consumer_queues.add_queue(exchange_name, generator)
+        self.channel.queue_bind(exchange=exchange_name, queue=exchange_name)
 
-    def receive_subscribed_message(self, exchange_name, routing_key=''):
-        print(f"Exchange_name: {exchange_name}, routing_key: {routing_key}")
-        if not self.subscribers_queues.get_queue_name(exchange_name, routing_key):
-            self.set_subscriber_queue(exchange_name, routing_key)
-            
-        message = self.subscribers_queues.recv_from(exchange_name, routing_key)
+    def produce_message(self, exchange_name, message):
+        if not exchange_name in self.producer_exchange_names:
+            self.set_producer_exchange(exchange_name)
+        self.channel.basic_publish(exchange=exchange_name, body=message, routing_key='')
 
+    def produce_message_n_times(self, exchange_name, message, n):
+        for _ in range(n):
+            self.produce_message(exchange_name, message)
+
+    def consume_message(self, exchange_name):
+        if not self.consumer_queues.contains(exchange_name):
+            self.set_consumer_queue(exchange_name)
+        message = self.consumer_queues.recv_from(exchange_name)
         return bytearray(message)
-    
-    def publish_to_all_routing_keys(self, exchange_name, message):
-        for routing_key in self.routing_key_iterator.routing_keys:
-            self.publish_message(exchange_name, message, routing_key)
 
     def close_connection(self):
         self.channel.close()
-
-class RoutingKeyIterator():
-    def __init__(self, list):
-        if len(list) == 0:
-            return None
-        self.routing_keys = list
-        self.actual = 0
-        
-
-    def next(self):
-        routing_key = self.routing_keys[self.actual % len(self.routing_keys)]
-        self.actual += 1
-        return routing_key
-    
-        
