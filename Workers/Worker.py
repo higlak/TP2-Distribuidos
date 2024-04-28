@@ -71,7 +71,6 @@ class Worker(ABC):
         
     def start(self):
         self.loop()
-        sleep(60)
         self.communicator.close_connection()
 
     def loop(self):
