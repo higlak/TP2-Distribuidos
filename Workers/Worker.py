@@ -71,13 +71,13 @@ class Worker(ABC):
         
     def start(self):
         self.loop()
+        sleep(60)
         self.communicator.close_connection()
 
     def loop(self):
         while True:
             print(f"[Worker {self.id}] Waiting for message...")
             batch_bytes = self.receive_message()
-            
             batch = Batch.from_bytes(batch_bytes)
             print(f"[Worker {self.id}] Received batch with {batch.size()} elements")
             
@@ -103,6 +103,7 @@ class Worker(ABC):
                 self.communicator.produce_message(exchange_name, batch.to_bytes())
 
     def propagate_eof(self, exchange_name):
+        print("proximos workers: ", self.next_pool_workers)
         self.communicator.produce_message_n_times(exchange_name, Batch([]).to_bytes(), self.next_pool_workers)
 
 def append_extend(l, element_or_list):

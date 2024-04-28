@@ -41,7 +41,6 @@ class DatasetLine():
         datasetLine_bytes = recv_exactly(sock, datasetLineLen)
         if not datasetLine_bytes:
             return None
-        
         return DatasetLine(datasetLine_bytes.decode(), datasetLineType)
     
     def is_book(self):

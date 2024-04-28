@@ -50,7 +50,6 @@ class QueryMessage():
     def from_bytes(self, byte_array):
         msg_type = remove_bytes(byte_array, 1)[0]
         generator = ParametersGenerator(byte_array)
-        
         year = generator.next()
         rating = generator.next()
         msp = generator.next()
@@ -203,7 +202,7 @@ class ParametersGenerator():
         if not method:
             return None
         return method()
-
+  
     def interprete_big_endian_integer(self, end):
         length = byte_array_to_big_endian_integer(self.remove_bytes(end))
         return length
@@ -239,8 +238,9 @@ class ParametersGenerator():
         return self.interprete_variable_field(REVIEW_TEXT_LEN_BYTES, self.interprete_string)
        
     def interprete_string(self, length):
-        text = self.remove_bytes(length).decode()        
-        return text
+        text = self.remove_bytes(length)
+        text_decoded = text.decode()    
+        return text_decoded
     
     def interprete_list(self, length):
         list = self.remove_bytes(length).decode().split(SEPARATOR)  

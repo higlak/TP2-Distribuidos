@@ -12,33 +12,6 @@ import socket
 
 GATEWAY_EXCHANGE_NAME = 'GATEWAY_EXCHANGE'
 
-def messages_for_query1():
-    messages = []
-    for i in range(30):
-        msg = QueryMessage(BOOK_MSG_TYPE, title=str(i), year=1995+i)
-        if i%2:
-            msg.categories = ['fiction']  
-        messages.append(msg)
-    return messages
-
-def messages_for_query2():
-    messages = []
-    for i in range(30):
-        msg = QueryMessage(BOOK_MSG_TYPE, title=str(i), year=1950+5*i)
-        if i%2:
-            msg.authors = ['Author1']  
-        messages.append(msg)
-    return messages
-
-def start_listening():
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.bind(('',12345))
-    server_socket.listen()
-    print("Server listening con ..:12345")
-    client_socket, addr = server_socket.accept()
-    print(f"\n\n Cliente conectado {addr}\n\n")
-    return server_socket, client_socket, addr
-
 def recv_queries_results(client_socket):
     print("[Gateway] Receiving queries results from queries subsystems")
     pass
@@ -49,11 +22,11 @@ class Gateway():
         self.server_socket.bind(('',port))
         self.server_socket.listen()
         self.threads = []
-        print(f"Server listening con {self.server_socket.getsockname()}")
+        print(f"[Gateway] Listening on: {self.server_socket.getsockname()}")
     
     def accept_client(self):
         client_socket, addr = self.server_socket.accept()
-        print(f"\n\n Client connected {addr}")
+        print(f"[Gateway] Client connected with address: {addr}")
         gateway_in = GatewayIn(client_socket)
         gateway_in_thread = threading.Thread(target=gateway_in.start)
         self.threads.append(gateway_in_thread)
@@ -75,15 +48,9 @@ class Gateway():
 class GatewayIn():
     def __init__(self, client_socket):
         self.client_socket = client_socket
-        while True:
-            try:
-                self.com = Communicator()
-                break
-            except:
-                print("Rabbit not ready")
-                sleep(1)
-        self.book_query_numbers = [1,2,3,5] #p dsp sacar de var de entorno\
-        self.review_query_numbers = [3,5]
+        self.com = Communicator()
+        self.book_query_numbers = [1] #p dsp sacar de var de entorno\
+        self.review_query_numbers = [ ]
     
     def start(self):
         self.loop()
@@ -110,11 +77,12 @@ class GatewayIn():
         for i in range(ammount_of_dataset_lines):
             datasetline = DatasetLine.from_socket(self.client_socket)
             datasetlines.append(datasetline)
-            print(datasetline)
         return datasetlines
     
     def send_eof(self):
-        pass
+        for query in set(self.review_query_numbers + self.book_query_numbers):
+            print(f"Sending to query {query}")
+            self.com.produce_message_n_times(f'{query}.0', Batch([]).to_bytes(), 2)
 
     def object_to_query1(obj):
         if isinstance(obj, Book):
@@ -137,16 +105,16 @@ class GatewayIn():
             obj = self.get_object_from_line(datasetLine)
             if obj:
                 objects.append(obj)
-        
         if objects[0].is_book():
             return self.send_objects_to_queries(objects, self.book_query_numbers)
         return self.send_objects_to_queries(objects, self.review_query_numbers)
         
 
     def send_objects_to_queries(self, objects, queries):
+        query_messages = []
         for query_number in queries:
             query_messages = []
-            for obj in objects:
+            for i, obj in enumerate(objects):
                 query_message = self.get_query_message(obj, query_number)
                 if query_message:
                     query_messages.append(query_message)

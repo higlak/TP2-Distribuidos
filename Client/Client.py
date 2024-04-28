@@ -20,13 +20,12 @@ def send_all_from_dataset(reader, object_type, client_socket):
     while True:
         datasetLines = reader.read_lines(BATCH_SIZE, object_type)
         if len(datasetLines) == 0:
-            print("No more to send")
+            print("[Client] No more to send")
             return
         batch = Batch(datasetLines)
-        for msg in batch:
-            print(msg)
+        
         client_socket.send(batch.to_bytes())
-        print(f"Sent batch of elements: {len(batch.messages)}")
+        print(f"[Client] Sent batch of {len(batch.messages)} elements")
 
 def connect_to_gateway():
     while True:

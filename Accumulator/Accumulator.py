@@ -37,7 +37,7 @@ def get_env_accumulator_vars():
 
 def main():
     worker_field, worker_value, accumulate_by = get_env_accumulator_vars() 
-    print(f"inciando con :{worker_field} {worker_value} {accumulate_by}")
+    print(f"Iniciando acumulador por {accumulate_by} => {worker_field} = {worker_value} ")
     if not worker_field:
         return
     worker = Accumulator(worker_field,worker_value, accumulate_by)

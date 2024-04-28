@@ -1,5 +1,8 @@
 import pika
 import pika.exceptions
+import time
+
+STARTING_RABBIT_WAIT = 1
 
 class ConsumerQueues():
     def __init__(self):
@@ -26,7 +29,15 @@ class Communicator():
     def __init__(self, prefetch_count=1):
         self.consumer_queues = ConsumerQueues()
         self.producer_exchange_names = set()
-        self.connection = pika.BlockingConnection(pika.ConnectionParameters(host='rabbitmq'))
+        i = STARTING_RABBIT_WAIT
+        while True:
+            try:
+                self.connection = pika.BlockingConnection(pika.ConnectionParameters(host='rabbitmq'))
+                break
+            except:
+                print(f"Rabbit not ready, sleeping {i}s")
+                time.sleep(i)
+                i *= 2
         self.channel = self.connection.channel()
         self.channel.basic_qos(prefetch_count=prefetch_count)
     
@@ -49,7 +60,8 @@ class Communicator():
         self.channel.basic_publish(exchange=exchange_name, body=message, routing_key='')
 
     def produce_message_n_times(self, exchange_name, message, n):
-        for _ in range(n):
+        for i in range(n):
+            print("Sending nth time: ",i)
             self.produce_message(exchange_name, message)
 
     def consume_message(self, exchange_name):

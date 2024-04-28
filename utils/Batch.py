@@ -1,4 +1,4 @@
-from utils.auxiliar_functions import integer_to_big_endian_byte_array
+from utils.auxiliar_functions import byte_array_to_big_endian_integer, integer_to_big_endian_byte_array
 from utils.QueryMessage import QueryMessage
 import unittest
 from unittest import TestCase
@@ -25,7 +25,7 @@ class Batch():
     
     def to_bytes(self):
         byte_array = integer_to_big_endian_byte_array(len(self.messages), AMOUNT_OF_MESSAGES_BYTES)
-        for message in self.messages:
+        for i, message in enumerate(self.messages):
             byte_array.extend(message.to_bytes())
         return byte_array
     

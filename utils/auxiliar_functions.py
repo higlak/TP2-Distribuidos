@@ -48,4 +48,4 @@ def remove_bytes(array, finish, start=0):
 def encode(string :str):
     if string == None:
         return None
-    string.encode()
+    return string.encode()
