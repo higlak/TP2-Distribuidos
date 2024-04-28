@@ -94,16 +94,16 @@ class QueryMessage():
     
     def variable_fields_to_bytes(self):
         byte_array = bytearray()
-        byte_array.extend(integer_to_big_endian_byte_array(length(self.title), TITLE_LEN_BYTES))
-
+        byte_array.extend(integer_to_big_endian_byte_array(length(encode(self.title)), TITLE_LEN_BYTES))
+    
         if self.authors:
             authors_str = f"{SEPARATOR}".join(self.authors)
-            byte_array.extend(integer_to_big_endian_byte_array(length(authors_str), AUTHORS_LEN_BYTES))
-        byte_array.extend(integer_to_big_endian_byte_array(length(self.publisher), PUBLISHER_LEN_BYTES))
+            byte_array.extend(integer_to_big_endian_byte_array(length(encode(authors_str)), AUTHORS_LEN_BYTES))
+        byte_array.extend(integer_to_big_endian_byte_array(length(encode(self.publisher)), PUBLISHER_LEN_BYTES))
         if self.categories:
             categories_str = f"{SEPARATOR}".join(self.categories)
-            byte_array.extend(integer_to_big_endian_byte_array(length(categories_str), CATEGORIES_LEN_BYTES))
-        byte_array.extend(integer_to_big_endian_byte_array(length(self.review_text), REVIEW_TEXT_LEN_BYTES))
+            byte_array.extend(integer_to_big_endian_byte_array(length(encode(categories_str)), CATEGORIES_LEN_BYTES))
+        byte_array.extend(integer_to_big_endian_byte_array(length(encode(self.review_text)), REVIEW_TEXT_LEN_BYTES))
         return byte_array
     
     def variable_len_fields_values_to_bytes(self):

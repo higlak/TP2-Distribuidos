@@ -2,7 +2,7 @@ from unittest import TestCase
 import csv
 from utils.auxiliar_functions import integer_to_big_endian_byte_array, byte_array_to_big_endian_integer, remove_bytes, recv_exactly
 import pprint
-from utils.QueryMessage import MSG_TYPE_BYTES
+from utils.QueryMessage import MSG_TYPE_BYTES, BOOK_MSG_TYPE
 
 DATASET_LINE_LEN_BYTES = 2
 
@@ -13,8 +13,9 @@ class DatasetLine():
         
     def to_bytes(self):
         byte_array = integer_to_big_endian_byte_array(self.datasetLineType, MSG_TYPE_BYTES)
-        byte_array.extend(integer_to_big_endian_byte_array(len(self.datasetLine), DATASET_LINE_LEN_BYTES))
-        byte_array.extend(self.datasetLine.encode())
+        encoded_datasetLine = self.datasetLine.encode()
+        byte_array.extend(integer_to_big_endian_byte_array(len(encoded_datasetLine), DATASET_LINE_LEN_BYTES))
+        byte_array.extend(encoded_datasetLine)
         return byte_array
 
     def __len__(self):
@@ -43,7 +44,9 @@ class DatasetLine():
         
         return DatasetLine(datasetLine_bytes.decode(), datasetLineType)
     
-
+    def is_book(self):
+        return self.datasetLineType == BOOK_MSG_TYPE
+        
 
 class DatasetReader():
     def __init__(self, path):

@@ -44,3 +44,8 @@ def remove_bytes(array, finish, start=0):
     elements = array[start:finish]
     del array[start:finish]
     return elements
+
+def encode(string :str):
+    if string == None:
+        return None
+    string.encode()

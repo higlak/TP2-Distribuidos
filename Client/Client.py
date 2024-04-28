@@ -23,6 +23,8 @@ def send_all_from_dataset(reader, object_type, client_socket):
             print("No more to send")
             return
         batch = Batch(datasetLines)
+        for msg in batch:
+            print(msg)
         client_socket.send(batch.to_bytes())
         print(f"Sent batch of elements: {len(batch.messages)}")
 
