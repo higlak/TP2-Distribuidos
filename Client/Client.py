@@ -12,7 +12,7 @@ SERVER_PORT = 12345
 STARTING_CLIENT_WAIT = 1
 def get_file_paths():
     if len(sys.argv) != 3:
-        print("Must receive exactly 2 parameter, first one the books filepath sencond one reviews filepath")
+        print("[Client] Must receive exactly 2 parameter, first one the books filepath sencond one reviews filepath")
         return None, None
     return sys.argv[1] , sys.argv[2]
 
@@ -31,27 +31,26 @@ def connect_to_gateway():
     i = STARTING_CLIENT_WAIT
     while True:
         try:
-            print("Attempting connection")
+            print("[Client] Attempting connection")
             client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             client_socket.connect(('gateway', SERVER_PORT))
-            print("[Cliente] Client Connected to gatewy")
+            print("[Client] Client Connected to gatewy")
             return client_socket
         except:
-            print("Gateway_not ready")
+            print("[Client] Gateway not ready")
             time.sleep(i) 
             i *= 2
 
 def send_eof(client_socket):
-    print("Send Eof")
+    print("[Client] Sending EOF")
     client_socket.send(Batch([]).to_bytes())
-
 
 def main():
     books_path, reviews_path = get_file_paths()
     book_reader = DatasetReader(books_path)
     reviews_reader = DatasetReader(reviews_path)
     if not book_reader or not reviews_reader:
-        print(f"Exited invalid one ({book_reader},{reviews_reader})")
+        print(f"[Client] Reader invalid. Book reader: {book_reader}, Review reader: {reviews_reader})")
         return
 
     client_socket = connect_to_gateway()

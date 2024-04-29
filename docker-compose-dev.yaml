@@ -114,6 +114,10 @@ services:
       - rabbitmq
     environment:
       - PYTHONUNBUFFERED=1
+      - PORT=12345
+      - BOOK_QUERIES=1
+      - REVIEW_QUERIES=
+      - TOTAL_LAST_WORKERS=2
 
   client:
     build:
