@@ -1,13 +1,9 @@
 import os
-import sys 
-#sys.path.append("..")
 
 from abc import ABC, abstractmethod
-from time import sleep
 
 from CommunicationMiddleware.middleware import Communicator
 from utils.Batch import Batch
-from utils.QueryMessage import QueryMessage
 
 ID_SEPARATOR = '.'
 GATEWAY_EXCHANGE_NAME = 'GATEWAY_EXCHANGE'
@@ -77,6 +73,9 @@ class Worker(ABC):
         while True:
             print(f"[Worker {self.id}] Waiting for message...")
             batch_bytes = self.receive_message()
+            if batch_bytes == None:
+                print(f"[Worker {self.id}] Error while consuming")
+                break
             batch = Batch.from_bytes(batch_bytes)
             print(f"[Worker {self.id}] Received batch with {batch.size()} elements")
             

@@ -1,4 +1,3 @@
-from time import sleep
 from Workers.Accumulators import Accumulator
 from utils.QueryMessage import ALL_MESSAGE_FIELDS, YEAR_FIELD, CATEGORIES_FIELD, TITLE_FIELD
 import os

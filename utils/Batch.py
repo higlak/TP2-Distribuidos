@@ -11,6 +11,8 @@ class Batch():
     
     @classmethod
     def from_bytes(cls, byte_array):
+        if len(byte_array) == 0:
+            return None
         amount_of_messages = byte_array[0]
         if amount_of_messages == 0:
             return Batch([])

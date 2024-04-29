@@ -9,7 +9,7 @@ import time
 
 BATCH_SIZE = 25 #probablemente lo levantemos de la config
 SERVER_PORT = 12345
-
+STARTING_CLIENT_WAIT = 1
 def get_file_paths():
     if len(sys.argv) != 3:
         print("Must receive exactly 2 parameter, first one the books filepath sencond one reviews filepath")
@@ -28,6 +28,7 @@ def send_all_from_dataset(reader, object_type, client_socket):
         print(f"[Client] Sent batch of {len(batch.messages)} elements")
 
 def connect_to_gateway():
+    i = STARTING_CLIENT_WAIT
     while True:
         try:
             print("Attempting connection")
@@ -37,7 +38,8 @@ def connect_to_gateway():
             return client_socket
         except:
             print("Gateway_not ready")
-        time.sleep(1) #exponential_backof
+            time.sleep(i) 
+            i *= 2
 
 def send_eof(client_socket):
     print("Send Eof")

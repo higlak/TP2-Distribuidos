@@ -1,6 +1,4 @@
 import threading
-from time import sleep
-import time
 from CommunicationMiddleware.middleware import Communicator
 from utils.QueryMessage import QueryMessage, BOOK_MSG_TYPE
 from utils.Batch import Batch
