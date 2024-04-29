@@ -1,13 +1,9 @@
 import os
-import sys 
-#sys.path.append("..")
 
 from abc import ABC, abstractmethod
-from time import sleep
 
 from CommunicationMiddleware.middleware import Communicator
 from utils.Batch import Batch
-from utils.QueryMessage import QueryMessage
 
 ID_SEPARATOR = '.'
 GATEWAY_EXCHANGE_NAME = 'GATEWAY_EXCHANGE'
@@ -47,9 +43,8 @@ class Worker(ABC):
         
         try:
             self.next_pool_workers = int(os.getenv('NEXT_POOL_WORKERS'))
-            self.previous_pool_workers = int(os.getenv('PREVIOUS_POOL_WORKERS'))
         except:
-            print("Attempted to use non int value for NEXT_POOL_WORKERS or PREVIOUS_POOL_WORKERS")
+            print("Attempted to use non int value for NEXT_POOL_WORKERS")
             return None
         
         self.communicator = Communicator()
@@ -78,7 +73,9 @@ class Worker(ABC):
         while True:
             print(f"[Worker {self.id}] Waiting for message...")
             batch_bytes = self.receive_message()
-            
+            if batch_bytes == None:
+                print(f"[Worker {self.id}] Error while consuming")
+                break
             batch = Batch.from_bytes(batch_bytes)
             print(f"[Worker {self.id}] Received batch with {batch.size()} elements")
             
@@ -99,9 +96,13 @@ class Worker(ABC):
         else:
             exchange_name = self.id.next_exchange_name()
             if batch.is_empty():
-                self.communicator.produce_message_n_times(exchange_name, batch.to_bytes(), self.next_pool_workers)
+                self.propagate_eof(exchange_name)
             else:
                 self.communicator.produce_message(exchange_name, batch.to_bytes())
+
+    def propagate_eof(self, exchange_name):
+        print("proximos workers: ", self.next_pool_workers)
+        self.communicator.produce_message_n_times(exchange_name, Batch([]).to_bytes(), self.next_pool_workers)
 
 def append_extend(l, element_or_list):
     if isinstance(element_or_list, list):

@@ -50,7 +50,6 @@ class QueryMessage():
     def from_bytes(self, byte_array):
         msg_type = remove_bytes(byte_array, 1)[0]
         generator = ParametersGenerator(byte_array)
-        
         year = generator.next()
         rating = generator.next()
         msp = generator.next()
@@ -94,16 +93,16 @@ class QueryMessage():
     
     def variable_fields_to_bytes(self):
         byte_array = bytearray()
-        byte_array.extend(integer_to_big_endian_byte_array(length(self.title), TITLE_LEN_BYTES))
-
+        byte_array.extend(integer_to_big_endian_byte_array(length(encode(self.title)), TITLE_LEN_BYTES))
+    
         if self.authors:
             authors_str = f"{SEPARATOR}".join(self.authors)
-            byte_array.extend(integer_to_big_endian_byte_array(length(authors_str), AUTHORS_LEN_BYTES))
-        byte_array.extend(integer_to_big_endian_byte_array(length(self.publisher), PUBLISHER_LEN_BYTES))
+            byte_array.extend(integer_to_big_endian_byte_array(length(encode(authors_str)), AUTHORS_LEN_BYTES))
+        byte_array.extend(integer_to_big_endian_byte_array(length(encode(self.publisher)), PUBLISHER_LEN_BYTES))
         if self.categories:
             categories_str = f"{SEPARATOR}".join(self.categories)
-            byte_array.extend(integer_to_big_endian_byte_array(length(categories_str), CATEGORIES_LEN_BYTES))
-        byte_array.extend(integer_to_big_endian_byte_array(length(self.review_text), REVIEW_TEXT_LEN_BYTES))
+            byte_array.extend(integer_to_big_endian_byte_array(length(encode(categories_str)), CATEGORIES_LEN_BYTES))
+        byte_array.extend(integer_to_big_endian_byte_array(length(encode(self.review_text)), REVIEW_TEXT_LEN_BYTES))
         return byte_array
     
     def variable_len_fields_values_to_bytes(self):
@@ -132,9 +131,6 @@ class QueryMessage():
         if self.year == None:
             return False
         return self.year >= year_range[0] and self.year <= year_range[1]
-    
-    def is_sync_message():
-        return False
 
     def contains_in_title(self, word):
         return word in self.title
@@ -206,7 +202,7 @@ class ParametersGenerator():
         if not method:
             return None
         return method()
-
+  
     def interprete_big_endian_integer(self, end):
         length = byte_array_to_big_endian_integer(self.remove_bytes(end))
         return length
@@ -242,8 +238,9 @@ class ParametersGenerator():
         return self.interprete_variable_field(REVIEW_TEXT_LEN_BYTES, self.interprete_string)
        
     def interprete_string(self, length):
-        text = self.remove_bytes(length).decode()        
-        return text
+        text = self.remove_bytes(length)
+        text_decoded = text.decode()    
+        return text_decoded
     
     def interprete_list(self, length):
         list = self.remove_bytes(length).decode().split(SEPARATOR)  

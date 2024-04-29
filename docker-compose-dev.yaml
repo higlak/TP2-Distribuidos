@@ -20,9 +20,8 @@ services:
       - PYTHONUNBUFFERED=1
       - WORKER_ID=1.0.0
       - NEXT_POOL_WORKERS=2
-      - PREVIOUS_POOL_WORKERS=0
       - WORKER_FIELD=categories
-      - WORKER_VALUE=fiction
+      - WORKER_VALUE=Biography & Autobiography
 
   filter1.0.1:
     build:
@@ -37,9 +36,8 @@ services:
       - PYTHONUNBUFFERED=1
       - WORKER_ID=1.0.1
       - NEXT_POOL_WORKERS=2
-      - PREVIOUS_POOL_WORKERS=0
       - WORKER_FIELD=categories
-      - WORKER_VALUE=fiction
+      - WORKER_VALUE=Biography & Autobiography
 
   filter1.1.0:
     build:
@@ -54,9 +52,8 @@ services:
       - PYTHONUNBUFFERED=1
       - WORKER_ID=1.1.0
       - NEXT_POOL_WORKERS=2
-      - PREVIOUS_POOL_WORKERS=2
       - WORKER_FIELD=year
-      - WORKER_VALUE=1990,1999
+      - WORKER_VALUE=2000,2010
 
   filter1.1.1:
     build:
@@ -71,9 +68,8 @@ services:
       - PYTHONUNBUFFERED=1
       - WORKER_ID=1.1.1
       - NEXT_POOL_WORKERS=2
-      - PREVIOUS_POOL_WORKERS=2
       - WORKER_FIELD=year
-      - WORKER_VALUE=1990,1999
+      - WORKER_VALUE=2000,2010
 
   filter1.2.0:
     build:
@@ -88,9 +84,8 @@ services:
       - PYTHONUNBUFFERED=1
       - WORKER_ID=1.2.0
       - NEXT_POOL_WORKERS=0
-      - PREVIOUS_POOL_WORKERS=2
       - WORKER_FIELD=title
-      - WORKER_VALUE=1
+      - WORKER_VALUE=Dr
 
   filter1.2.1:
     build:
@@ -105,9 +100,8 @@ services:
       - PYTHONUNBUFFERED=1
       - WORKER_ID=1.2.1
       - NEXT_POOL_WORKERS=0
-      - PREVIOUS_POOL_WORKERS=2
       - WORKER_FIELD=title
-      - WORKER_VALUE=1
+      - WORKER_VALUE=Dr
 
   gateway:
     build:
@@ -118,5 +112,17 @@ services:
       - rabbitmq
     links: 
       - rabbitmq
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PORT=12345
+      - BOOK_QUERIES=1
+      - REVIEW_QUERIES=
+      - TOTAL_LAST_WORKERS=2
+
+  client:
+    build:
+      context: ./
+      dockerfile: Client/Client.dockerfile
+    restart: on-failure
     environment:
       - PYTHONUNBUFFERED=1

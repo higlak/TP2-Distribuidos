@@ -1,4 +1,3 @@
-from time import sleep
 from Workers.Filters import Filter
 from utils.QueryMessage import ALL_MESSAGE_FIELDS, YEAR_FIELD, CATEGORIES_FIELD, TITLE_FIELD
 import os
@@ -35,12 +34,11 @@ def get_env_filter_vars():
 
 def main():
     filter_field, filter_value, drop_fields = get_env_filter_vars() 
-    print(f"inciando con :{filter_field} {filter_value} {drop_fields}")
+    print(f"Iniciando filtro por {filter_field} = {filter_value}")
     if not filter_field:
         return
-    sleep(2)
     worker = Filter(filter_field,filter_value, drop_fields)
     worker.start()
-    print("hola")
+    print("Proceso finalizado")
 
 main()

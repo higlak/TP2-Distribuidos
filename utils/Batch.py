@@ -1,6 +1,5 @@
-from utils.auxiliar_functions import integer_to_big_endian_byte_array
+from utils.auxiliar_functions import byte_array_to_big_endian_integer, integer_to_big_endian_byte_array
 from utils.QueryMessage import QueryMessage
-from utils.SyncMessage import SyncMessage, SYNC_DONE_MSG_TYPE, SYNC_MSG_TYPE
 import unittest
 from unittest import TestCase
 
@@ -12,6 +11,8 @@ class Batch():
     
     @classmethod
     def from_bytes(cls, byte_array):
+        if len(byte_array) == 0:
+            return None
         amount_of_messages = byte_array[0]
         if amount_of_messages == 0:
             return Batch([])
@@ -20,13 +21,13 @@ class Batch():
         for _ in range(amount_of_messages):
             if len(byte_array) == 0:
                 break
-            message = message_from_bytes(byte_array)
+            message = QueryMessage.from_bytes(byte_array)
             messages.append(message) 
         return Batch(messages)
     
     def to_bytes(self):
         byte_array = integer_to_big_endian_byte_array(len(self.messages), AMOUNT_OF_MESSAGES_BYTES)
-        for message in self.messages:
+        for i, message in enumerate(self.messages):
             byte_array.extend(message.to_bytes())
         return byte_array
     
@@ -41,11 +42,6 @@ class Batch():
 
     def __next__(self):
         return next(self.messages)
-
-def message_from_bytes(byte_array):
-        #if byte_array[0] == SYNC_MSG_TYPE or byte_array[0] == SYNC_DONE_MSG_TYPE:
-        #    return SyncMessage.from_bytes(byte_array)
-        return QueryMessage.from_bytes(byte_array)
                  
 class TestBatch(TestCase):
     def test_book_message1(self):
