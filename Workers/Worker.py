@@ -48,6 +48,8 @@ class Worker(ABC):
             return None
         
         self.communicator = Communicator()
+        if not self.communicator:
+            return None
 
     @abstractmethod
     def process_message(self, message):

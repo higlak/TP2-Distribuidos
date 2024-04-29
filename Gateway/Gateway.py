@@ -21,28 +21,29 @@ class Gateway():
     def __init__(self):
         try:
             port = int(os.getenv("PORT"))
+            total_last_workers = int(os.getenv("TOTAL_LAST_WORKERS"))
         except:
-            print("Could not convert port to int")
+            print("Could not convert port of total last workers to int")
+            return None
+        com_in = Communicator()
+        com_out = Communicator()
+        if not com_in or not com_out:
             return None
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_socket.bind(('',port))
         self.server_socket.listen()
-        self.threads = []
         print(f"[Gateway] Listening on: {self.server_socket.getsockname()}")
+        self.client_socket, self.threads = Gateway.accept_client(self.server_socket, com_in, com_out, total_last_workers)
     
-    def accept_client(self):
-        client_socket, addr = self.server_socket.accept()
+    @classmethod
+    def accept_client(self, server_socket, com_in, com_out, total_last_workers):
+        client_socket, addr = server_socket.accept()
         print(f"[Gateway] Client connected with address: {addr}")
-        gateway_in = GatewayIn(client_socket)
-        gateway_out = GatewayOut(client_socket)
-        if not gateway_in or not gateway_out:
-            return None
+        gateway_in = GatewayIn(client_socket, com_in)
+        gateway_out = GatewayOut(client_socket, total_last_workers, com_out)
         gateway_in_thread = threading.Thread(target=gateway_in.start)
         gateway_out_thread = threading.Thread(target=gateway_out.start)
-        self.threads.append(gateway_in_thread)
-        self.threads.append(gateway_out_thread)
-        
-        return client_socket
+        return client_socket, [gateway_in_thread, gateway_out_thread]
     
     def start_and_wait(self):
         for thread in self.threads:
@@ -51,22 +52,15 @@ class Gateway():
             handle.join()
 
     def run(self):
-        client_socket = self.accept_client()
-        if not client_socket:
-            return None
         self.start_and_wait()
-        client_socket.close()
+        self.client_socket.close()
         self.server_socket.close()
 
 class GatewayOut():
-    def __init__(self, client_socket):
+    def __init__(self, client_socket, total_last_workers, com):
         self.client_socket = client_socket
-        self.com = Communicator()
-        try:
-            self.pending_last_workers = int(os.getenv("TOTAL_LAST_WORKERS"))
-        except:
-            print("Can not convert TOTAL_LAST_WORKERS_ to int")
-            return None
+        self.com = com
+        self.pending_last_workers = total_last_workers
 
     def start(self):
         self.loop()
@@ -85,6 +79,7 @@ class GatewayOut():
                 
             if self.pending_last_workers == 0:
                 print("[Gateway] No more EOF to receive")
+                send_all(self.client_socket, Batch([]).to_bytes())
                 break
             
             print("[Gateway] Sending result to client")
@@ -97,9 +92,9 @@ def get_env_list(param):
     return l
 
 class GatewayIn():
-    def __init__(self, client_socket):
+    def __init__(self, client_socket, com):
         self.client_socket = client_socket
-        self.com = Communicator()
+        self.com = com
         self.book_query_numbers = get_env_list("BOOK_QUERIES")
         self.review_query_numbers = get_env_list("REVIEW_QUERIES")
     

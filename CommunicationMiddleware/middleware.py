@@ -3,6 +3,7 @@ import pika.exceptions
 import time
 
 STARTING_RABBIT_WAIT = 1
+MAX_ATTEMPTS = 6
 
 class ConsumerQueues():
     def __init__(self):
@@ -36,6 +37,9 @@ class Communicator():
                 self.connection = pika.BlockingConnection(pika.ConnectionParameters(host='rabbitmq'))
                 break
             except:
+                if i > 2**MAX_ATTEMPTS:
+                    print("[Client] Could not connect to RabbitMQ. Max attempts reached")
+                    return None
                 print(f"Rabbit not ready, sleeping {i}s")
                 time.sleep(i)
                 i *= 2
