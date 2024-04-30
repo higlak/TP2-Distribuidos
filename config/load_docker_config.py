@@ -26,7 +26,17 @@ CLIENT = """  client:
       dockerfile: Client/Client.dockerfile
     restart: on-failure
     environment:
-      - PYTHONUNBUFFERED=1"""
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - dataVolume:/data\n\n"""
+
+VOLUMES = """volumes:
+  dataVolume:
+    driver: local
+    driver_opts:
+      type: none
+      device: ./data
+      o: bind"""
 
 class Pool():
     def __init__(self, pool_number, config_pool):
@@ -60,7 +70,7 @@ class QueryConfig():
     def worker_amount_of_pool(self, pool_num):
       return self.query_pools[pool_num].worker_amount
 
-    def to_docker_string(self, queries):
+    def to_docker_string(self, queries, eof_to_receive):
         result = ""
         for p, pool in enumerate(self.query_pools):
             for i in range(pool.worker_amount):
@@ -78,6 +88,7 @@ class QueryConfig():
     environment:
       - PYTHONUNBUFFERED=1
       - WORKER_ID={worker_id}
+      - EOF_TO_RECEIVE={eof_to_receive.get(f"{self.query_number}.{pool.pool_number}", 1)}
       - NEXT_POOL_WORKERS={next_pool_workers}
       - FORWARD_TO={pool.forward_to}
       - WORKER_FIELD={pool.worker_field}
@@ -104,11 +115,11 @@ def process_query(file, query_filename, query_number):
   print("Processed query: ", query_number)
   return q
 
-def process_gateway(queries, file):
+def process_gateway(queries, eof_to_receive, file):
   config = ConfigParser()
-  total_last_workers = 0
-  for query in queries:
-     total_last_workers += query.workers_last_pool()
+  #total_last_workers = 0
+  #for query in queries:
+  #   total_last_workers += query.workers_last_pool()
   try:
     config.read(GATEWAY_CONFIG_FILE)
   except:
@@ -134,7 +145,7 @@ def process_gateway(queries, file):
       - REVIEW_QUERIES={config["REVIEW_QUERIES"]}
       - FORWARD_TO={forward_to}
       - NEXT_POOL_WORKERS={next_pool_workers}
-      - TOTAL_LAST_WORKERS={total_last_workers}\n\n"""
+      - EOF_TO_RECEIVE={eof_to_receive[GATEWAY]}\n\n"""
   file.write(gateway_str)
   print("Processed gateway")
 
@@ -164,10 +175,18 @@ def get_next_pool_workers(queries, forward_to):
       next_pool_workers.append(str(worker_amount))
   return ','.join(next_pool_workers)
 
-def write_queries(file, queries):
+def write_queries(file, queries, eof_to_receive):
    for query in queries:
-    file.write(query.to_docker_string(queries))
+    file.write(query.to_docker_string(queries, eof_to_receive))
     
+def eof_to_receive(queries):
+  eof_to_receive = {}
+  for query in queries:
+    for pool in query.query_pools:
+      for next_to_send in pool.forward_to.split(','):
+        eof_to_receive[next_to_send] = eof_to_receive.get(next_to_send, 0) + pool.worker_amount
+  return eof_to_receive 
+
 def main():
 
   with open(FILENAME, "w") as file:
@@ -186,9 +205,10 @@ def main():
       filename = f'{QUERY_CONFIG_FILE}{individual_query}.ini'
       queries = [process_query(file, filename, individual_query)]
 
-    write_queries(file, queries)
-
-    process_gateway(queries, file)
+    eof = eof_to_receive(queries)
+    write_queries(file, queries, eof)
+    process_gateway(queries, eof, file)
     file.write(CLIENT)      
+    file.write(VOLUMES)
 
 main()

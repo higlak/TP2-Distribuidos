@@ -73,7 +73,9 @@ class DatasetReader():
 
 class DatasetWriter():
     def __init__(self, path, columns):
-        self.file = open(path, 'a', encoding='Utf-8')
+        self.file = open(path, 'a+', encoding='Utf-8')
+        self.file.seek(0)
+        self.file.truncate()
         self.writer = csv.DictWriter(self.file, fieldnames=columns, lineterminator='\n')
         self.writer.writeheader()
 

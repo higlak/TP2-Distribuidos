@@ -78,12 +78,22 @@ class Communicator():
 
     def produce_message(self, message, group):
         queue_name = self.next_producer_queue(group)
+        print("Mandando a la cola ", queue_name)
         self.channel.basic_publish(exchange="", body=message, routing_key=queue_name)
 
-    def produce_message_n_times(self, queue_name, message, n):
+    def produce_message_n_times(self, message, group, n):
         for i in range(n):
             print("Sending nth time: ",i)
-            self.produce_message(queue_name, message)
+            self.produce_message(message, group )
+
+    def produce_to_all_group_members(self, message):
+        for group, members in self.producer_groups.items():
+            for _member in members:
+                self.produce_message(message, group) 
+    
+    def produce_to_all_groups(self, message):
+        for group in self.producer_groups.keys():
+            self.produce_message(message, group)
 
     def consume_message(self, queue_name):
         if not self.consumer_queues.contains(queue_name):

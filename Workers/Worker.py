@@ -4,9 +4,10 @@ from abc import ABC, abstractmethod
 
 from CommunicationMiddleware.middleware import Communicator
 from utils.Batch import Batch
+from utils.auxiliar_functions import get_env_list 
 
 ID_SEPARATOR = '.'
-GATEWAY_EXCHANGE_NAME = 'GATEWAY_EXCHANGE'
+GATEWAY_QUEUE_NAME = "Gateway"
 
 class Worker_ID():
     def __init__(self, query, pool_id, worker_num):
@@ -25,8 +26,8 @@ class Worker_ID():
     def get_query(self):
         return self.query
     
-    def get_exchange_name(self):
-        return f'{self.query}.{self.pool_id}'
+    def get_worker_name(self):
+        return f'{self.query}.{self.pool_id}.{self.worker_num}'
     
     def next_exchange_name(self):
         return f'{self.query}.{int(self.pool_id)+1}'
@@ -42,12 +43,23 @@ class Worker(ABC):
             return None
         
         try:
-            self.next_pool_workers = int(os.getenv('NEXT_POOL_WORKERS'))
-        except:
-            print("Attempted to use non int value for NEXT_POOL_WORKERS")
+            next_pool_workers = get_env_list('NEXT_POOL_WORKERS')
+            forward_to = get_env_list("FORWARD_TO")
+            self.eof_to_receive = int(os.getenv("EOF_TO_RECEIVE"))
+            next_pool_queues = []
+            for i in range(len(next_pool_workers)):
+                if forward_to[i] == GATEWAY_QUEUE_NAME:
+                    l = [GATEWAY_QUEUE_NAME]
+                else:
+                    l = [f'{forward_to[i]}.{j}' for j in range(int(next_pool_workers[i]))]
+                next_pool_queues.append(l)
+        except Exception as r:
+            print(f"[Worker {self.id}] Failed converting env_vars: {r}")
             return None
         
-        self.communicator = Communicator()
+        print("groups : ", dict(zip(forward_to, next_pool_queues)))
+
+        self.communicator = Communicator(dict(zip(forward_to, next_pool_queues)))
         if not self.communicator:
             return None
 
@@ -64,8 +76,8 @@ class Worker(ABC):
         return Batch(results)
     
     def receive_message(self):
-        exchange_name = self.id.get_exchange_name()
-        return self.communicator.consume_message(exchange_name)
+        worker_name = self.id.get_worker_name()
+        return self.communicator.consume_message(worker_name)
         
     def start(self):
         self.loop()
@@ -82,9 +94,12 @@ class Worker(ABC):
             print(f"[Worker {self.id}] Received batch with {batch.size()} elements")
             
             if batch.is_empty():
-                print(f"[Worker {self.id}] Received EOf")
-                self.send_batch(batch)
-                return    
+                self.eof_to_receive -= 1
+                print(f"[Worker {self.id}] Pending EOF to receive: {self.eof_to_receive}")
+                if not self.eof_to_receive:
+                    print(f"[Worker {self.id}] No more eof to receive")
+                    self.send_batch(batch)
+                    break
             
             result_batch = self.process_batch(batch)
             print(f"[Worker {self.id}] Message proccesed")
@@ -93,19 +108,11 @@ class Worker(ABC):
                 print(f"[Worker {self.id}] Message sending batch with {result_batch.size()}", )
 
     def send_batch(self, batch):
-        if self.next_pool_workers == 0:
-            self.communicator.produce_message(GATEWAY_EXCHANGE_NAME, batch.to_bytes())
+        if batch.is_empty():
+            self.communicator.produce_to_all_group_members(batch.to_bytes())
         else:
-            exchange_name = self.id.next_exchange_name()
-            if batch.is_empty():
-                self.propagate_eof(exchange_name)
-            else:
-                self.communicator.produce_message(exchange_name, batch.to_bytes())
-
-    def propagate_eof(self, exchange_name):
-        print("proximos workers: ", self.next_pool_workers)
-        self.communicator.produce_message_n_times(exchange_name, Batch([]).to_bytes(), self.next_pool_workers)
-
+            self.communicator.produce_to_all_groups(batch.to_bytes())
+            
 def append_extend(l, element_or_list):
     if isinstance(element_or_list, list):
         l.extend(element_or_list)
