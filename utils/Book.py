@@ -37,8 +37,13 @@ class Book():
         if not attributes['authors']:
             authors = []
         else:
-            authors = attributes['authors'].strip('"').strip('[').strip(']').split(',')
+            authors = attributes['authors'].strip('"').strip('[').strip(']').strip(',').split(',')
             authors = [author.strip(' ').strip('\'') for author in authors]
+            aux = []
+            for author in authors:
+                if author != '':
+                    aux.append(author)
+            authors = aux
         image = attributes['image'] 
         previewLink = attributes['previewLink']
         publisher = attributes['publisher']
@@ -69,7 +74,13 @@ class Book():
     def to_query2(self):
         if not self.publishedYear or not self.title or not self.authors:
             return None
-        return QueryMessage(BOOK_MSG_TYPE, year=self.publishedYear, title=self.title, authors=self.authors)
+        messages = []
+        for author in self.authors:
+            if author == "":
+                print(self.authors)
+            messages.append(QueryMessage(BOOK_MSG_TYPE, year=self.publishedYear, authors=[author]))
+        return messages
+
     
     def to_query3(self):
         if not self.publishedYear or not self.title or not self.authors or self.ratingsCount == None:

@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 
 from CommunicationMiddleware.middleware import Communicator
 from utils.Batch import Batch
-from utils.auxiliar_functions import get_env_list
+from utils.auxiliar_functions import get_env_list, append_extend
 from utils.QueryMessage import query_to_query_result
 
 ID_SEPARATOR = '.'
@@ -111,10 +111,3 @@ class Worker(ABC):
             self.communicator.produce_to_all_group_members(batch.to_bytes())
         else:
             self.communicator.produce_to_all_groups(batch.to_bytes())
-            
-def append_extend(l, element_or_list):
-    if isinstance(element_or_list, list):
-        l.extend(element_or_list)
-    else:
-        l.append(element_or_list)
-

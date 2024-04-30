@@ -49,6 +49,12 @@ def length(iterable):
         return len(iterable)
     except:
         return None
+    
+def append_extend(l, element_or_list):
+    if isinstance(element_or_list, list):
+        l.extend(element_or_list)
+    else:
+        l.append(element_or_list)
         
 def remove_bytes(array, finish, start=0):
     elements = array[start:finish]

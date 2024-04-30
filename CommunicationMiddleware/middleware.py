@@ -1,6 +1,9 @@
 import pika
 import pika.exceptions
 import time
+import hashlib
+
+from utils.Batch import Batch
 
 STARTING_RABBIT_WAIT = 1
 MAX_ATTEMPTS = 6
@@ -36,12 +39,15 @@ class ProducerGroup():
         queue = self.producer_queues[self.i]
         self.i = (self.i + 1) % len(self.producer_queues)
         return queue
-    
+
     def __iter__(self):
         return iter(self.producer_queues)
 
     def __next__(self):
         return next(self.producer_queues)
+    
+    def __len__(self):
+        return len(self.producer_queues)
     
     def __repr__(self):
         return f"{self.producer_queues}"
@@ -65,9 +71,6 @@ class Communicator():
         self.channel = self.connection.channel()
         self.channel.basic_qos(prefetch_count=prefetch_count)
         self.set_producer_queues()
-
-    def next_producer_queue(self, group):
-        return self.producer_groups[group].next()
     
     def set_producer_queues(self):
         for members in self.producer_groups.values():
@@ -79,8 +82,13 @@ class Communicator():
         generator = self.channel.consume(queue=queue_name)
         self.consumer_queues.add_queue(queue_name, generator)
 
-    def produce_message(self, message, group):
-        queue_name = self.next_producer_queue(group)
+    def produce_message(self, message, group, queue_pos=None):
+        group_to_send = self.producer_groups[group]
+        if queue_pos == None:
+            queue_name = group_to_send.next()
+        else:
+            queue_name = group_to_send.producer_queues[queue_pos]
+    
         self.channel.basic_publish(exchange="", body=message, routing_key=queue_name)
 
     def produce_message_n_times(self, message, group, n):
@@ -105,6 +113,9 @@ class Communicator():
             return bytearray([])
         self.channel.basic_ack(delivery_tag=method.delivery_tag)
         return bytearray(message)
+
+    def amount_of_producer_group(self, group):
+        return len(self.producer_groups[group])
 
     def contains_producer_group(self, group):
         return group in self.producer_groups.keys()

@@ -11,6 +11,7 @@ FORWARD_TO_SEPARATOR = ','
 QUERY_POOL_SEPARATOR = '.'
 GATEWAY = 'Gateway'
 QUERIES = 5
+DISTRIBUTE_BY_DEFAULT = 'title'
 
 FILENAME = 'docker-compose-dev.yaml'
 RABBIT = """  rabbitmq:
@@ -38,6 +39,10 @@ class Pool():
       self.worker_field = config_pool["WORKER_FIELD"]
       self.worker_value = config_pool["WORKER_VALUE"]
       self.forward_to = config_pool["FORWARD_TO"]
+      try:
+        self.distribute_by = config_pool["DISTRIBUTE_BY"]
+      except:
+        self.distribute_by = DISTRIBUTE_BY_DEFAULT
       self.accumulate_by = None
       if self.worker_type == ACCUMULATOR_TYPE:
         self.accumulate_by = config_pool["ACCUMULATE_BY"]
@@ -83,6 +88,7 @@ class QueryConfig():
       - EOF_TO_RECEIVE={eof_to_receive.get(f"{self.query_number}.{pool.pool_number}", 1)}
       - NEXT_POOL_WORKERS={next_pool_workers}
       - FORWARD_TO={pool.forward_to}
+      - DISTRIBUTE_BY={pool.distribute_by}
       - WORKER_FIELD={pool.worker_field}
       - WORKER_VALUE={pool.worker_value}"""
                 if pool.worker_type == ACCUMULATOR_TYPE:
@@ -92,12 +98,12 @@ class QueryConfig():
         return result
 
 def process_all_queries(file):
-  queries = [] 
-  for i in range(QUERIES):
+  queries = {}
+  for i in range(1,QUERIES+1):
     filename = f'{QUERY_CONFIG_FILE}{i}.ini'
     query = process_query(file, filename, i)
     if query:
-      queries.append(query)
+      queries[str(i)] = query
   return queries
     
 def process_query(file, query_filename, query_number):
@@ -161,17 +167,18 @@ def get_next_pool_workers(queries, forward_to):
     else:
       print("Next pool: ", next_pool)
       query_num, pool_num = next_pool.split(QUERY_POOL_SEPARATOR)
-      worker_amount = queries[int(query_num)-1].worker_amount_of_pool(int(pool_num))
+      print(queries)
+      worker_amount = queries[int(query_num)].worker_amount_of_pool(int(pool_num))
       next_pool_workers.append(str(worker_amount))
   return ','.join(next_pool_workers)
 
 def write_queries(file, queries, eof_to_receive):
-   for query in queries:
+   for query in queries.values():
     file.write(query.to_docker_string(queries, eof_to_receive))
     
 def eof_to_receive(queries):
   eof_to_receive = {}
-  for query in queries:
+  for query in queries.values():
     for pool in query.query_pools:
       for next_to_send in pool.forward_to.split(','):
         eof_to_receive[next_to_send] = eof_to_receive.get(next_to_send, 0) + pool.worker_amount
@@ -194,7 +201,7 @@ def process_client(queries, port, file):
       - PYTHONUNBUFFERED=1
       - BATCH_SIZE={config["BATCH_SIZE"]}
       - QUERY_RESULTS_PATH={config["QUERY_RESULTS_PATH"]}
-      - QUERIES={",".join([str(query.query_number) for query in queries])}
+      - QUERIES={",".join([str(query.query_number) for query in queries.values()])}
       - SERVER_PORT={port}
     volumes:
       - dataVolume:/data\n\n"""
@@ -217,7 +224,7 @@ def main():
       queries = process_all_queries(file)
     else:
       filename = f'{QUERY_CONFIG_FILE}{individual_query}.ini'
-      queries = [process_query(file, filename, individual_query)]
+      queries = {individual_query :process_query(file, filename, individual_query)}
 
     eof = eof_to_receive(queries)
     write_queries(file, queries, eof)

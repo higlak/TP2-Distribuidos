@@ -1,8 +1,9 @@
+import pprint
 import threading
 from CommunicationMiddleware.middleware import Communicator
 from utils.QueryMessage import QueryMessage, BOOK_MSG_TYPE
 from utils.Batch import Batch
-from utils.auxiliar_functions import recv_exactly, send_all, byte_array_to_big_endian_integer, get_env_list
+from utils.auxiliar_functions import recv_exactly, send_all, byte_array_to_big_endian_integer, get_env_list, append_extend
 from utils.DatasetHandler import DatasetLine
 from utils.Book import Book
 from utils.Review import Review
@@ -142,7 +143,7 @@ class GatewayIn():
         if isinstance(obj, Book):
             QueryMessage.query1_from_book()
         
-    def get_query_message(self, obj, query_number):
+    def get_query_messages(self, obj, query_number):
         switch = {
             '1': obj.to_query1,
             '2': obj.to_query2,
@@ -168,12 +169,24 @@ class GatewayIn():
         for query_number in queries:
             query_messages = []
             for obj in objects:
-                query_message = self.get_query_message(obj, query_number)
+                query_message = self.get_query_messages(obj, query_number)
                 if query_message:
-                    query_messages.append(query_message)
-            batch = Batch(query_messages)
-            if not batch.is_empty():
-                self.com.produce_message(batch.to_bytes(), f'{query_number}.{FIRST_POOL}')
+                    append_extend(query_messages, query_message)
+            group = f'{query_number}.{FIRST_POOL}'
+            hashed_batchs = self.get_hashed_batchs(query_messages, query_number)
+            for worker_to_send, batch in hashed_batchs.items():
+                if not batch.is_empty():
+                    self.com.produce_message(batch.to_bytes(), group, worker_to_send)
+
+    def get_hashed_batchs(self, query_messages, query_number):
+        hashed_messages = {}
+        pool_to_send = f"{query_number}.{FIRST_POOL}"
+        amount_of_workers = self.com.amount_of_producer_group(pool_to_send)
+        for msg in query_messages:
+            worker_to_send = msg.get_attribute_hash(query_number) % amount_of_workers
+            hashed_messages[worker_to_send] = hashed_messages.get(worker_to_send, []) + [msg]
+        
+        return {w:Batch(messages) for w, messages in hashed_messages.items()}
 
     def get_object_from_line(self, datasetLine):
         if datasetLine.is_book():
