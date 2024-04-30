@@ -13,10 +13,6 @@ GATEWAY_QUEUE_NAME = 'Gateway'
 QUERY_SEPARATOR = ","
 FIRST_POOL = 0
 
-def recv_queries_results(client_socket):
-    print("[Gateway] Receiving queries results from queries subsystems")
-    pass
-
 class Gateway():
     def __init__(self):
         try:
@@ -41,17 +37,25 @@ class Gateway():
         self.server_socket.bind(('',port))
         self.server_socket.listen()
         print(f"[Gateway] Listening on: {self.server_socket.getsockname()}")
-        self.client_socket, self.threads = Gateway.accept_client(self.server_socket, com_in, com_out, eof_to_receive)
+        self.client_recv_socket, receive_thread = Gateway.accept_client_receive_socket(self.server_socket, com_in)
+        self.client_send_socket, send_thread = Gateway.accept_client_send_socket(self.server_socket, com_out, eof_to_receive)
+        self.threads = [receive_thread, send_thread]
     
     @classmethod
-    def accept_client(self, server_socket, com_in, com_out, eof_to_receive):
+    def accept_client_receive_socket(self, server_socket, com_in):
         client_socket, addr = server_socket.accept()
         print(f"[Gateway] Client connected with address: {addr}")
         gateway_in = GatewayIn(client_socket, com_in)
-        gateway_out = GatewayOut(client_socket, eof_to_receive, com_out)
         gateway_in_thread = threading.Thread(target=gateway_in.start)
+        return client_socket, gateway_in_thread
+    
+    @classmethod
+    def accept_client_send_socket(self, server_socket, com_out, eof_to_receive):
+        client_socket, addr = server_socket.accept()
+        print(f"[Gateway] Client connected with address: {addr}")
+        gateway_out = GatewayOut(client_socket, eof_to_receive, com_out)
         gateway_out_thread = threading.Thread(target=gateway_out.start)
-        return client_socket, [gateway_in_thread, gateway_out_thread]
+        return client_socket, gateway_out_thread
     
     def start_and_wait(self):
         for thread in self.threads:
@@ -61,17 +65,16 @@ class Gateway():
 
     def run(self):
         self.start_and_wait()
-        self.client_socket.close()
-        self.server_socket.close()
 
 class GatewayOut():
-    def __init__(self, client_socket, eof_to_receive, com):
-        self.client_socket = client_socket
+    def __init__(self, socket, eof_to_receive, com):
+        self.socket = socket
         self.com = com
         self.eof_to_receive = eof_to_receive
 
     def start(self):
         self.loop()
+        self.close()
 
     def loop(self):
 
@@ -81,27 +84,33 @@ class GatewayOut():
                 print(f"[Gateway] Error while consuming results")
                 break
             batch = Batch.from_bytes(batch_bytes)
-            
+            print("Prosesando mensaje len ", {batch.size()})
             if batch.is_empty():
                 self.eof_to_receive -= 1
                 print(f"[Gateway] Pending EOF to receive: {self.eof_to_receive}")
                 if not self.eof_to_receive:
                     print("[Gateway] No more EOF to receive")
-                    send_all(self.client_socket, batch.to_bytes())
+                    send_all(self.socket, batch.to_bytes())
+                    print("[Gateway] Send EOF to client")
                     break
-            
-            print("[Gateway] Sending result to client")
-            send_all(self.client_socket, batch_bytes)
-
+            else:
+                print("[Gateway] Sending result to client")
+                send_all(self.socket, batch_bytes)
+    
+    def close(self):
+        self.com.close_connection()
+        self.socket.close()
+    
 class GatewayIn():
-    def __init__(self, client_socket, com):
-        self.client_socket = client_socket
+    def __init__(self, socket, com):
+        self.socket = socket
         self.com = com
         self.book_query_numbers = get_env_list("BOOK_QUERIES")
         self.review_query_numbers = get_env_list("REVIEW_QUERIES")
     
     def start(self):
         self.loop()
+        self.close()
 
     def loop(self):
         while True:
@@ -110,27 +119,24 @@ class GatewayIn():
                 self.send_eof()
                 break
             self.send_batch_to_all_queries(datasetlines)
-    
+        
     def recv_dataset_line_batch(self):
-        ammount_of_dataset_lines = recv_exactly(self.client_socket,1)
+        ammount_of_dataset_lines = recv_exactly(self.socket,1)
         if ammount_of_dataset_lines == None:
             print("[Gateway] Socket read failed")
             return None
         ammount_of_dataset_lines = ammount_of_dataset_lines[0]
-        print(f"[Gateway] Receiving {ammount_of_dataset_lines} dataset lines from client")
         if ammount_of_dataset_lines == 0:
             print("[Gateway] EOF received")
             return None
         datasetlines = []
         for _ in range(ammount_of_dataset_lines):
-            datasetline = DatasetLine.from_socket(self.client_socket)
+            datasetline = DatasetLine.from_socket(self.socket)
             datasetlines.append(datasetline)
         return datasetlines
     
     def send_eof(self):
-        for query in set(self.review_query_numbers + self.book_query_numbers): #p capas cambiar esto 
-            print(f"[Gateway] Sending EOF to query {query}")
-            self.com.produce_message_n_times(Batch([]).to_bytes(), f'{query}.0', 2)
+        self.com.produce_to_all_group_members(Batch([]).to_bytes())
 
     def object_to_query1(obj):
         if isinstance(obj, Book):
@@ -173,6 +179,10 @@ class GatewayIn():
         if datasetLine.is_book():
             return Book.from_datasetline(datasetLine)
         return Review.from_datasetline(datasetLine)
+    
+    def close(self):
+        self.com.close_connection()
+        self.socket.close()
 
 def unknown_query():
     print("[Gateway] Attempting to proccess unkwown query")

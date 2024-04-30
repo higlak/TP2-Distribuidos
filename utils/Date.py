@@ -1,3 +1,4 @@
+import re
 import unittest
 from unittest import TestCase
 
@@ -18,14 +19,19 @@ class Date:
         """
         Creates a date of format year-month-day
         """
+
         if len(string) == 0:
             return Date(None, None, None)
         date = string.split('-')
         date = list(map(int,date))
         for _ in range(3-len(date)):
             date.append(None)
+
+        coincidencia = re.match('[^\d]*(\d{4})[^\d]*', string)
+        date[2] = coincidencia.group(1)
+        
         return Date(date[0], date[1], date[2])
-    
+
 class TestBook(TestCase):
     def test_empty_date(self):
         str = ''

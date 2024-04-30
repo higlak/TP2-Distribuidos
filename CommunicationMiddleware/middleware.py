@@ -42,6 +42,9 @@ class ProducerGroup():
 
     def __next__(self):
         return next(self.producer_queues)
+    
+    def __repr__(self):
+        return f"{self.producer_queues}"
 
 class Communicator():
     def __init__(self, producer_groups={}, prefetch_count=1):
@@ -78,12 +81,10 @@ class Communicator():
 
     def produce_message(self, message, group):
         queue_name = self.next_producer_queue(group)
-        print("Mandando a la cola ", queue_name)
         self.channel.basic_publish(exchange="", body=message, routing_key=queue_name)
 
     def produce_message_n_times(self, message, group, n):
         for i in range(n):
-            print("Sending nth time: ",i)
             self.produce_message(message, group )
 
     def produce_to_all_group_members(self, message):

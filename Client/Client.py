@@ -10,7 +10,6 @@ import os
 import sys
 import time
 
-SERVER_PORT = 12345
 STARTING_CLIENT_WAIT = 1
 MAX_ATTEMPTS = 6
 
@@ -22,23 +21,25 @@ def get_file_paths():
 
 class Client():
     def __init__(self):
-        self.client_socket = Client.connect_to_gateway()
+        try:
+            queries = get_env_list("QUERIES")
+            query_result_path = os.getenv("QUERY_RESULTS_PATH")
+            batch_size = int(os.getenv("BATCH_SIZE"))
+            server_port = int(os.getenv("SERVER_PORT"))
+        except Exception as r:
+            print("[Client] Error converting env vars: ", r)
+            return None
+        self.send_socket = Client.connect_to_gateway(server_port)
+        self.receive_socket = Client.connect_to_gateway(server_port)
         books_path, reviews_path = get_file_paths()
         book_reader = DatasetReader(books_path)
         review_reader = DatasetReader(reviews_path)
         if not book_reader or not review_reader:
             print(f"[Client] Reader invalid. Bookfile: {books_path}, Reviewfile: {reviews_path})")
             return None
-        try:
-            queries = get_env_list("QUERIES")
-            query_result_path = os.getenv("QUERY_RESULTS_PATH")
-            batch_size = int(os.getenv("BATCH_SIZE"))
-        except Exception as r:
-            print("[Client] Error converting env vars: ", r)
-            return None
             
-        client_reader = ClientReader(self.client_socket, book_reader, review_reader, batch_size)
-        client_writer = ClientWriter(self.client_socket, Client.get_datasetWriters(queries, query_result_path))
+        client_reader = ClientReader(self.send_socket, book_reader, review_reader, batch_size)
+        client_writer = ClientWriter(self.receive_socket, Client.get_datasetWriters(queries, query_result_path))
         reader_thread = threading.Thread(target=client_reader.start)
         writer_thread = threading.Thread(target=client_writer.start)
         self.threads = [reader_thread, writer_thread]
@@ -54,15 +55,14 @@ class Client():
             writers[query_result] = dw
         return writers
 
-
     @classmethod
-    def connect_to_gateway(cls):
+    def connect_to_gateway(cls, port):
         i = STARTING_CLIENT_WAIT
         while True:
             try:
                 print("[Client] Attempting connection")
                 client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                client_socket.connect(('gateway', SERVER_PORT))
+                client_socket.connect(('gateway', port))
                 print("[Client] Client Connected to gatewy")
                 return client_socket
             except:
@@ -78,7 +78,11 @@ class Client():
             thread.start()
         for handle in self.threads:
             handle.join()
-        self.client_socket.close()
+        self.close()
+        
+    def close(self):
+        self.send_socket.close()
+        self.receive_socket.close()
         
 class ClientReader():
     def __init__(self, socket, book_reader, review_reader, batch_size):
@@ -97,15 +101,11 @@ class ClientReader():
         while True:
             datasetLines = reader.read_lines(self.batch_size, object_type)
             if len(datasetLines) == 0:
-                print("[Client] No more to send")
                 return
             batch = Batch(datasetLines)
-            
             self.socket.send(batch.to_bytes())
-            print(f"[Client] Sent batch of {len(batch.messages)} elements")
     
     def send_eof(self):
-        print("[Client] Sending EOF")
         self.socket.send(Batch([]).to_bytes())
 
     def close(self):

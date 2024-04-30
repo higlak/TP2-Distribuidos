@@ -1,4 +1,3 @@
-from utils.Date import Date
 from utils.auxiliar_functions import *
 import struct
 import unittest
@@ -158,7 +157,7 @@ class QueryMessage():
         return self.year >= year_range[0] and self.year <= year_range[1]
 
     def contains_in_title(self, word):
-        return word in self.title
+        return word.lower() in self.title.lower()
     
     def decade(self):
         if self.year == None:

@@ -10,4 +10,4 @@ COPY ./Client/Client.py /root/main.py
 #COPY ./__init__.py /root/__init__.py
 #ENV PYTHONPATH "${PYTHONPATH}:/root"
 
-CMD python3 /root/main.py /data/test.csv /data/test.csv
+CMD python3 /root/main.py /data/books_data.csv /data/test.csv

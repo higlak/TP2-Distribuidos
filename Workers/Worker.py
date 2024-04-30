@@ -58,8 +58,6 @@ class Worker(ABC):
             print(f"[Worker {self.id}] Failed converting env_vars: {r}")
             return None
         
-        print("groups : ", dict(zip(forward_to, next_pool_queues)))
-
         self.communicator = Communicator(dict(zip(forward_to, next_pool_queues)))
         if not self.communicator:
             return None
@@ -91,14 +89,11 @@ class Worker(ABC):
 
     def loop(self):
         while True:
-            print(f"[Worker {self.id}] Waiting for message...")
             batch_bytes = self.receive_message()
             if batch_bytes == None:
                 print(f"[Worker {self.id}] Error while consuming")
                 break
             batch = Batch.from_bytes(batch_bytes)
-            print(f"[Worker {self.id}] Received batch with {batch.size()} elements")
-            
             if batch.is_empty():
                 self.eof_to_receive -= 1
                 print(f"[Worker {self.id}] Pending EOF to receive: {self.eof_to_receive}")
@@ -106,12 +101,10 @@ class Worker(ABC):
                     print(f"[Worker {self.id}] No more eof to receive")
                     self.send_batch(batch)
                     break
-            
-            result_batch = self.process_batch(batch)
-            print(f"[Worker {self.id}] Message proccesed")
-            if not result_batch.is_empty():
-                self.send_batch(result_batch)
-                print(f"[Worker {self.id}] Message sending batch with {result_batch.size()}", )
+            else:
+                result_batch = self.process_batch(batch)
+                if not result_batch.is_empty():
+                    self.send_batch(result_batch)
 
     def send_batch(self, batch):
         if batch.is_empty():

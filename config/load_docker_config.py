@@ -113,7 +113,7 @@ def process_gateway(queries, eof_to_receive, file):
     config.read(GATEWAY_CONFIG_FILE)
   except:
     print("No valid flename for gateway")
-    return False
+    return None
   config = config["DEFAULT"]
   book_queries = config["BOOK_QUERIES"]
   review_queries = config["REVIEW_QUERIES"]
@@ -137,7 +137,7 @@ def process_gateway(queries, eof_to_receive, file):
       - EOF_TO_RECEIVE={eof_to_receive[GATEWAY]}\n\n"""
   file.write(gateway_str)
   print("Processed gateway")
-  return True
+  return config["PORT"]
 
 def get_forward_gateway(queries, book_queries, review_queries):
   book_queries = book_queries.split(',')
@@ -177,7 +177,7 @@ def eof_to_receive(queries):
         eof_to_receive[next_to_send] = eof_to_receive.get(next_to_send, 0) + pool.worker_amount
   return eof_to_receive 
 
-def process_client(queries, file):
+def process_client(queries, port, file):
   config = ConfigParser()
   try:
     config.read(CLIENT_CONFIG_FILE)
@@ -195,6 +195,7 @@ def process_client(queries, file):
       - BATCH_SIZE={config["BATCH_SIZE"]}
       - QUERY_RESULTS_PATH={config["QUERY_RESULTS_PATH"]}
       - QUERIES={",".join([str(query.query_number) for query in queries])}
+      - SERVER_PORT={port}
     volumes:
       - dataVolume:/data\n\n"""
   file.write(client_str)
@@ -220,9 +221,10 @@ def main():
 
     eof = eof_to_receive(queries)
     write_queries(file, queries, eof)
-    if not process_gateway(queries, eof, file):
+    port = process_gateway(queries, eof, file)
+    if not port:
       return
-    if not process_client(queries, file):
+    if not process_client(queries, port, file):
       return      
     file.write(VOLUMES)
 
