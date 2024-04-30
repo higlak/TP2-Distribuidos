@@ -22,10 +22,17 @@ class Gateway():
         try:
             port = int(os.getenv("PORT"))
             total_last_workers = int(os.getenv("TOTAL_LAST_WORKERS"))
+            forward_to = get_env_list("FORWARD_TO")
+            next_pool_workers = get_env_list("NEXT_POOL_WORKERS") 
+            next_pool_queues = []
+            for i in range(next_pool_workers):
+                next_pool_queues.append([f'{forward_to[i]}.{j}' for j in range(next_pool_workers[i])])
+
         except:
-            print("Could not convert port of total last workers to int")
+            print("[Gateway] Could not convert port of total last workers to int")
             return None
-        com_in = Communicator()
+        
+        com_in = Communicator(dict(zip(forward_to, next_pool_queues)))
         com_out = Communicator()
         if not com_in or not com_out:
             return None
@@ -155,7 +162,6 @@ class GatewayIn():
             return self.send_objects_to_queries(objects, self.book_query_numbers)
         return self.send_objects_to_queries(objects, self.review_query_numbers)
         
-
     def send_objects_to_queries(self, objects, queries):
         query_messages = []
         for query_number in queries:

@@ -6,6 +6,10 @@ QUERY_CONFIG_FILE = "config/config_query"
 GATEWAY_CONFIG_FILE = "config/config_gateway.ini"
 FILTER_TYPE = 'filter'
 ACCUMULATOR_TYPE = 'accumulator'
+FORWARD_TO_SEPARATOR = ','
+QUERY_POOL_SEPARATOR = '.'
+GATEWAY = 'Gateway'
+QUERIES = 5
 
 FILENAME = 'docker-compose-dev.yaml'
 RABBIT = """  rabbitmq:
@@ -31,6 +35,7 @@ class Pool():
       self.worker_type = config_pool["WORKER_TYPE"]
       self.worker_field = config_pool["WORKER_FIELD"]
       self.worker_value = config_pool["WORKER_VALUE"]
+      self.forward_to = config_pool["FORWARD_TO"]
       self.accumulate_by = None
       if self.worker_type == ACCUMULATOR_TYPE:
         self.accumulate_by = config_pool["ACCUMULATE_BY"]
@@ -39,8 +44,7 @@ class Pool():
       if self.worker_type == FILTER_TYPE:
           return "Filter/Filter.dockerfile"
       return "Accumulator/Accumulator.dockerfile"
-        
-
+      
 class QueryConfig():
     def __init__(self, query_number, filename):
       config = ConfigParser()
@@ -52,11 +56,15 @@ class QueryConfig():
     
     def workers_last_pool(self):
       return self.query_pools[-1].worker_amount
-      
-    def to_docker_string(self):
+    
+    def worker_amount_of_pool(self, pool_num):
+      return self.query_pools[pool_num].worker_amount
+
+    def to_docker_string(self, queries):
         result = ""
         for p, pool in enumerate(self.query_pools):
             for i in range(pool.worker_amount):
+                next_pool_workers = get_next_pool_workers(queries, pool.forward_to) 
                 worker_id = f"{self.query_number}.{pool.pool_number}.{i}"
                 result += f"""  {pool.worker_type}{worker_id}:
     build:
@@ -70,7 +78,8 @@ class QueryConfig():
     environment:
       - PYTHONUNBUFFERED=1
       - WORKER_ID={worker_id}
-      - NEXT_POOL_WORKERS={0 if p == len(self.query_pools) - 1 else self.query_pools[p].worker_amount}
+      - NEXT_POOL_WORKERS={next_pool_workers}
+      - FORWARD_TO={pool.forward_to}
       - WORKER_FIELD={pool.worker_field}
       - WORKER_VALUE={pool.worker_value}"""
                 if pool.worker_type == ACCUMULATOR_TYPE:
@@ -79,23 +88,19 @@ class QueryConfig():
                 
         return result
 
-def proccess_all_queries(file):
-  i=1 
-  queries = []
-  while True:
-      filename = f'{QUERY_CONFIG_FILE}{i}.ini'
-      query = proccess_query(file,filename, i)
-      if not query:
-          break
+def process_all_queries(file):
+  queries = [] 
+  for i in range(QUERIES):
+    filename = f'{QUERY_CONFIG_FILE}{i}.ini'
+    query = process_query(file, filename, i)
+    if query:
       queries.append(query)
-      i+=1
   return queries
     
-def proccess_query(file, query_filename, query_number):
+def process_query(file, query_filename, query_number):
   if not os.path.exists(query_filename):
       return None
   q = QueryConfig(query_number, query_filename)
-  file.write(q.to_docker_string())
   print("Processed query: ", query_number)
   return q
 
@@ -109,8 +114,10 @@ def process_gateway(queries, file):
   except:
     print("No valid flename")
     return False
-  
   config = config["DEFAULT"]
+  book_queries = config["BOOK_QUERIES"]
+  review_queries = config["REVIEW_QUERIES"]
+  forward_to, next_pool_workers = get_forward_gateway(queries, book_queries, review_queries)
   gateway_str = f"""  gateway:
     build:
       context: ./
@@ -125,11 +132,42 @@ def process_gateway(queries, file):
       - PORT={config["PORT"]}
       - BOOK_QUERIES={config["BOOK_QUERIES"]}
       - REVIEW_QUERIES={config["REVIEW_QUERIES"]}
+      - FORWARD_TO={forward_to}
+      - NEXT_POOL_WORKERS={next_pool_workers}
       - TOTAL_LAST_WORKERS={total_last_workers}\n\n"""
   file.write(gateway_str)
   print("Processed gateway")
 
+def get_forward_gateway(queries, book_queries, review_queries):
+  book_queries = book_queries.split(',')
+  review_queries = review_queries.split(',')
+  if review_queries[0] == "":
+    review_queries = []
+  query_names = set(book_queries + review_queries)
+  forward_to = []
+  for query_name in query_names:
+    forward_to.append(f"{query_name}.0")
+  forward_to = ",".join(forward_to)
 
+  return forward_to, get_next_pool_workers(queries, forward_to)
+    
+def get_next_pool_workers(queries, forward_to):
+  next_pools = forward_to.split(FORWARD_TO_SEPARATOR)
+  next_pool_workers = []
+  for next_pool in next_pools:
+    if next_pool == GATEWAY:
+      next_pool_workers.append(str(1))
+    else:
+      print("Next pool: ", next_pool)
+      query_num, pool_num = next_pool.split(QUERY_POOL_SEPARATOR)
+      worker_amount = queries[int(query_num)-1].worker_amount_of_pool(int(pool_num))
+      next_pool_workers.append(str(worker_amount))
+  return ','.join(next_pool_workers)
+
+def write_queries(file, queries):
+   for query in queries:
+    file.write(query.to_docker_string(queries))
+    
 def main():
 
   with open(FILENAME, "w") as file:
@@ -143,10 +181,12 @@ def main():
     print(individual_query)
 
     if not individual_query:
-      queries = proccess_all_queries(file)
+      queries = process_all_queries(file)
     else:
       filename = f'{QUERY_CONFIG_FILE}{individual_query}.ini'
-      queries = [proccess_query(file, filename, individual_query)]
+      queries = [process_query(file, filename, individual_query)]
+
+    write_queries(file, queries)
 
     process_gateway(queries, file)
     file.write(CLIENT)      
