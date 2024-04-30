@@ -12,7 +12,7 @@ BATCH_SIZE = 25 #probablemente lo levantemos de la config
 SERVER_PORT = 12345
 STARTING_CLIENT_WAIT = 1
 MAX_ATTEMPTS = 6
-QUERY_RESULTS_PATH = "query_results"
+QUERY_RESULTS_PATH = "/data/query_results"
 QUERY1_RESULTS_FIELDS = ""
 QUERIES = 5
 
@@ -121,7 +121,9 @@ class ClientWriter():
             if result_batch.is_empty():
                 print("Finished receiving")
                 break
-            self.writers[result_batch[0].msg_type].append_objects(result_batch)
+            print(f"\n\n {result_batch[0]}\n\n")
+            print(f"\n\n {result_batch[0].msg_type}\n\n")
+            self.writers[QUERY1_RESULT].append_objects(result_batch)
         self.close()
 
     def close(self):

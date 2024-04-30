@@ -19,23 +19,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - WORKER_ID=1.0.0
-      - NEXT_POOL_WORKERS=2
-      - WORKER_FIELD=categories
-      - WORKER_VALUE=Biography & Autobiography
-
-  filter1.0.1:
-    build:
-      context: ./
-      dockerfile: Filter/Filter.dockerfile
-    restart: on-failure
-    depends_on:
-      - rabbitmq
-    links: 
-      - rabbitmq
-    environment:
-      - PYTHONUNBUFFERED=1
-      - WORKER_ID=1.0.1
-      - NEXT_POOL_WORKERS=2
+      - NEXT_POOL_WORKERS=1
       - WORKER_FIELD=categories
       - WORKER_VALUE=Biography & Autobiography
 
@@ -51,23 +35,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - WORKER_ID=1.1.0
-      - NEXT_POOL_WORKERS=2
-      - WORKER_FIELD=year
-      - WORKER_VALUE=2000,2010
-
-  filter1.1.1:
-    build:
-      context: ./
-      dockerfile: Filter/Filter.dockerfile
-    restart: on-failure
-    depends_on:
-      - rabbitmq
-    links: 
-      - rabbitmq
-    environment:
-      - PYTHONUNBUFFERED=1
-      - WORKER_ID=1.1.1
-      - NEXT_POOL_WORKERS=2
+      - NEXT_POOL_WORKERS=1
       - WORKER_FIELD=year
       - WORKER_VALUE=2000,2010
 
@@ -87,10 +55,10 @@ services:
       - WORKER_FIELD=title
       - WORKER_VALUE=Dr
 
-  filter1.2.1:
+  accumulator2.0.0:
     build:
       context: ./
-      dockerfile: Filter/Filter.dockerfile
+      dockerfile: Accumulator/Accumulator.dockerfile
     restart: on-failure
     depends_on:
       - rabbitmq
@@ -98,10 +66,11 @@ services:
       - rabbitmq
     environment:
       - PYTHONUNBUFFERED=1
-      - WORKER_ID=1.2.1
+      - WORKER_ID=2.0.0
       - NEXT_POOL_WORKERS=0
-      - WORKER_FIELD=title
-      - WORKER_VALUE=Dr
+      - WORKER_FIELD=year
+      - WORKER_VALUE=10
+      - ACCUMULATE_BY=authors
 
   gateway:
     build:
@@ -126,3 +95,13 @@ services:
     restart: on-failure
     environment:
       - PYTHONUNBUFFERED=1
+    volumes:
+      - dataVolume:/data
+
+volumes:
+  dataVolume:
+    driver: local
+    driver_opts:
+      type: none
+      device: ./data
+      o: bind

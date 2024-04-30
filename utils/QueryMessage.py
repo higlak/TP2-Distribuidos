@@ -194,7 +194,7 @@ class ParametersGenerator():
         mask = 0x1
         parameters_len = 0
         for i in range(8):
-            parameter = parameters | mask
+            parameter = parameters & mask
             if parameter:
                 parameters_len += PARAMETER_LENS[i]
             mask = mask << 1
@@ -207,7 +207,8 @@ class ParametersGenerator():
         for i in range(8):
             field_value = gen.next()
             if i >= 3:
-                body_len += field_value
+                if not (field_value == None):
+                    body_len += field_value
         return body_len
         
 
@@ -230,9 +231,13 @@ class ParametersGenerator():
         for _ in range(5):
             parameter = self.parameters & mask
             if parameter:
-                self.interprete(parameter)
+                l = self.interprete(parameter)
+                if self.only_header:
+                    yield l
             else:  
                 self.interprete_later.append((None, None))
+                if self.only_header:
+                    yield None
             mask = mask << 1
         
         if not self.only_header:

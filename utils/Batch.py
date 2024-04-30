@@ -33,7 +33,7 @@ class Batch():
         amount_of_messages = amount_of_messages[0]
         instances = []
         for _ in range(amount_of_messages):
-            instance = data_class.from_socket()
+            instance = data_class.from_socket(sock)
             if not instance:
                 return None
             instances.append(instance)
