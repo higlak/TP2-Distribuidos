@@ -180,6 +180,26 @@ class QueryMessage():
     
     def __eq__(self, other):
         return self.fields_to_list() == other.fields_to_list()
+    
+def query_to_query_result(query):
+    switch = {
+        '1': QUERY1_RESULT,
+        '2': QUERY2_RESULT,
+        '3': QUERY3_RESULT,
+        '4': QUERY4_RESULT,
+        '5': QUERY5_RESULT,
+    }
+    return switch[query]
+
+def query_result_headers(query_result):
+    switch = {
+            QUERY1_RESULT: ['title','authors','publisher'],
+            QUERY2_RESULT: ['authors'],
+            QUERY3_RESULT: ['title','authors'],
+            QUERY4_RESULT: ['title'],
+            QUERY5_RESULT: ['title'],
+        }
+    return switch[query_result]
 
 class ParametersGenerator():
     def __init__(self, byte_array, only_header=False):

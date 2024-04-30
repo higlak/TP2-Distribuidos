@@ -19,7 +19,7 @@ class Accumulator(Worker):
         if not method:
             return None
         
-        return method(msg)
+        return [self.transform_to_result(m) for m in method(msg)]
     
     def accumulate_decade_by_authors(self, msg):
         if msg.authors == None:

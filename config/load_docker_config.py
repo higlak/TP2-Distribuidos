@@ -4,6 +4,7 @@ import sys
 
 QUERY_CONFIG_FILE = "config/config_query"
 GATEWAY_CONFIG_FILE = "config/config_gateway.ini"
+CLIENT_CONFIG_FILE = "config/config_client.ini"
 FILTER_TYPE = 'filter'
 ACCUMULATOR_TYPE = 'accumulator'
 FORWARD_TO_SEPARATOR = ','
@@ -20,15 +21,6 @@ RABBIT = """  rabbitmq:
       - 15672:15672
 
 """
-CLIENT = """  client:
-    build:
-      context: ./
-      dockerfile: Client/Client.dockerfile
-    restart: on-failure
-    environment:
-      - PYTHONUNBUFFERED=1
-    volumes:
-      - dataVolume:/data\n\n"""
 
 VOLUMES = """volumes:
   dataVolume:
@@ -117,13 +109,10 @@ def process_query(file, query_filename, query_number):
 
 def process_gateway(queries, eof_to_receive, file):
   config = ConfigParser()
-  #total_last_workers = 0
-  #for query in queries:
-  #   total_last_workers += query.workers_last_pool()
   try:
     config.read(GATEWAY_CONFIG_FILE)
   except:
-    print("No valid flename")
+    print("No valid flename for gateway")
     return False
   config = config["DEFAULT"]
   book_queries = config["BOOK_QUERIES"]
@@ -148,6 +137,7 @@ def process_gateway(queries, eof_to_receive, file):
       - EOF_TO_RECEIVE={eof_to_receive[GATEWAY]}\n\n"""
   file.write(gateway_str)
   print("Processed gateway")
+  return True
 
 def get_forward_gateway(queries, book_queries, review_queries):
   book_queries = book_queries.split(',')
@@ -187,6 +177,29 @@ def eof_to_receive(queries):
         eof_to_receive[next_to_send] = eof_to_receive.get(next_to_send, 0) + pool.worker_amount
   return eof_to_receive 
 
+def process_client(queries, file):
+  config = ConfigParser()
+  try:
+    config.read(CLIENT_CONFIG_FILE)
+  except:
+    print("No valid flename for client")
+    return False
+  config = config["DEFAULT"]
+  client_str = f"""  client:
+    build:
+      context: ./
+      dockerfile: Client/Client.dockerfile
+    restart: on-failure
+    environment:
+      - PYTHONUNBUFFERED=1
+      - BATCH_SIZE={config["BATCH_SIZE"]}
+      - QUERY_RESULTS_PATH={config["QUERY_RESULTS_PATH"]}
+      - QUERIES={",".join([str(query.query_number) for query in queries])}
+    volumes:
+      - dataVolume:/data\n\n"""
+  file.write(client_str)
+  return True
+  
 def main():
 
   with open(FILENAME, "w") as file:
@@ -207,8 +220,10 @@ def main():
 
     eof = eof_to_receive(queries)
     write_queries(file, queries, eof)
-    process_gateway(queries, eof, file)
-    file.write(CLIENT)      
+    if not process_gateway(queries, eof, file):
+      return
+    if not process_client(queries, file):
+      return      
     file.write(VOLUMES)
 
 main()

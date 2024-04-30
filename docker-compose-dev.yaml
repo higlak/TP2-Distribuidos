@@ -140,6 +140,9 @@ services:
     restart: on-failure
     environment:
       - PYTHONUNBUFFERED=1
+      - BATCH_SIZE=25
+      - QUERY_RESULTS_PATH=/data/query_results
+      - QUERIES=1
     volumes:
       - dataVolume:/data
 

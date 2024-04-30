@@ -4,7 +4,8 @@ from abc import ABC, abstractmethod
 
 from CommunicationMiddleware.middleware import Communicator
 from utils.Batch import Batch
-from utils.auxiliar_functions import get_env_list 
+from utils.auxiliar_functions import get_env_list
+from utils.QueryMessage import query_to_query_result
 
 ID_SEPARATOR = '.'
 GATEWAY_QUEUE_NAME = "Gateway"
@@ -66,6 +67,11 @@ class Worker(ABC):
     @abstractmethod
     def process_message(self, message):
         pass
+
+    def transform_to_result(self, message):
+        if self.communicator.contains_producer_group(GATEWAY_QUEUE_NAME):
+            message.msg_type = query_to_query_result(self.id.query)
+        return message
 
     def process_batch(self, batch):
         results = []

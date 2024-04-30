@@ -105,5 +105,8 @@ class Communicator():
         self.channel.basic_ack(delivery_tag=method.delivery_tag)
         return bytearray(message)
 
+    def contains_producer_group(self, group):
+        return group in self.producer_groups.keys()
+
     def close_connection(self):
         self.channel.close()
