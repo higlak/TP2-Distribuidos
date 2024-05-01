@@ -179,14 +179,10 @@ class GatewayIn():
                     self.com.produce_message(batch.to_bytes(), group, worker_to_send)
 
     def get_hashed_batchs(self, query_messages, query_number):
-        hashed_messages = {}
+        batch = Batch(query_messages)
         pool_to_send = f"{query_number}.{FIRST_POOL}"
         amount_of_workers = self.com.amount_of_producer_group(pool_to_send)
-        for msg in query_messages:
-            worker_to_send = msg.get_attribute_hash(query_number) % amount_of_workers
-            hashed_messages[worker_to_send] = hashed_messages.get(worker_to_send, []) + [msg]
-        
-        return {w:Batch(messages) for w, messages in hashed_messages.items()}
+        return batch.get_hashed_batchs(query_number,amount_of_workers) 
 
     def get_object_from_line(self, datasetLine):
         if datasetLine.is_book():

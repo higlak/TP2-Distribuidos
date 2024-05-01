@@ -7,7 +7,7 @@ services:
     ports:
       - 15672:15672
 
-  filter1.0.0:
+  filter3.0.0:
     build:
       context: ./
       dockerfile: Filter/Filter.dockerfile
@@ -18,91 +18,15 @@ services:
       - rabbitmq
     environment:
       - PYTHONUNBUFFERED=1
-      - WORKER_ID=1.0.0
+      - WORKER_ID=3.0.0
       - EOF_TO_RECEIVE=1
-      - NEXT_POOL_WORKERS=3
-      - FORWARD_TO=1.1
-      - DISTRIBUTE_BY=title
-      - WORKER_FIELD=categories
-      - WORKER_VALUE=Computers
-
-  filter1.0.1:
-    build:
-      context: ./
-      dockerfile: Filter/Filter.dockerfile
-    restart: on-failure
-    depends_on:
-      - rabbitmq
-    links: 
-      - rabbitmq
-    environment:
-      - PYTHONUNBUFFERED=1
-      - WORKER_ID=1.0.1
-      - EOF_TO_RECEIVE=1
-      - NEXT_POOL_WORKERS=3
-      - FORWARD_TO=1.1
-      - DISTRIBUTE_BY=title
-      - WORKER_FIELD=categories
-      - WORKER_VALUE=Computers
-
-  filter1.0.2:
-    build:
-      context: ./
-      dockerfile: Filter/Filter.dockerfile
-    restart: on-failure
-    depends_on:
-      - rabbitmq
-    links: 
-      - rabbitmq
-    environment:
-      - PYTHONUNBUFFERED=1
-      - WORKER_ID=1.0.2
-      - EOF_TO_RECEIVE=1
-      - NEXT_POOL_WORKERS=3
-      - FORWARD_TO=1.1
-      - DISTRIBUTE_BY=title
-      - WORKER_FIELD=categories
-      - WORKER_VALUE=Computers
-
-  filter1.0.3:
-    build:
-      context: ./
-      dockerfile: Filter/Filter.dockerfile
-    restart: on-failure
-    depends_on:
-      - rabbitmq
-    links: 
-      - rabbitmq
-    environment:
-      - PYTHONUNBUFFERED=1
-      - WORKER_ID=1.0.3
-      - EOF_TO_RECEIVE=1
-      - NEXT_POOL_WORKERS=3
-      - FORWARD_TO=1.1
-      - DISTRIBUTE_BY=title
-      - WORKER_FIELD=categories
-      - WORKER_VALUE=Computers
-
-  filter1.1.0:
-    build:
-      context: ./
-      dockerfile: Filter/Filter.dockerfile
-    restart: on-failure
-    depends_on:
-      - rabbitmq
-    links: 
-      - rabbitmq
-    environment:
-      - PYTHONUNBUFFERED=1
-      - WORKER_ID=1.1.0
-      - EOF_TO_RECEIVE=4
       - NEXT_POOL_WORKERS=4
-      - FORWARD_TO=1.2
+      - FORWARD_TO=3.1
       - DISTRIBUTE_BY=title
       - WORKER_FIELD=year
-      - WORKER_VALUE=2000,2023
+      - WORKER_VALUE=1990,1999
 
-  filter1.1.1:
+  filter3.0.1:
     build:
       context: ./
       dockerfile: Filter/Filter.dockerfile
@@ -113,15 +37,15 @@ services:
       - rabbitmq
     environment:
       - PYTHONUNBUFFERED=1
-      - WORKER_ID=1.1.1
-      - EOF_TO_RECEIVE=4
+      - WORKER_ID=3.0.1
+      - EOF_TO_RECEIVE=1
       - NEXT_POOL_WORKERS=4
-      - FORWARD_TO=1.2
+      - FORWARD_TO=3.1
       - DISTRIBUTE_BY=title
       - WORKER_FIELD=year
-      - WORKER_VALUE=2000,2023
+      - WORKER_VALUE=1990,1999
 
-  filter1.1.2:
+  filter3.0.2:
     build:
       context: ./
       dockerfile: Filter/Filter.dockerfile
@@ -132,15 +56,15 @@ services:
       - rabbitmq
     environment:
       - PYTHONUNBUFFERED=1
-      - WORKER_ID=1.1.2
-      - EOF_TO_RECEIVE=4
+      - WORKER_ID=3.0.2
+      - EOF_TO_RECEIVE=1
       - NEXT_POOL_WORKERS=4
-      - FORWARD_TO=1.2
+      - FORWARD_TO=3.1
       - DISTRIBUTE_BY=title
       - WORKER_FIELD=year
-      - WORKER_VALUE=2000,2023
+      - WORKER_VALUE=1990,1999
 
-  filter1.2.0:
+  filter3.0.3:
     build:
       context: ./
       dockerfile: Filter/Filter.dockerfile
@@ -151,72 +75,15 @@ services:
       - rabbitmq
     environment:
       - PYTHONUNBUFFERED=1
-      - WORKER_ID=1.2.0
-      - EOF_TO_RECEIVE=3
-      - NEXT_POOL_WORKERS=1
-      - FORWARD_TO=Gateway
+      - WORKER_ID=3.0.3
+      - EOF_TO_RECEIVE=1
+      - NEXT_POOL_WORKERS=4
+      - FORWARD_TO=3.1
       - DISTRIBUTE_BY=title
-      - WORKER_FIELD=title
-      - WORKER_VALUE=distributed
+      - WORKER_FIELD=year
+      - WORKER_VALUE=1990,1999
 
-  filter1.2.1:
-    build:
-      context: ./
-      dockerfile: Filter/Filter.dockerfile
-    restart: on-failure
-    depends_on:
-      - rabbitmq
-    links: 
-      - rabbitmq
-    environment:
-      - PYTHONUNBUFFERED=1
-      - WORKER_ID=1.2.1
-      - EOF_TO_RECEIVE=3
-      - NEXT_POOL_WORKERS=1
-      - FORWARD_TO=Gateway
-      - DISTRIBUTE_BY=title
-      - WORKER_FIELD=title
-      - WORKER_VALUE=distributed
-
-  filter1.2.2:
-    build:
-      context: ./
-      dockerfile: Filter/Filter.dockerfile
-    restart: on-failure
-    depends_on:
-      - rabbitmq
-    links: 
-      - rabbitmq
-    environment:
-      - PYTHONUNBUFFERED=1
-      - WORKER_ID=1.2.2
-      - EOF_TO_RECEIVE=3
-      - NEXT_POOL_WORKERS=1
-      - FORWARD_TO=Gateway
-      - DISTRIBUTE_BY=title
-      - WORKER_FIELD=title
-      - WORKER_VALUE=distributed
-
-  filter1.2.3:
-    build:
-      context: ./
-      dockerfile: Filter/Filter.dockerfile
-    restart: on-failure
-    depends_on:
-      - rabbitmq
-    links: 
-      - rabbitmq
-    environment:
-      - PYTHONUNBUFFERED=1
-      - WORKER_ID=1.2.3
-      - EOF_TO_RECEIVE=3
-      - NEXT_POOL_WORKERS=1
-      - FORWARD_TO=Gateway
-      - DISTRIBUTE_BY=title
-      - WORKER_FIELD=title
-      - WORKER_VALUE=distributed
-
-  accumulator2.0.0:
+  accumulator3.1.0:
     build:
       context: ./
       dockerfile: Accumulator/Accumulator.dockerfile
@@ -227,16 +94,16 @@ services:
       - rabbitmq
     environment:
       - PYTHONUNBUFFERED=1
-      - WORKER_ID=2.0.0
-      - EOF_TO_RECEIVE=1
+      - WORKER_ID=3.1.0
+      - EOF_TO_RECEIVE=4
       - NEXT_POOL_WORKERS=1
       - FORWARD_TO=Gateway
       - DISTRIBUTE_BY=title
-      - WORKER_FIELD=year
-      - WORKER_VALUE=10
-      - ACCUMULATE_BY=authors
+      - WORKER_FIELD=review_count
+      - WORKER_VALUE=500
+      - ACCUMULATE_BY=title
 
-  accumulator2.0.1:
+  accumulator3.1.1:
     build:
       context: ./
       dockerfile: Accumulator/Accumulator.dockerfile
@@ -247,16 +114,16 @@ services:
       - rabbitmq
     environment:
       - PYTHONUNBUFFERED=1
-      - WORKER_ID=2.0.1
-      - EOF_TO_RECEIVE=1
+      - WORKER_ID=3.1.1
+      - EOF_TO_RECEIVE=4
       - NEXT_POOL_WORKERS=1
       - FORWARD_TO=Gateway
       - DISTRIBUTE_BY=title
-      - WORKER_FIELD=year
-      - WORKER_VALUE=10
-      - ACCUMULATE_BY=authors
+      - WORKER_FIELD=review_count
+      - WORKER_VALUE=500
+      - ACCUMULATE_BY=title
 
-  accumulator2.0.2:
+  accumulator3.1.2:
     build:
       context: ./
       dockerfile: Accumulator/Accumulator.dockerfile
@@ -267,16 +134,16 @@ services:
       - rabbitmq
     environment:
       - PYTHONUNBUFFERED=1
-      - WORKER_ID=2.0.2
-      - EOF_TO_RECEIVE=1
+      - WORKER_ID=3.1.2
+      - EOF_TO_RECEIVE=4
       - NEXT_POOL_WORKERS=1
       - FORWARD_TO=Gateway
       - DISTRIBUTE_BY=title
-      - WORKER_FIELD=year
-      - WORKER_VALUE=10
-      - ACCUMULATE_BY=authors
+      - WORKER_FIELD=review_count
+      - WORKER_VALUE=500
+      - ACCUMULATE_BY=title
 
-  accumulator2.0.3:
+  accumulator3.1.3:
     build:
       context: ./
       dockerfile: Accumulator/Accumulator.dockerfile
@@ -287,14 +154,14 @@ services:
       - rabbitmq
     environment:
       - PYTHONUNBUFFERED=1
-      - WORKER_ID=2.0.3
-      - EOF_TO_RECEIVE=1
+      - WORKER_ID=3.1.3
+      - EOF_TO_RECEIVE=4
       - NEXT_POOL_WORKERS=1
       - FORWARD_TO=Gateway
       - DISTRIBUTE_BY=title
-      - WORKER_FIELD=year
-      - WORKER_VALUE=10
-      - ACCUMULATE_BY=authors
+      - WORKER_FIELD=review_count
+      - WORKER_VALUE=500
+      - ACCUMULATE_BY=title
 
   gateway:
     build:
@@ -308,11 +175,11 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - PORT=12345
-      - BOOK_QUERIES=1,2
-      - REVIEW_QUERIES=
-      - FORWARD_TO=2.0,1.0
-      - NEXT_POOL_WORKERS=4,4
-      - EOF_TO_RECEIVE=8
+      - BOOK_QUERIES=3
+      - REVIEW_QUERIES=3
+      - FORWARD_TO=3.0
+      - NEXT_POOL_WORKERS=4
+      - EOF_TO_RECEIVE=4
 
   client:
     build:
@@ -323,7 +190,7 @@ services:
       - PYTHONUNBUFFERED=1
       - BATCH_SIZE=25
       - QUERY_RESULTS_PATH=/data/query_results
-      - QUERIES=1,2
+      - QUERIES=3
       - SERVER_PORT=12345
     volumes:
       - dataVolume:/data

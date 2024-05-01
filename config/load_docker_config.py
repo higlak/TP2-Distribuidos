@@ -10,7 +10,7 @@ ACCUMULATOR_TYPE = 'accumulator'
 FORWARD_TO_SEPARATOR = ','
 QUERY_POOL_SEPARATOR = '.'
 GATEWAY = 'Gateway'
-QUERIES = 2
+QUERIES = 3
 DISTRIBUTE_BY_DEFAULT = 'title'
 
 FILENAME = 'docker-compose-dev.yaml'

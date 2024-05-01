@@ -81,9 +81,8 @@ class Book():
             messages.append(QueryMessage(BOOK_MSG_TYPE, year=self.publishedYear, authors=[author]))
         return messages
 
-    
     def to_query3(self):
-        if not self.publishedYear or not self.title or not self.authors or self.ratingsCount == None:
+        if not self.publishedYear or not self.title or not self.authors:
             return None
         return QueryMessage(BOOK_MSG_TYPE, year=self.publishedYear, rating=self.ratingsCount, title=self.title, authors=self.authors)
     

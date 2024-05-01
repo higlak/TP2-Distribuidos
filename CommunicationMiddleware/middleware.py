@@ -100,9 +100,9 @@ class Communicator():
             for _member in members:
                 self.produce_message(message, group) 
     
-    def produce_to_all_groups(self, message):
+    def produce_to_all_groups(self, message, queue_pos=None):
         for group in self.producer_groups.keys():
-            self.produce_message(message, group)
+            self.produce_message(message, group, queue_pos)
 
     def consume_message(self, queue_name):
         if not self.consumer_queues.contains(queue_name):
