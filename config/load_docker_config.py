@@ -10,7 +10,7 @@ ACCUMULATOR_TYPE = 'accumulator'
 FORWARD_TO_SEPARATOR = ','
 QUERY_POOL_SEPARATOR = '.'
 GATEWAY = 'Gateway'
-QUERIES = 5
+QUERIES = 2
 DISTRIBUTE_BY_DEFAULT = 'title'
 
 FILENAME = 'docker-compose-dev.yaml'
@@ -103,7 +103,7 @@ def process_all_queries(file):
     filename = f'{QUERY_CONFIG_FILE}{i}.ini'
     query = process_query(file, filename, i)
     if query:
-      queries[str(i)] = query
+      queries[i] = query
   return queries
     
 def process_query(file, query_filename, query_number):
