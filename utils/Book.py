@@ -84,7 +84,7 @@ class Book():
     def to_query3(self):
         if not self.publishedYear or not self.title or not self.authors:
             return None
-        return QueryMessage(BOOK_MSG_TYPE, year=self.publishedYear, rating=self.ratingsCount, title=self.title, authors=self.authors)
+        return QueryMessage(BOOK_MSG_TYPE, year=self.publishedYear, title=self.title, authors=self.authors)
     
     def to_query5(self):
         if not self.title:

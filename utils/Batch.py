@@ -1,5 +1,5 @@
 from utils.auxiliar_functions import byte_array_to_big_endian_integer, integer_to_big_endian_byte_array, recv_exactly
-from utils.QueryMessage import QueryMessage
+from utils.QueryMessage import QueryMessage, query_result_headers
 import unittest
 from unittest import TestCase
 
@@ -53,6 +53,12 @@ class Batch():
         
         return {w:Batch(messages) for w, messages in hashed_messages.items()}
     
+    def keep_fields(self):
+        new_messages = []
+        for message in self.messages:
+            new_messages.append(message.copy_keeping_fields(query_result_headers(message.msg_type)))
+        self.messages = new_messages
+
     def is_empty(self):
         return len(self.messages) == 0
     
