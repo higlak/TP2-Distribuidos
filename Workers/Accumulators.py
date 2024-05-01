@@ -1,10 +1,21 @@
 from .Worker import Worker
-from utils.QueryMessage import QueryMessage, CATEGORIES_FIELD, YEAR_FIELD, TITLE_FIELD, AUTHOR_FIELD, BOOK_MSG_TYPE, REVIEW_MSG_TYPE, RATING_FIELD
+from utils.QueryMessage import QueryMessage, CATEGORIES_FIELD, YEAR_FIELD, TITLE_FIELD, AUTHOR_FIELD, BOOK_MSG_TYPE, REVIEW_MSG_TYPE, RATING_FIELD, MSP_FIELD, REVIEW_TEXT_FIELD
 import unittest
 from unittest import TestCase
 import heapq
+import bisect
+from textblob import TextBlob
 
 REVIEW_COUNT = "review_count"
+
+
+def sentiment_analysis(texto):
+    if isinstance(texto, str):
+        blob = TextBlob(texto)
+        sentimiento = blob.sentiment.polarity
+        return sentimiento
+    else:
+        return None
 
 class Accumulator(Worker):
     def __init__(self, field, values, accumulate_by):
@@ -16,6 +27,8 @@ class Accumulator(Worker):
             (YEAR_FIELD, AUTHOR_FIELD): {},
             (REVIEW_COUNT, TITLE_FIELD): {},
             (RATING_FIELD, TITLE_FIELD): [],
+            (REVIEW_TEXT_FIELD, TITLE_FIELD): {},
+            (MSP_FIELD, TITLE_FIELD): [],
         }
         self.context = switch[(field, accumulate_by)]
 
@@ -23,7 +36,9 @@ class Accumulator(Worker):
         switch = {
             (YEAR_FIELD, AUTHOR_FIELD): self.accumulate_decade_by_authors,
             (REVIEW_COUNT, TITLE_FIELD): self.accumulate_amount_of_reviews,
-            (RATING_FIELD, TITLE_FIELD): self.accumulate_rating_by_title
+            (RATING_FIELD, TITLE_FIELD): self.accumulate_rating_by_title,
+            (REVIEW_TEXT_FIELD, TITLE_FIELD): self.accumulate_review_text_sentiment_by_title,
+            (MSP_FIELD, TITLE_FIELD): self.accumulate_msp_by_title,
         }
         method = switch.get((self.field, self.accumulate_by), None)
         if not method:
@@ -40,9 +55,6 @@ class Accumulator(Worker):
         if msg.msg_type == REVIEW_MSG_TYPE:
             self.context[msg.title][1] += 1
             self.context[msg.title][2] += msg.rating 
-            #if self.context[msg.title][1] == int(self.values):
-            #    print("Reached 500 ", msg.title)
-            #    return [self.context[msg.title][0].copy_droping_fields([RATING_FIELD])]
         return None
 
     def accumulate_decade_by_authors(self, msg):
@@ -68,17 +80,36 @@ class Accumulator(Worker):
                 return True
     
     def accumulate_rating_by_title(self, msg):
+        print("Me llega ", msg.rating)
+        if msg.rating == None:
+            return None
         if len(self.context) < int(self.values):
-            heapq.heappush(self.context, RatingOfBook(msg.title, msg.rating))
-        elif self.context[0].rating < msg.rating:
+            heapq.heappush(self.context, BookAtribute(msg.title, msg.rating))
+        elif self.context[0].attribute < msg.rating:
             heapq.heappop(self.context)
-            heapq.heappush(self.context, RatingOfBook(msg.title, msg.rating))
+            heapq.heappush(self.context, BookAtribute(msg.title, msg.rating))
+
+    def accumulate_review_text_sentiment_by_title(self, msg):
+        if msg.msg_type == REVIEW_MSG_TYPE:
+            if not msg.title in self.context.keys():
+                self.context[msg.title] = [0, 0]
+            sent_analysis = sentiment_analysis(msg.review_text)
+            if sent_analysis != None:
+                self.context[msg.title][0] += 1
+                self.context[msg.title][1] += sent_analysis
+        return None
+        
+    def accumulate_msp_by_title(self, msg):
+        if msg.title and msg.mean_sentiment_polarity != None:
+            bisect.insort(self.context, BookAtribute(msg.title, msg.mean_sentiment_polarity))
         
     def get_final_results(self):
         switch = {
             (YEAR_FIELD, AUTHOR_FIELD): None,
             (REVIEW_COUNT, TITLE_FIELD): self.amount_of_reviews_final_results,
-            (RATING_FIELD, TITLE_FIELD): self.rating_by_title_final_results
+            (RATING_FIELD, TITLE_FIELD): self.rating_by_title_final_results,
+            (REVIEW_TEXT_FIELD, TITLE_FIELD): self.review_text_sentiment_by_title_final_results,
+            (MSP_FIELD, TITLE_FIELD): self.msp_by_title_final_results,
         }
         method = switch.get((self.field, self.accumulate_by), None)
         if not method:
@@ -97,20 +128,34 @@ class Accumulator(Worker):
     def rating_by_title_final_results(self):
         results = []
         while len(self.context) > 0:
-            results.append(heapq.heappop(self.context).get_query_message())
+            result = heapq.heappop(self.context)
+            results.append(QueryMessage(BOOK_MSG_TYPE, title=result.title, rating= result.attribute))
         results.reverse()
         return results
         
-class RatingOfBook():
-    def __init__(self, title, rating):
+    def review_text_sentiment_by_title_final_results(self):
+        results = []
+        for title, result in self.context.items():
+            msp = result[1] / result[0]
+            results.append(QueryMessage(msg_type=BOOK_MSG_TYPE, title=title, mean_sentiment_polarity=msp))
+        return results
+
+    def msp_by_title_final_results(self):
+        percentil_90_index = int(len(self.context) * (int(self.values) / 100))
+        results = []
+        for a in self.context:
+            if a >= self.context[percentil_90_index]:
+                results.append(a)
+
+        return [QueryMessage(BOOK_MSG_TYPE, title=result.title) for result in results]
+
+class BookAtribute():
+    def __init__(self, title, attribute):
         self.title = title
-        self.rating = rating
+        self.attribute = attribute
 
     def __lt__(self, other):
-        return self.rating < other.rating
+        return self.attribute < other.attribute
     
     def __le__(self, other):
-        return self.rating <= other.rating
-    
-    def get_query_message(self):
-        return QueryMessage(BOOK_MSG_TYPE, title=self.title, rating=self.rating)
+        return self.attribute <= other.attribute

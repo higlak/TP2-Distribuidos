@@ -87,9 +87,9 @@ class Book():
         return QueryMessage(BOOK_MSG_TYPE, year=self.publishedYear, title=self.title, authors=self.authors)
     
     def to_query5(self):
-        if not self.title:
+        if not self.title or not self.categories:
             return None
-        return QueryMessage(BOOK_MSG_TYPE, title=self.title)
+        return QueryMessage(BOOK_MSG_TYPE, title=self.title, categories=self.categories)
 
     def is_book(self):
         return True 
