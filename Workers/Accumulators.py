@@ -69,6 +69,8 @@ class Accumulator(Worker):
         return results
                             
     def accumulate_decade_by_author(self, author, msg_decade):
+        if author == 'Joseph Conrad':
+            print("msg_decade" , msg_decade)
         author_decades = self.context.get(author, [])
         if len(author_decades) == self.values:
             return False
