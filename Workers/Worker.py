@@ -107,6 +107,15 @@ class Worker(ABC):
         self.loop()
         self.communicator.close_connection()
 
+    @abstractmethod
+    def reset_context(self):
+        pass
+
+    def reset(self):
+        self.eof_to_receive = int(os.getenv("EOF_TO_RECEIVE"))
+        self.reset_context()
+        print(f"[Worker {self.id}] Client disconnected. Worker reset")
+
     def loop(self):
         while True:
             batch_bytes = self.receive_message()
@@ -121,7 +130,7 @@ class Worker(ABC):
                     print(f"[Worker {self.id}] No more eof to receive")
                     self.send_final_results()
                     self.send_batch(batch)
-                    break
+                    self.reset()
             else:
                 result_batch = self.process_batch(batch)
                 if not result_batch.is_empty():

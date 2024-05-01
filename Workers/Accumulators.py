@@ -23,6 +23,11 @@ class Accumulator(Worker):
         self.field = field
         self.values = values
         self.accumulate_by = accumulate_by
+        
+        self.context = Accumulator.get_new_context(field, accumulate_by)
+
+    @classmethod
+    def get_new_context(cls, field, accumulate_by):
         switch = {
             (YEAR_FIELD, AUTHOR_FIELD): {},
             (REVIEW_COUNT, TITLE_FIELD): {},
@@ -30,8 +35,12 @@ class Accumulator(Worker):
             (REVIEW_TEXT_FIELD, TITLE_FIELD): {},
             (MSP_FIELD, TITLE_FIELD): [],
         }
-        self.context = switch[(field, accumulate_by)]
+        
+        return switch[(field, accumulate_by)]
 
+    def reset_context(self):
+        self.context = Accumulator.get_new_context(self.field, self.accumulate_by)  
+        
     def process_message(self, msg: QueryMessage):
         switch = {
             (YEAR_FIELD, AUTHOR_FIELD): self.accumulate_decade_by_authors,

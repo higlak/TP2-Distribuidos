@@ -20,6 +20,9 @@ class Filter(Worker):
             return self.transform_to_result(msg)
         return None
     
+    def reset_context(self):
+        self.filtered_books_titles = set()        
+
     def filter_book(self, msg:QueryMessage):
         switch = {
             CATEGORIES_FIELD: msg.contains_category,
