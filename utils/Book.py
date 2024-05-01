@@ -6,19 +6,20 @@ import unittest
 import pprint
 from utils.QueryMessage import QueryMessage, BOOK_MSG_TYPE
 from utils.DatasetHandler import DatasetLine
+import re
 
 CSV_HEADER = "Title,description,authors,image,previewLink,publisher,publishedDate,infoLink,categories,ratingsCount"
 BOOK_AS_CSV_LEN_BYTES = 2
 
 class Book():
-    def __init__(self, title='', description='', authors=[], image='', previewLink='', publisher='', publishedDate=None, infoLink='', categories=[], ratingsCount=None):
+    def __init__(self, title='', description='', authors=[], image='', previewLink='', publisher='', publishedDate='', infoLink='', categories=[], ratingsCount=None):
         self.title = title
         self.description = description
         self.authors = authors
         self.image = image
         self.previewLink = previewLink
         self.publisher = publisher
-        self.publishedDate = Date.from_str(publishedDate)
+        self.publishedYear = get_year_from_str(publishedDate)
         self.infoLink = infoLink
         self.categories = categories
         self.ratingsCount = ratingsCount
@@ -27,7 +28,7 @@ class Book():
         return vars(self) == vars(other)
     
     def __repr__(self):
-       return f'{self.title}\n{self.description}\n{self.authors}\n{self.image}\n{self.previewLink}\n{self.publisher}\n{self.publishedDate}\n{self.infoLink}\n{self.categories}\n{self.ratingsCount}'
+       return f'{self.title}\n{self.description}\n{self.authors}\n{self.image}\n{self.previewLink}\n{self.publisher}\n{self.publishedYear}\n{self.infoLink}\n{self.categories}\n{self.ratingsCount}'
 
     @classmethod
     def from_csv(cls, attributes):
@@ -36,8 +37,13 @@ class Book():
         if not attributes['authors']:
             authors = []
         else:
-            authors = attributes['authors'].strip('"').strip('[').strip(']').split(',')
+            authors = attributes['authors'].strip('"').strip('[').strip(']').strip(',').split(',')
             authors = [author.strip(' ').strip('\'') for author in authors]
+            aux = []
+            for author in authors:
+                if author != '':
+                    aux.append(author)
+            authors = aux
         image = attributes['image'] 
         previewLink = attributes['previewLink']
         publisher = attributes['publisher']
@@ -61,19 +67,25 @@ class Book():
         return cls.from_csv(next(dict_reader))
 
     def to_query1(self):
-        if not self.publishedDate or not self.title or not self.authors or not self.publisher or not self.categories:
+        if not self.publishedYear or not self.title or not self.authors or not self.publisher or not self.categories:
             return None
-        return QueryMessage(BOOK_MSG_TYPE, year=self.publishedDate.year, title=self.title, authors=self.authors, publisher=self.publisher, categories=self.categories)
+        return QueryMessage(BOOK_MSG_TYPE, year=self.publishedYear, title=self.title, authors=self.authors, publisher=self.publisher, categories=self.categories)
 
     def to_query2(self):
-        if not self.publishedDate or not self.title or not self.authors:
+        if not self.publishedYear or not self.title or not self.authors:
             return None
-        return QueryMessage(BOOK_MSG_TYPE, year=self.publishedDate.year, title=self.title, authors=self.authors)
+        messages = []
+        for author in self.authors:
+            if author == "":
+                print(self.authors)
+            messages.append(QueryMessage(BOOK_MSG_TYPE, year=self.publishedYear, authors=[author]))
+        return messages
+
     
     def to_query3(self):
-        if not self.publishedDate or not self.title or not self.authors or self.ratingsCount == None:
+        if not self.publishedYear or not self.title or not self.authors or self.ratingsCount == None:
             return None
-        return QueryMessage(BOOK_MSG_TYPE, year=self.publishedDate.year, rating=self.ratingsCount, title=self.title, authors=self.authors)
+        return QueryMessage(BOOK_MSG_TYPE, year=self.publishedYear, rating=self.ratingsCount, title=self.title, authors=self.authors)
     
     def to_query5(self):
         if not self.title:
@@ -83,6 +95,13 @@ class Book():
     def is_book(self):
         return True 
     
+def get_year_from_str(string):
+    coincidence = re.match('[^\d]*(\d{4})[^\d]*', string)
+    if not coincidence:
+        return None
+    year = coincidence.group(1)
+    return int(year)
+
 class TestBook(TestCase):
     def expected_book(self):
         return Book('Murdocca', 'Libro de estructura del computador', ['Autor1', 'Autor2'], 'imagen.png', 'link.com', 'Mazzeo', "1840-04", 'infolink.com', ['Computacion'], 4397)

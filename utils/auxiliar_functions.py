@@ -1,3 +1,7 @@
+import os
+
+QUERY_SEPARATOR = ','
+
 # Receives bytes until n bytes have been received. If cannot receive n bytes None is returned
 def recv_exactly(socket, n):
     buffer = bytes()
@@ -30,6 +34,12 @@ def integer_to_big_endian_byte_array(number, amount_of_bytes):
             byte_array.append(byte)
     return byte_array
 
+def get_env_list(param):
+    l = os.getenv(param).split(QUERY_SEPARATOR)
+    if l == [""]:
+        return []
+    return l
+
 def length(iterable):
     """
     Receives and iterable and returns its length
@@ -39,6 +49,12 @@ def length(iterable):
         return len(iterable)
     except:
         return None
+    
+def append_extend(l, element_or_list):
+    if isinstance(element_or_list, list):
+        l.extend(element_or_list)
+    else:
+        l.append(element_or_list)
         
 def remove_bytes(array, finish, start=0):
     elements = array[start:finish]

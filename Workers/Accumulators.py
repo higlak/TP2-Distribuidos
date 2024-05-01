@@ -19,13 +19,18 @@ class Accumulator(Worker):
         if not method:
             return None
         
-        return method(msg)
+        results = method(msg)
+        if not results:
+            return None
+        return [self.transform_to_result(m) for m in results]
     
     def accumulate_decade_by_authors(self, msg):
         if msg.authors == None:
             return None
         results = []
         for author in msg.authors:
+            #if author == 'William Shakespeare':
+            #    print(f"{self.id.get_worker_name()} tiene a shakespier")
             if self.accumulate_decade_by_author(author, msg.decade()):
                 msg_aux = msg.copy_droping_fields([YEAR_FIELD])
                 msg_aux.authors = [author]
@@ -40,7 +45,7 @@ class Accumulator(Worker):
         if msg_decade == None:
             return False
         if not (msg_decade in self.context.get(author, [])):
-            print(f"Accumulating Author {author} decade {msg_decade}")
+            #print(f"Accumulating Author {author} decade {msg_decade}")
             self.context[author] = self.context.get(author, []) + [msg_decade]
             if len(self.context.get(author, [])) == self.values:
                 return True

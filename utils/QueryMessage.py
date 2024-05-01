@@ -1,4 +1,4 @@
-from utils.Date import Date
+import hashlib
 from utils.auxiliar_functions import *
 import struct
 import unittest
@@ -14,6 +14,7 @@ QUERY5_RESULT = 6
 
 SEPARATOR = ","
 MSG_TYPE_BYTES = 1
+PARAMETERS_BYTES = 1
 TITLE_LEN_BYTES = 2
 AUTHORS_LEN_BYTES = 2
 PUBLISHER_LEN_BYTES = 1
@@ -22,6 +23,9 @@ REVIEW_TEXT_LEN_BYTES = 2
 YEAR_BYTES = 2
 RATING_BYTES = 2
 MSP_BYTES = 4
+FIXED_PART_HEADER_LEN = MSG_TYPE_BYTES + PARAMETERS_BYTES
+
+PARAMETER_LENS = [YEAR_BYTES, RATING_BYTES, MSP_BYTES, TITLE_LEN_BYTES, AUTHORS_LEN_BYTES, PUBLISHER_LEN_BYTES, CATEGORIES_LEN_BYTES, REVIEW_TEXT_LEN_BYTES]
 
 MSG_TYPE_FIELD = 'msg_type' 
 YEAR_FIELD = 'year'
@@ -61,6 +65,27 @@ class QueryMessage():
         
         return QueryMessage(msg_type, year, rating, msp, title, authors, publisher, categories, review_text) 
     
+    @classmethod
+    def from_socket(cls, socket):
+        fixed_part_header  = recv_exactly(socket, FIXED_PART_HEADER_LEN)
+        if not fixed_part_header:
+            return None
+        msg_type = fixed_part_header[0]
+        parameters = fixed_part_header[1]
+        
+        header_parameters_len = ParametersGenerator.determine_header_parameter_len(parameters)
+        header_parameters = recv_exactly(socket, header_parameters_len)
+        if not header_parameters:
+            return None
+
+        body_len = ParametersGenerator.determine_body_len(bytearray([parameters])+header_parameters)
+        body = recv_exactly(socket, body_len)
+        if not body:
+            return None
+
+        full_message_bytes = bytearray([msg_type, parameters]) + header_parameters + body
+        return cls.from_bytes(full_message_bytes)
+
     def fields_to_list(self):
         return [self.year, self.rating, self.mean_sentiment_polarity, self.title, self.authors, self.publisher, self.categories, self.review_text]
     
@@ -121,6 +146,16 @@ class QueryMessage():
             byte_array.extend(self.review_text.encode())  
         return byte_array
     
+    def get_attribute_hash(self, query_number):
+        if query_number == '2':
+            string_to_hash =  ','.join(self.authors)
+        else:
+            string_to_hash = self.title
+            
+        hash_object = hashlib.sha256(string_to_hash.lower().encode())
+        hash_int = int(hash_object.hexdigest(), 16)
+        return hash_int
+
     def contains_category(self, category):
         if not self.categories:
             return False 
@@ -133,7 +168,7 @@ class QueryMessage():
         return self.year >= year_range[0] and self.year <= year_range[1]
 
     def contains_in_title(self, word):
-        return word in self.title
+        return word.lower() in self.title.lower()
     
     def decade(self):
         if self.year == None:
@@ -146,15 +181,66 @@ class QueryMessage():
             fields[field_to_drop] = None
         return QueryMessage(**fields)
     
+    def get_csv_values(self):
+        csv_values = []
+        for value in self.fields_to_list():
+            if value:
+                csv_values.append(value)
+        return csv_values
+    
     def __eq__(self, other):
         return self.fields_to_list() == other.fields_to_list()
+    
+def query_to_query_result(query):
+    switch = {
+        '1': QUERY1_RESULT,
+        '2': QUERY2_RESULT,
+        '3': QUERY3_RESULT,
+        '4': QUERY4_RESULT,
+        '5': QUERY5_RESULT,
+    }
+    return switch[query]
+
+def query_result_headers(query_result):
+    switch = {
+            QUERY1_RESULT: ['title','authors','publisher'],
+            QUERY2_RESULT: ['authors'],
+            QUERY3_RESULT: ['title','authors'],
+            QUERY4_RESULT: ['title'],
+            QUERY5_RESULT: ['title'],
+        }
+    return switch[query_result]    
 
 class ParametersGenerator():
-    def __init__(self, byte_array):
+    def __init__(self, byte_array, only_header=False):
         self.parameters = remove_bytes(byte_array,1)[0]
         self.byte_array = byte_array
         self.interprete_later = []
         self.generator = self.loop()
+        self.only_header = only_header
+    
+    @classmethod
+    def determine_header_parameter_len(cls, parameters):
+        mask = 0x1
+        parameters_len = 0
+        for i in range(8):
+            parameter = parameters & mask
+            if parameter:
+                parameters_len += PARAMETER_LENS[i]
+            mask = mask << 1
+        return parameters_len
+    
+    @classmethod
+    def determine_body_len(cls, byte_array):
+        gen = cls(byte_array, True)
+        body_len = 0
+        for i in range(8):
+            field_value = gen.next()
+            if i >= 3:
+                if not (field_value == None):
+                    body_len += field_value
+        return body_len
+        
 
     def next(self):
         return next(self.generator)
@@ -175,17 +261,22 @@ class ParametersGenerator():
         for _ in range(5):
             parameter = self.parameters & mask
             if parameter:
-                self.interprete(parameter)
-            else:
+                l = self.interprete(parameter)
+                if self.only_header:
+                    yield l
+            else:  
                 self.interprete_later.append((None, None))
+                if self.only_header:
+                    yield None
             mask = mask << 1
         
-        # handle variable length fields values
-        for (length, method) in self.interprete_later:
-            if not length:
-                yield None
-            else:
-                yield method(length)
+        if not self.only_header:
+            # handle variable length fields values
+            for (length, method) in self.interprete_later:
+                if not length:
+                    yield None
+                else:
+                    yield method(length)
     
     def interprete(self, parameter):
         switch = {

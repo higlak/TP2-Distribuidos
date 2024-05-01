@@ -32,3 +32,16 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - CONSUMER_ID=1
+
+  consumer2:
+    build:
+      context: ./
+      dockerfile: test/consumer/consumer.dockerfile
+    restart: on-failure
+    depends_on:
+      - rabbitmq
+    links: 
+      - rabbitmq
+    environment:
+      - PYTHONUNBUFFERED=1
+      - CONSUMER_ID=2

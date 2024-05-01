@@ -1,4 +1,4 @@
-from utils.auxiliar_functions import byte_array_to_big_endian_integer, integer_to_big_endian_byte_array
+from utils.auxiliar_functions import byte_array_to_big_endian_integer, integer_to_big_endian_byte_array, recv_exactly
 from utils.QueryMessage import QueryMessage
 import unittest
 from unittest import TestCase
@@ -25,6 +25,20 @@ class Batch():
             messages.append(message) 
         return Batch(messages)
     
+    @classmethod
+    def from_socket(cls, sock, data_class):
+        amount_of_messages = recv_exactly(sock, AMOUNT_OF_MESSAGES_BYTES)
+        if amount_of_messages == None:
+            return None
+        amount_of_messages = amount_of_messages[0]
+        instances = []
+        for _ in range(amount_of_messages):
+            instance = data_class.from_socket(sock)
+            if not instance:
+                return None
+            instances.append(instance)
+        return Batch(instances)
+    
     def to_bytes(self):
         byte_array = integer_to_big_endian_byte_array(len(self.messages), AMOUNT_OF_MESSAGES_BYTES)
         for i, message in enumerate(self.messages):
@@ -42,6 +56,9 @@ class Batch():
 
     def __next__(self):
         return next(self.messages)
+    
+    def __getitem__(self, index):
+        return self.messages[index]
                  
 class TestBatch(TestCase):
     def test_book_message1(self):

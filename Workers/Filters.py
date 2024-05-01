@@ -12,9 +12,8 @@ class Filter(Worker):
 
     def process_message(self, msg: QueryMessage):
         if self.filter_msg(msg):
-            print(f"fowarded {msg.title}")
-            return msg.copy_droping_fields(self.droping_fields)
-        print(f"dropped {msg.title}")
+            msg = msg.copy_droping_fields(self.droping_fields)
+            return self.transform_to_result(msg)
         return None
     
     def filter_msg(self, msg:QueryMessage):
