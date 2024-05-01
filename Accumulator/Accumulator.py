@@ -1,11 +1,11 @@
-from Workers.Accumulators import Accumulator
+from Workers.Accumulators import Accumulator, REVIEW_COUNT
 from utils.QueryMessage import ALL_MESSAGE_FIELDS, YEAR_FIELD, CATEGORIES_FIELD, TITLE_FIELD
 import os
 
 def get_env_worker_field():
     worker_field = os.getenv('WORKER_FIELD')
-    if not (worker_field in ALL_MESSAGE_FIELDS):
-        print("invalid FILTER_FIELD env var: ", worker_field)
+    if not (worker_field in ALL_MESSAGE_FIELDS) and worker_field != REVIEW_COUNT:
+        print("invalid Worker_FIELD env var: ", worker_field)
         return None
     return worker_field
 

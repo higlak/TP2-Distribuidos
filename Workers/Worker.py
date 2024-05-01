@@ -106,8 +106,13 @@ class Worker(ABC):
                 if not result_batch.is_empty():
                     self.send_batch(result_batch)
 
-    def send_batch(self, batch):
+    def send_batch(self, batch: Batch):
         if batch.is_empty():
             self.communicator.produce_to_all_group_members(batch.to_bytes())
         else:
-            self.communicator.produce_to_all_groups(batch.to_bytes())
+            for group in self.communicator.producer_groups.keys():
+                amount_of_workers = self.communicator.amount_of_producer_group(group)
+                hashed_batchs = batch.get_hashed_batchs(self.id.query,amount_of_workers)
+                for worker_to_send, batch in hashed_batchs.items():
+                    if not batch.is_empty():
+                        self.communicator.produce_message(batch.to_bytes(), group, worker_to_send)

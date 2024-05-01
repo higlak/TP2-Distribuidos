@@ -93,7 +93,7 @@ class ClientReader():
     
     def start(self):
         self.send_all_from_dataset(BOOK_MSG_TYPE, self.book_reader)
-        #send_all_from_dataset(REVIEW_MSG_TYPE, self.review_reader)
+        self.send_all_from_dataset(REVIEW_MSG_TYPE, self.review_reader)
         self.send_eof()
         self.close()
     

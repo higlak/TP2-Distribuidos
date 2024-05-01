@@ -3,12 +3,12 @@ from unittest import TestCase
 import unittest
 import csv
 from utils.DatasetHandler import DatasetLine
-from utils.QueryMessage import QueryMessage
+from utils.QueryMessage import QueryMessage, REVIEW_MSG_TYPE
 
 CSV_HEADER = "Id,Title,Price,User_id,profileName,review/helpfulness,review/score,review/time,review/summary,review/text"
 
 class Review():
-    def __init__(self, id=None, title='', price=None, user_id=None, profileName='', helpfulness=None, score=None, time=None, summary='', text=''):
+    def __init__(self, id=None, title='', price='', user_id='', profileName='', helpfulness='', score='', time='', summary='', text=''):
         self.id = id
         self.title = title
         self.price = price
@@ -28,35 +28,16 @@ class Review():
 
     @classmethod
     def from_csv(cls, attributes):
-        if not attributes['Id']:
-            id = None
-        else:
-            id = int(attributes['Id'])
+        id = attributes['Id']
         title = attributes['Title'] 
-        if not attributes['Price']:
-            price = None
-        else:
-            price = float(attributes['Price'])
-        if not attributes['User_id']:
-            user_id = None
-        else:
-            user_id = int(attributes['User_id'])    
+        price = attributes['Price']
+        user_id = attributes['User_id']    
         profileName = attributes['profileName']
-        if not attributes['review/helpfulness']:
-            helpfulness = None
-        else: 
-            aux = attributes['review/helpfulness'].split('/')
-            helpfulness = (int(aux[0]), int(aux[1]))
-        if not attributes['review/score']:
-            score = None
-        else:
-            score = int(float(attributes['review/score']))
-        if not attributes['review/time']:
-            time = None
-        else:
-            time = int(attributes['review/time'])
+        helpfulness = attributes['review/helpfulness']
+        score = attributes['review/score']
+        time = attributes['review/time']
         summary = attributes['review/summary']
-        text = attributes['review/text'].strip('"')
+        text = attributes['review/text']
 
         return Review(id, title, price, user_id, profileName, helpfulness, score, time, summary, text)
 
@@ -64,6 +45,12 @@ class Review():
     def from_datasetline(cls, datasetLine: DatasetLine):
         dict_reader = csv.DictReader([CSV_HEADER, datasetLine.datasetLine])
         return cls.from_csv(next(dict_reader))
+    
+    def to_query1(self):
+        return None
+
+    def to_query2(self):
+        return None
     
     def to_query3(self):
         if not self.title:
@@ -80,12 +67,12 @@ class Review():
 
 class TestReview(TestCase):
     def expected_review(self):
-        return Review(1, 'Murdocca', 10.0, 1, 'Mazzeo', (1, 2), 4, 940636800, 'Libro de estructura del computador', 'Libro de estructura del computador')
-    
+        return Review('1', 'Murdocca', '10.0', '1', 'Mazzeo', '1/2', '4.0', '940636800', 'Libro de estructura del computador', 'Libro de estructura del computador')
+        
     def test_empty_review(self):
         attributes = {'Id': '', 'Title': '', 'Price': '', 'User_id': '', 'profileName': '', 'review/helpfulness': '', 'review/score': '', 'review/time': '', 'review/summary': '', 'review/text': ''}
         review = Review.from_csv(attributes)
-        expected = Review(None, '', None, None, '', None, None, None, '', '')
+        expected = Review(None, '', '', '', '', '', '', '', '', '')
         self.assertEqual(review, expected)
 
     def test_full_review(self):
@@ -101,5 +88,4 @@ class TestReview(TestCase):
         self.assertEqual(review, expected)
 
 if __name__ == '__main__':
-    from utils.QueryMessage import REVIEW_MSG_TYPE
     unittest.main()
