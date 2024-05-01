@@ -10,7 +10,7 @@ ACCUMULATOR_TYPE = 'accumulator'
 FORWARD_TO_SEPARATOR = ','
 QUERY_POOL_SEPARATOR = '.'
 GATEWAY = 'Gateway'
-QUERIES = 3
+QUERIES = 4
 DISTRIBUTE_BY_DEFAULT = 'title'
 
 FILENAME = 'docker-compose-dev.yaml'
@@ -165,9 +165,7 @@ def get_next_pool_workers(queries, forward_to):
     if next_pool == GATEWAY:
       next_pool_workers.append(str(1))
     else:
-      print("Next pool: ", next_pool)
       query_num, pool_num = next_pool.split(QUERY_POOL_SEPARATOR)
-      print(queries)
       worker_amount = queries[int(query_num)].worker_amount_of_pool(int(pool_num))
       next_pool_workers.append(str(worker_amount))
   return ','.join(next_pool_workers)

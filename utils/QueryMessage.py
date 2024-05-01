@@ -21,7 +21,7 @@ PUBLISHER_LEN_BYTES = 1
 CATEGORIES_LEN_BYTES = 2
 REVIEW_TEXT_LEN_BYTES = 2
 YEAR_BYTES = 2
-RATING_BYTES = 2
+RATING_BYTES = 4
 MSP_BYTES = 4
 FIXED_PART_HEADER_LEN = MSG_TYPE_BYTES + PARAMETERS_BYTES
 
@@ -111,7 +111,8 @@ class QueryMessage():
     def fixed_fields_to_bytes(self):
         byte_array = bytearray()
         byte_array.extend(integer_to_big_endian_byte_array(self.year, YEAR_BYTES))
-        byte_array.extend(integer_to_big_endian_byte_array(self.rating, RATING_BYTES))
+        if self.rating:
+            byte_array.extend(struct.pack('f',self.rating))
         if self.mean_sentiment_polarity:
             byte_array.extend(struct.pack('f',self.mean_sentiment_polarity))
         return byte_array
@@ -181,6 +182,13 @@ class QueryMessage():
             fields[field_to_drop] = None
         return QueryMessage(**fields)
     
+    def copy_keeping_fields(self, fields_to_keep):
+        fields = vars(self)
+        for field in fields.keys():
+            if field != MSG_TYPE_FIELD and not field in fields_to_keep:
+                fields[field] = None
+        return QueryMessage(**fields)
+
     def get_csv_values(self):
         csv_values = []
         for value in self.fields_to_list():
@@ -302,11 +310,10 @@ class ParametersGenerator():
         return self.interprete_big_endian_integer(YEAR_BYTES)
     
     def interprete_rating(self):
-        return self.interprete_big_endian_integer(RATING_BYTES)
+        return struct.unpack('f',self.remove_bytes(RATING_BYTES))[0]
 
     def interprete_mean_sentiment_polarity(self):
-        msp = struct.unpack('f',self.remove_bytes(MSP_BYTES))[0]
-        return msp
+        return struct.unpack('f',self.remove_bytes(MSP_BYTES))[0]
     
     def interprete_variable_field(self, len_bytes, later_method):
         length = self.interprete_big_endian_integer(len_bytes)

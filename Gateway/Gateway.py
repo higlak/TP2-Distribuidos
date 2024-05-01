@@ -78,25 +78,23 @@ class GatewayOut():
         self.close()
 
     def loop(self):
-
         while True:
             batch_bytes = self.com.consume_message(GATEWAY_QUEUE_NAME)
             if batch_bytes == None:
                 print(f"[Gateway] Error while consuming results")
                 break
             batch = Batch.from_bytes(batch_bytes)
-            print("Prosesando mensaje len ", {batch.size()})
             if batch.is_empty():
                 self.eof_to_receive -= 1
                 print(f"[Gateway] Pending EOF to receive: {self.eof_to_receive}")
                 if not self.eof_to_receive:
-                    print("[Gateway] No more EOF to receive")
+                    print("[Gateway] No more EOF to receive. Sending EOF to client")
                     send_all(self.socket, batch.to_bytes())
-                    print("[Gateway] Send EOF to client")
                     break
             else:
-                print("[Gateway] Sending result to client")
-                send_all(self.socket, batch_bytes)
+                batch.keep_fields()
+                print(f"[Gateway] Sending result to client with {batch.size()} elements")
+                send_all(self.socket, batch.to_bytes())
     
     def close(self):
         self.com.close_connection()

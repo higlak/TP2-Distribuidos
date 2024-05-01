@@ -9,6 +9,7 @@ from utils.QueryMessage import query_to_query_result
 
 ID_SEPARATOR = '.'
 GATEWAY_QUEUE_NAME = "Gateway"
+BATCH_SIZE = 25
 
 class Worker_ID():
     def __init__(self, query, pool_id, worker_num):
@@ -66,6 +67,25 @@ class Worker(ABC):
     def process_message(self, message):
         pass
 
+    @abstractmethod
+    def get_final_results(self, message):
+        pass
+    
+    def send_final_results(self):
+        fr = self.get_final_results()
+        if not fr:
+            return None
+        final_results = []
+        append_extend(final_results,fr)
+        i = 0
+        while True:
+            batch = Batch(final_results[i:i+BATCH_SIZE])
+            if batch.size() == 0:
+                break
+            print("Sending batch ", i)
+            self.send_batch(batch)
+            i += BATCH_SIZE
+
     def transform_to_result(self, message):
         if self.communicator.contains_producer_group(GATEWAY_QUEUE_NAME):
             message.msg_type = query_to_query_result(self.id.query)
@@ -99,6 +119,7 @@ class Worker(ABC):
                 print(f"[Worker {self.id}] Pending EOF to receive: {self.eof_to_receive}")
                 if not self.eof_to_receive:
                     print(f"[Worker {self.id}] No more eof to receive")
+                    self.send_final_results()
                     self.send_batch(batch)
                     break
             else:

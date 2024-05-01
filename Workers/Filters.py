@@ -30,3 +30,6 @@ class Filter(Worker):
         if not method:
             return False
         return method(self.valid_values)
+
+    def get_final_results(self):
+        return []

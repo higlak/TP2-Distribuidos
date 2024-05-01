@@ -55,7 +55,11 @@ class Review():
     def to_query3(self):
         if not self.title:
             return None
-        return QueryMessage(REVIEW_MSG_TYPE, title=self.title)
+        try:
+            score = float(self.score)
+        except:
+            score = None
+        return QueryMessage(REVIEW_MSG_TYPE, title=self.title, rating=score)
     
     def to_query5(self):
         if not self.title or not self.text:
