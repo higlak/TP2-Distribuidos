@@ -18,7 +18,7 @@ class Gateway():
     def __init__(self):
         try:
             port = int(os.getenv("PORT"))
-            eof_to_receive = int(os.getenv("EOF_TO_RECEIVE"))
+            self.eof_to_receive = int(os.getenv("EOF_TO_RECEIVE"))
             forward_to = get_env_list("FORWARD_TO")
             next_pool_workers = get_env_list("NEXT_POOL_WORKERS") 
             next_pool_queues = []
@@ -29,43 +29,45 @@ class Gateway():
             print(f"[Gateway] Failed converting env_vars ", r)
             return None
         
-        print("Group: ", dict(zip(forward_to, next_pool_queues)))
-        com_in = Communicator(dict(zip(forward_to, next_pool_queues)))
-        com_out = Communicator()
-        if not com_in or not com_out:
+        self.com_in = Communicator(dict(zip(forward_to, next_pool_queues)))
+        self.com_out = Communicator()
+        if not self.com_in or not self.com_out:
             return None
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_socket.bind(('',port))
         self.server_socket.listen()
         print(f"[Gateway] Listening on: {self.server_socket.getsockname()}")
-        self.client_recv_socket, receive_thread = Gateway.accept_client_receive_socket(self.server_socket, com_in)
-        self.client_send_socket, send_thread = Gateway.accept_client_send_socket(self.server_socket, com_out, eof_to_receive)
-        self.threads = [receive_thread, send_thread]
-    
-    @classmethod
-    def accept_client_receive_socket(self, server_socket, com_in):
-        client_socket, addr = server_socket.accept()
+        
+    def handle_new_client(self):
+        receive_thread = self.accept_client_receive_socket()
+        send_thread = self.accept_client_send_socket()
+        threads = [receive_thread, send_thread]
+        self.start_and_wait(threads)
+
+    def accept_client_receive_socket(self):
+        client_socket, addr = self.server_socket.accept()
         print(f"[Gateway] Client connected with address: {addr}")
-        gateway_in = GatewayIn(client_socket, com_in)
+        gateway_in = GatewayIn(client_socket, self.com_in)
         gateway_in_thread = threading.Thread(target=gateway_in.start)
-        return client_socket, gateway_in_thread
+        return gateway_in_thread
     
-    @classmethod
-    def accept_client_send_socket(self, server_socket, com_out, eof_to_receive):
-        client_socket, addr = server_socket.accept()
+    def accept_client_send_socket(self):
+        client_socket, addr = self.server_socket.accept()
         print(f"[Gateway] Client connected with address: {addr}")
-        gateway_out = GatewayOut(client_socket, eof_to_receive, com_out)
+        gateway_out = GatewayOut(client_socket, self.eof_to_receive, self.com_out)
         gateway_out_thread = threading.Thread(target=gateway_out.start)
-        return client_socket, gateway_out_thread
+        return gateway_out_thread
     
-    def start_and_wait(self):
-        for thread in self.threads:
+    def start_and_wait(self, threads):
+        for thread in threads:
             thread.start()
-        for handle in self.threads:
+        for handle in threads:
             handle.join()
 
     def run(self):
-        self.start_and_wait()
+        while True:
+            self.handle_new_client()
+            print("[Gateway] Client disconnected. Waiting for new client...")
 
 class GatewayOut():
     def __init__(self, socket, eof_to_receive, com):
@@ -97,7 +99,6 @@ class GatewayOut():
                 send_all(self.socket, batch.to_bytes())
     
     def close(self):
-        self.com.close_connection()
         self.socket.close()
     
 class GatewayIn():
@@ -188,7 +189,6 @@ class GatewayIn():
         return Review.from_datasetline(datasetLine)
     
     def close(self):
-        self.com.close_connection()
         self.socket.close()
 
 def unknown_query():
@@ -200,5 +200,4 @@ def main():
         return
     gateway.run()
  
-
 main()
