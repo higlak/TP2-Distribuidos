@@ -1,6 +1,5 @@
 # TP Sistemas Distribuidos
 ## Escalabilidad
----
 
 ### Alumnos
 - Martin Ugarte (107870)  
