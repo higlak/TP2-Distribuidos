@@ -1,5 +1,6 @@
 from Workers.Filters import Filter
-from utils.QueryMessage import ALL_MESSAGE_FIELDS, YEAR_FIELD, CATEGORIES_FIELD, TITLE_FIELD
+from utils.QueryMessage import ALL_MESSAGE_FIELDS, YEAR_FIELD, TITLE_FIELD
+from utils.auxiliar_functions import InstanceError
 import os
 
 def get_env_worker_field():
@@ -37,7 +38,10 @@ def main():
     print(f"Iniciando filtro por {filter_field} = {filter_value}")
     if not filter_field:
         return
-    worker = Filter(filter_field,filter_value, drop_fields)
+    try:
+        worker = Filter(filter_field,filter_value, drop_fields)
+    except InstanceError:
+        return
     worker.start()
     print("Proceso finalizado")
 

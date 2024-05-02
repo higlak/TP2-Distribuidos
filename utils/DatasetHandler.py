@@ -1,7 +1,6 @@
 from unittest import TestCase
 import csv
 from utils.auxiliar_functions import integer_to_big_endian_byte_array, byte_array_to_big_endian_integer, remove_bytes, recv_exactly
-import pprint
 from utils.QueryMessage import MSG_TYPE_BYTES, BOOK_MSG_TYPE
 
 DATASET_LINE_LEN_BYTES = 2
@@ -73,11 +72,11 @@ class DatasetReader():
 
 class DatasetWriter():
     def __init__(self, path, columns):
-        self.file = open(path, 'a+', encoding='Utf-8')
+        self.file = open(path, 'a', encoding='Utf-8')
         self.file.seek(0)
         self.file.truncate()
+        self.header = False
         self.writer = csv.DictWriter(self.file, fieldnames=columns, lineterminator='\n')
-        self.writer.writeheader()
 
     def append_objects(self, objects):
         """""
@@ -92,6 +91,9 @@ class DatasetWriter():
         Appends an object using the get_csv_values method, which must ruturn
         the amount of values specified when the Writer was created
         """
+        if not self.header:
+            self.writer.writeheader()
+            self.header = True
         columns = self.writer.fieldnames
         values = object.get_csv_values()
         line = {}
@@ -109,8 +111,7 @@ if __name__ == '__main__':
     import unittest
     import time
     from utils.Book import Book 
-    from utils.QueryResult import QueryResult
-    from utils.QueryMessage import BOOK_MSG_TYPE
+    from utils.QueryMessage import QueryMessage, BOOK_MSG_TYPE
 
     class TestDatasetReader(TestCase):
         def test_line(self):
@@ -132,12 +133,12 @@ if __name__ == '__main__':
     class TestDatasetWriter(TestCase):
         def test_write_query_result(self):
             columns = ["Title", "author"]
-            dw = DatasetWriter('test_result.csv', columns)
-            result = QueryResult("Murdoca", "['Mazzeo']")
+            dw = DatasetWriter('./utils/test_result.csv', columns)
+            result = QueryMessage(BOOK_MSG_TYPE, title="Murdoca", authors="['Mazzeo']")
             dw.append_object(result)
             dw.close()
 
-            file = open('test_result.csv', 'r', encoding='Utf-8',)
+            file = open('./utils/test_result.csv', 'r', encoding='Utf-8',)
             reader = csv.DictReader(file)
             values = list(next(reader).values())
             file.close()
@@ -146,8 +147,8 @@ if __name__ == '__main__':
         def test_write_query_result(self):
             columns = ["Title", "author"]
             dw = DatasetWriter('test_result.csv', columns)
-            result1 = QueryResult("Murdoca", "['Mazzeo']")
-            result2 = QueryResult("Fisica", "['Sears', 'Semanski']")
+            result1 = QueryMessage(BOOK_MSG_TYPE, title="Murdoca", authors="['Mazzeo']")
+            result2 = QueryMessage(BOOK_MSG_TYPE, title="Fisica", authors="['Sears', 'Semanski']")
             dw.append_objects([result1, result2])
             dw.close()
 
