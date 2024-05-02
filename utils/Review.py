@@ -1,4 +1,3 @@
-import datetime
 from unittest import TestCase
 import unittest
 import csv

@@ -1,9 +1,6 @@
 import csv
 from unittest import TestCase
-from utils.Date import Date
-from utils.auxiliar_functions import integer_to_big_endian_byte_array, byte_array_to_big_endian_integer, remove_bytes
 import unittest
-import pprint
 from utils.QueryMessage import QueryMessage, BOOK_MSG_TYPE
 from utils.DatasetHandler import DatasetLine
 import re

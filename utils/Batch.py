@@ -1,4 +1,4 @@
-from utils.auxiliar_functions import byte_array_to_big_endian_integer, integer_to_big_endian_byte_array, recv_exactly
+from utils.auxiliar_functions import integer_to_big_endian_byte_array, recv_exactly
 from utils.QueryMessage import QueryMessage, query_result_headers
 import unittest
 from unittest import TestCase

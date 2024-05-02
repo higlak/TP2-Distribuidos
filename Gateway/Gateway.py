@@ -1,14 +1,15 @@
-import pprint
-import threading
+import signal
+from multiprocessing import Process
 from CommunicationMiddleware.middleware import Communicator
-from utils.QueryMessage import QueryMessage, BOOK_MSG_TYPE
+from utils.QueryMessage import QueryMessage
 from utils.Batch import Batch
-from utils.auxiliar_functions import recv_exactly, send_all, byte_array_to_big_endian_integer, get_env_list, append_extend
+from utils.auxiliar_functions import recv_exactly, send_all, get_env_list, append_extend, InstanceError
 from utils.DatasetHandler import DatasetLine
 from utils.Book import Book
 from utils.Review import Review
 import socket
 import os
+from queue import Queue
 
 GATEWAY_QUEUE_NAME = 'Gateway'
 QUERY_SEPARATOR = ","
@@ -16,6 +17,12 @@ FIRST_POOL = 0
 
 class Gateway():
     def __init__(self):
+        self.threads = []
+        self.signal_queue_in = Queue()
+        self.signal_queue_out = Queue()
+        signal.signal(signal.SIGTERM, self.handle_SIGTERM)
+        self.server_socket = None
+        
         try:
             port = int(os.getenv("PORT"))
             self.eof_to_receive = int(os.getenv("EOF_TO_RECEIVE"))
@@ -24,78 +31,108 @@ class Gateway():
             next_pool_queues = []
             for i in range(len(next_pool_workers)):
                 next_pool_queues.append([f'{forward_to[i]}.{j}' for j in range(int(next_pool_workers[i]))])
-
         except Exception as r:
             print(f"[Gateway] Failed converting env_vars ", r)
-            return None
+            raise InstanceError
         
-        self.com_in = Communicator(dict(zip(forward_to, next_pool_queues)))
-        self.com_out = Communicator()
-        if not self.com_in or not self.com_out:
-            return None
+        self.com_in, self.com_out = Gateway.connect_in_out(self.signal_queue_in, self.signal_queue_out, forward_to, next_pool_queues)           
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_socket.bind(('',port))
         self.server_socket.listen()
-        print(f"[Gateway] Listening on: {self.server_socket.getsockname()}")
         
+        print(f"[Gateway] Listening on: {self.server_socket.getsockname()}")
+     
+    @classmethod   
+    def connect_in_out(cls, signal_queue_in, signal_queue_out, forward_to, next_pool_queues):
+        com_in = Communicator(signal_queue_in, dict(zip(forward_to, next_pool_queues)))
+        com_out = Communicator(signal_queue_out)
+        return com_in, com_out
+
+    def handle_SIGTERM(self, _signum, _frame):
+        print("\n\n [Gateway] SIGTERM detected\n\n")
+        self.signal_queue_in.put(True)
+        self.signal_queue_out.put(True)
+        for thread in self.threads:
+            thread.terminate()
+        if self.server_socket:
+            self.server_socket.close()
+
     def handle_new_client(self):
-        receive_thread = self.accept_client_receive_socket()
-        send_thread = self.accept_client_send_socket()
-        threads = [receive_thread, send_thread]
-        self.start_and_wait(threads)
+        self.threads.append(self.accept_client_receive_socket())
+        self.threads.append(self.accept_client_send_socket())
+        self.start_and_wait()
 
     def accept_client_receive_socket(self):
         client_socket, addr = self.server_socket.accept()
         print(f"[Gateway] Client connected with address: {addr}")
         gateway_in = GatewayIn(client_socket, self.com_in)
-        gateway_in_thread = threading.Thread(target=gateway_in.start)
+        gateway_in_thread = Process(target=gateway_in.start)
         return gateway_in_thread
     
     def accept_client_send_socket(self):
         client_socket, addr = self.server_socket.accept()
         print(f"[Gateway] Client connected with address: {addr}")
         gateway_out = GatewayOut(client_socket, self.eof_to_receive, self.com_out)
-        gateway_out_thread = threading.Thread(target=gateway_out.start)
+        gateway_out_thread = Process(target=gateway_out.start)
         return gateway_out_thread
     
-    def start_and_wait(self, threads):
-        for thread in threads:
+    def start_and_wait(self):
+        for thread in self.threads:
             thread.start()
-        for handle in threads:
+        for handle in self.threads:
             handle.join()
 
     def run(self):
         while True:
-            self.handle_new_client()
+            try:
+                self.handle_new_client()
+            except:
+                print("[Gateway] Socket disconnected")
+                break
             print("[Gateway] Client disconnected. Waiting for new client...")
-
+        
+        self.close()
+    
+    def close(self):
+        self.server_socket.close()
+        self.com_in.close_connection()
+        self.com_out.close_connection()
+        
 class GatewayOut():
     def __init__(self, socket, eof_to_receive, com):
         self.socket = socket
         self.com = com
         self.eof_to_receive = eof_to_receive
 
+    def handle_SIGTERM(self, _signum, _frame):
+        print("\n\n [GatewayOut] SIGTERM detected\n\n")
+        self.close()
+
     def start(self):
-        self.loop()
+        signal.signal(signal.SIGTERM, self.handle_SIGTERM)
+        try:
+            self.loop()
+        except OSError:
+            print("[GatewayOut] Socket disconnected")
         self.close()
 
     def loop(self):
         while True:
             batch_bytes = self.com.consume_message(GATEWAY_QUEUE_NAME)
-            if batch_bytes == None:
-                print(f"[Gateway] Error while consuming results")
+            if not batch_bytes:
+                print(f"[GatewayOut] Disconnected from MOM")
                 break
             batch = Batch.from_bytes(batch_bytes)
             if batch.is_empty():
                 self.eof_to_receive -= 1
-                print(f"[Gateway] Pending EOF to receive: {self.eof_to_receive}")
+                print(f"[GatewayOut] Pending EOF to receive: {self.eof_to_receive}")
                 if not self.eof_to_receive:
                     print("[Gateway] No more EOF to receive. Sending EOF to client")
                     send_all(self.socket, batch.to_bytes())
                     break
             else:
                 batch.keep_fields()
-                print(f"[Gateway] Sending result to client with {batch.size()} elements")
+                print(f"[GatewayOut] Sending result to client with {batch.size()} elements")
                 send_all(self.socket, batch.to_bytes())
     
     def close(self):
@@ -108,35 +145,51 @@ class GatewayIn():
         self.book_query_numbers = get_env_list("BOOK_QUERIES")
         self.review_query_numbers = get_env_list("REVIEW_QUERIES")
     
+    def handle_SIGTERM(self, _signum, _frame):
+        print("\n\n Entre al sigterm\n\n")
+        self.close()
+
     def start(self):
-        self.loop()
+        signal.signal(signal.SIGTERM, self.handle_SIGTERM)
+        try:
+            self.loop()
+        except OSError:
+            print("[GatewayIn] Socket disconnected")
         self.close()
 
     def loop(self):
         while True:
             datasetlines = self.recv_dataset_line_batch()
-            if not datasetlines:
-                self.send_eof()
+            if datasetlines == None:
+                print("[Gateway] Socket disconnected")
                 break
-            self.send_batch_to_all_queries(datasetlines)
-        
+            if not datasetlines:
+                if not self.send_eof():
+                    print("[GatewayIn] MOM disconnected")
+                break
+            if not self.send_batch_to_all_queries(datasetlines):
+                print("[GatewayIn] MOM disconnected")
+                break
+
     def recv_dataset_line_batch(self):
         ammount_of_dataset_lines = recv_exactly(self.socket,1)
         if ammount_of_dataset_lines == None:
-            print("[Gateway] Socket read failed")
             return None
         ammount_of_dataset_lines = ammount_of_dataset_lines[0]
         if ammount_of_dataset_lines == 0:
             print("[Gateway] EOF received")
-            return None
+            return []
         datasetlines = []
         for _ in range(ammount_of_dataset_lines):
             datasetline = DatasetLine.from_socket(self.socket)
+            if not datasetline:
+                print("[Gateway] Socket disconnected")
+                return None
             datasetlines.append(datasetline)
         return datasetlines
     
     def send_eof(self):
-        self.com.produce_to_all_group_members(Batch([]).to_bytes())
+        return self.com.produce_to_all_group_members(Batch([]).to_bytes())
 
     def object_to_query1(obj):
         if isinstance(obj, Book):
@@ -175,7 +228,10 @@ class GatewayIn():
             hashed_batchs = self.get_hashed_batchs(query_messages, query_number)
             for worker_to_send, batch in hashed_batchs.items():
                 if not batch.is_empty():
-                    self.com.produce_message(batch.to_bytes(), group, worker_to_send)
+                    if not self.com.produce_message(batch.to_bytes(), group, worker_to_send):
+                        return False
+        return True
+            
 
     def get_hashed_batchs(self, query_messages, query_number):
         batch = Batch(query_messages)
@@ -195,8 +251,9 @@ def unknown_query():
     print("[Gateway] Attempting to proccess unkwown query")
 
 def main():
-    gateway = Gateway()
-    if gateway == None:
+    try:
+        gateway = Gateway()
+    except InstanceError:
         return
     gateway.run()
  

@@ -1,7 +1,5 @@
 from .Worker import Worker
 from utils.QueryMessage import QueryMessage, CATEGORIES_FIELD, YEAR_FIELD, TITLE_FIELD, REVIEW_MSG_TYPE
-import unittest
-from unittest import TestCase
 
 class Filter(Worker):
     def __init__(self, field, valid_values, droping_fields=[]):

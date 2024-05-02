@@ -12,4 +12,4 @@ COPY ./utils /root/utils
 COPY ./Accumulator/Accumulator.py /root/main.py
 RUN chmod +x /root/main.py
 
-CMD python3 /root/main.py
+ENTRYPOINT ["python3", "/root/main.py"]

@@ -1,5 +1,5 @@
 from .Worker import Worker
-from utils.QueryMessage import QueryMessage, CATEGORIES_FIELD, YEAR_FIELD, TITLE_FIELD, AUTHOR_FIELD, BOOK_MSG_TYPE, REVIEW_MSG_TYPE, RATING_FIELD, MSP_FIELD, REVIEW_TEXT_FIELD
+from utils.QueryMessage import QueryMessage, YEAR_FIELD, TITLE_FIELD, AUTHOR_FIELD, BOOK_MSG_TYPE, REVIEW_MSG_TYPE, RATING_FIELD, MSP_FIELD, REVIEW_TEXT_FIELD
 import unittest
 from unittest import TestCase
 import heapq
@@ -64,6 +64,8 @@ class Accumulator(Worker):
         if msg.msg_type == REVIEW_MSG_TYPE:
             self.context[msg.title][1] += 1
             self.context[msg.title][2] += msg.rating 
+            if self.context[msg.title][1] == int(self.values):
+                print(f"[Worker {self.id}] Accumulated {self.values} of {msg.title}")
         return None
 
     def accumulate_decade_by_authors(self, msg):
@@ -78,8 +80,6 @@ class Accumulator(Worker):
         return results
                             
     def accumulate_decade_by_author(self, author, msg_decade):
-        if author == 'Joseph Conrad':
-            print("msg_decade" , msg_decade)
         author_decades = self.context.get(author, [])
         if len(author_decades) == self.values:
             return False
@@ -91,7 +91,6 @@ class Accumulator(Worker):
                 return True
     
     def accumulate_rating_by_title(self, msg):
-        print("Me llega ", msg.rating)
         if msg.rating == None:
             return None
         if len(self.context) < int(self.values):

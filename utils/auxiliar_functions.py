@@ -2,6 +2,9 @@ import os
 
 QUERY_SEPARATOR = ','
 
+class InstanceError(Exception):
+    pass
+
 # Receives bytes until n bytes have been received. If cannot receive n bytes None is returned
 def recv_exactly(socket, n):
     buffer = bytes()

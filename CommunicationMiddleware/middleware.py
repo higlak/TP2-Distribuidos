@@ -1,12 +1,20 @@
 import pika
 import pika.exceptions
-import time
-import hashlib
-
-from utils.Batch import Batch
+from queue import Queue, Empty
+from utils.auxiliar_functions import InstanceError
 
 STARTING_RABBIT_WAIT = 1
 MAX_ATTEMPTS = 6
+MIDDLEWARE_EXCEPTIONS = (pika.exceptions.AMQPError,
+            pika.exceptions.AMQPConnectionError,
+            pika.exceptions.AMQPChannelError,
+            pika.exceptions.ChannelClosed, 
+            pika.exceptions.ChannelClosedByBroker,
+            pika.exceptions.ChannelClosedByClient,
+            pika.exceptions.StreamLostError,
+            pika.exceptions.ChannelWrongStateError,
+            OSError,
+            StopIteration)
 
 class ConsumerQueues():
     def __init__(self):
@@ -21,11 +29,9 @@ class ConsumerQueues():
             method_frame, _header_frame, body = next(generator)
             
             return body, method_frame
-        except (pika.exceptions.ChannelClosed, 
-                pika.exceptions.ChannelClosedByBroker,
-                pika.exceptions.ChannelClosedByClient):
+        except MIDDLEWARE_EXCEPTIONS:
             print ("se cerro")
-            return None
+            return None, None
     
     def contains(self, queue_name):
         return queue_name in self.queues.keys()
@@ -39,7 +45,7 @@ class ProducerGroup():
         queue = self.producer_queues[self.i]
         self.i = (self.i + 1) % len(self.producer_queues)
         return queue
-
+    
     def __iter__(self):
         return iter(self.producer_queues)
 
@@ -53,8 +59,8 @@ class ProducerGroup():
         return f"{self.producer_queues}"
 
 class Communicator():
-    def __init__(self, producer_groups={}, prefetch_count=1):
-        self.consumer_queues = ConsumerQueues() 
+    def __init__(self, signal_queue: Queue, producer_groups={}, prefetch_count=1):
+        self.consumer_queues = ConsumerQueues()     
         self.producer_groups = {group:ProducerGroup(members) for group, members in producer_groups.items() }
         i = STARTING_RABBIT_WAIT
         while True:
@@ -63,11 +69,15 @@ class Communicator():
                 break
             except:
                 if i > 2**MAX_ATTEMPTS:
-                    print("[Client] Could not connect to RabbitMQ. Max attempts reached")
-                    return None
+                    print("[Communicator] Could not connect to RabbitMQ. Max attempts reached")
+                    raise InstanceError 
                 print(f"Rabbit not ready, sleeping {i}s")
-                time.sleep(i)
-                i *= 2
+                try:
+                    signal_queue.get(timeout=i)
+                    print("[Communicator] SIGTERM received, exiting attempting connection")
+                    raise InstanceError
+                except Empty:   
+                    i *= 2
         self.channel = self.connection.channel()
         self.channel.basic_qos(prefetch_count=prefetch_count)
         self.set_producer_queues()
@@ -83,30 +93,31 @@ class Communicator():
         self.consumer_queues.add_queue(queue_name, generator)
 
     def produce_message(self, message, group, queue_pos=None):
+        if self.connection.is_closed:
+            return False
         group_to_send = self.producer_groups[group]
         if queue_pos == None:
             queue_name = group_to_send.next()
         else:
             queue_name = group_to_send.producer_queues[queue_pos]
     
-        self.channel.basic_publish(exchange="", body=message, routing_key=queue_name)
-
-    def produce_message_n_times(self, message, group, n):
-        for i in range(n):
-            self.produce_message(message, group )
+        try:
+            self.channel.basic_publish(exchange="", body=message, routing_key=queue_name)
+        except MIDDLEWARE_EXCEPTIONS:
+            return False
+        return True
 
     def produce_to_all_group_members(self, message):
         for group, members in self.producer_groups.items():
             for _member in members:
-                self.produce_message(message, group) 
-    
-    def produce_to_all_groups(self, message, queue_pos=None):
-        for group in self.producer_groups.keys():
-            self.produce_message(message, group, queue_pos)
+                if not self.produce_message(message, group):
+                    return False
+        return True
 
     def consume_message(self, queue_name):
+        if self.connection.is_closed:
+            return bytearray([])
         if not self.consumer_queues.contains(queue_name):
-            print("Setting cons queue")
             self.set_consumer_queue(queue_name)
         message, method = self.consumer_queues.recv_from(queue_name)
         if message == None:
@@ -121,4 +132,5 @@ class Communicator():
         return group in self.producer_groups.keys()
 
     def close_connection(self):
-        self.channel.close()
+        if not self.connection.is_closed:
+            self.connection.close()
