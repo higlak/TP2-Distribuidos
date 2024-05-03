@@ -62,3 +62,7 @@ PORT = 12345
 BOOK_QUERIES = 1,2,3,5
 REVIEW_QUERIES = 3,5
 ```
+
+### Link al informe
+
+https://docs.google.com/document/d/1vvd63Mq2xXhbs_8CsDVUTOJ195rTSJZ3rQM41h5i8pQ/edit
