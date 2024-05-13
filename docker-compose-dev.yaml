@@ -22,7 +22,7 @@ services:
       - EOF_TO_RECEIVE=1
       - NEXT_POOL_WORKERS=2
       - FORWARD_TO=1.1
-      - DISTRIBUTE_BY=title
+      - SHARD_BY=
       - WORKER_FIELD=categories
       - WORKER_VALUE=Computers
 
@@ -41,7 +41,7 @@ services:
       - EOF_TO_RECEIVE=1
       - NEXT_POOL_WORKERS=2
       - FORWARD_TO=1.1
-      - DISTRIBUTE_BY=title
+      - SHARD_BY=
       - WORKER_FIELD=categories
       - WORKER_VALUE=Computers
 
@@ -60,7 +60,7 @@ services:
       - EOF_TO_RECEIVE=2
       - NEXT_POOL_WORKERS=2
       - FORWARD_TO=1.2
-      - DISTRIBUTE_BY=title
+      - SHARD_BY=
       - WORKER_FIELD=year
       - WORKER_VALUE=2000,2023
 
@@ -79,7 +79,7 @@ services:
       - EOF_TO_RECEIVE=2
       - NEXT_POOL_WORKERS=2
       - FORWARD_TO=1.2
-      - DISTRIBUTE_BY=title
+      - SHARD_BY=
       - WORKER_FIELD=year
       - WORKER_VALUE=2000,2023
 
@@ -98,7 +98,7 @@ services:
       - EOF_TO_RECEIVE=2
       - NEXT_POOL_WORKERS=1
       - FORWARD_TO=Gateway
-      - DISTRIBUTE_BY=title
+      - SHARD_BY=
       - WORKER_FIELD=title
       - WORKER_VALUE=distributed
 
@@ -117,7 +117,7 @@ services:
       - EOF_TO_RECEIVE=2
       - NEXT_POOL_WORKERS=1
       - FORWARD_TO=Gateway
-      - DISTRIBUTE_BY=title
+      - SHARD_BY=
       - WORKER_FIELD=title
       - WORKER_VALUE=distributed
 
@@ -136,7 +136,7 @@ services:
       - EOF_TO_RECEIVE=1
       - NEXT_POOL_WORKERS=1
       - FORWARD_TO=Gateway
-      - DISTRIBUTE_BY=title
+      - SHARD_BY=
       - WORKER_FIELD=year
       - WORKER_VALUE=10
       - ACCUMULATE_BY=authors
@@ -156,7 +156,7 @@ services:
       - EOF_TO_RECEIVE=1
       - NEXT_POOL_WORKERS=1
       - FORWARD_TO=Gateway
-      - DISTRIBUTE_BY=title
+      - SHARD_BY=
       - WORKER_FIELD=year
       - WORKER_VALUE=10
       - ACCUMULATE_BY=authors
@@ -176,7 +176,7 @@ services:
       - EOF_TO_RECEIVE=1
       - NEXT_POOL_WORKERS=4
       - FORWARD_TO=3.1
-      - DISTRIBUTE_BY=title
+      - SHARD_BY=title
       - WORKER_FIELD=year
       - WORKER_VALUE=1990,1999
 
@@ -195,7 +195,7 @@ services:
       - EOF_TO_RECEIVE=1
       - NEXT_POOL_WORKERS=4
       - FORWARD_TO=3.1
-      - DISTRIBUTE_BY=title
+      - SHARD_BY=title
       - WORKER_FIELD=year
       - WORKER_VALUE=1990,1999
 
@@ -214,7 +214,7 @@ services:
       - EOF_TO_RECEIVE=1
       - NEXT_POOL_WORKERS=4
       - FORWARD_TO=3.1
-      - DISTRIBUTE_BY=title
+      - SHARD_BY=title
       - WORKER_FIELD=year
       - WORKER_VALUE=1990,1999
 
@@ -233,7 +233,7 @@ services:
       - EOF_TO_RECEIVE=1
       - NEXT_POOL_WORKERS=4
       - FORWARD_TO=3.1
-      - DISTRIBUTE_BY=title
+      - SHARD_BY=title
       - WORKER_FIELD=year
       - WORKER_VALUE=1990,1999
 
@@ -252,7 +252,7 @@ services:
       - EOF_TO_RECEIVE=4
       - NEXT_POOL_WORKERS=1,4
       - FORWARD_TO=Gateway,4.0
-      - DISTRIBUTE_BY=title
+      - SHARD_BY=,title
       - WORKER_FIELD=review_count
       - WORKER_VALUE=500
       - ACCUMULATE_BY=title
@@ -272,7 +272,7 @@ services:
       - EOF_TO_RECEIVE=4
       - NEXT_POOL_WORKERS=1,4
       - FORWARD_TO=Gateway,4.0
-      - DISTRIBUTE_BY=title
+      - SHARD_BY=,title
       - WORKER_FIELD=review_count
       - WORKER_VALUE=500
       - ACCUMULATE_BY=title
@@ -292,7 +292,7 @@ services:
       - EOF_TO_RECEIVE=4
       - NEXT_POOL_WORKERS=1,4
       - FORWARD_TO=Gateway,4.0
-      - DISTRIBUTE_BY=title
+      - SHARD_BY=,title
       - WORKER_FIELD=review_count
       - WORKER_VALUE=500
       - ACCUMULATE_BY=title
@@ -312,7 +312,7 @@ services:
       - EOF_TO_RECEIVE=4
       - NEXT_POOL_WORKERS=1,4
       - FORWARD_TO=Gateway,4.0
-      - DISTRIBUTE_BY=title
+      - SHARD_BY=,title
       - WORKER_FIELD=review_count
       - WORKER_VALUE=500
       - ACCUMULATE_BY=title
@@ -332,7 +332,7 @@ services:
       - EOF_TO_RECEIVE=4
       - NEXT_POOL_WORKERS=1
       - FORWARD_TO=4.1
-      - DISTRIBUTE_BY=title
+      - SHARD_BY=title
       - WORKER_FIELD=rating
       - WORKER_VALUE=10
       - ACCUMULATE_BY=title
@@ -352,7 +352,7 @@ services:
       - EOF_TO_RECEIVE=4
       - NEXT_POOL_WORKERS=1
       - FORWARD_TO=4.1
-      - DISTRIBUTE_BY=title
+      - SHARD_BY=title
       - WORKER_FIELD=rating
       - WORKER_VALUE=10
       - ACCUMULATE_BY=title
@@ -372,7 +372,7 @@ services:
       - EOF_TO_RECEIVE=4
       - NEXT_POOL_WORKERS=1
       - FORWARD_TO=4.1
-      - DISTRIBUTE_BY=title
+      - SHARD_BY=title
       - WORKER_FIELD=rating
       - WORKER_VALUE=10
       - ACCUMULATE_BY=title
@@ -392,7 +392,7 @@ services:
       - EOF_TO_RECEIVE=4
       - NEXT_POOL_WORKERS=1
       - FORWARD_TO=4.1
-      - DISTRIBUTE_BY=title
+      - SHARD_BY=title
       - WORKER_FIELD=rating
       - WORKER_VALUE=10
       - ACCUMULATE_BY=title
@@ -412,7 +412,7 @@ services:
       - EOF_TO_RECEIVE=4
       - NEXT_POOL_WORKERS=1
       - FORWARD_TO=Gateway
-      - DISTRIBUTE_BY=title
+      - SHARD_BY=
       - WORKER_FIELD=rating
       - WORKER_VALUE=10
       - ACCUMULATE_BY=title
@@ -432,7 +432,7 @@ services:
       - EOF_TO_RECEIVE=1
       - NEXT_POOL_WORKERS=5
       - FORWARD_TO=5.1
-      - DISTRIBUTE_BY=title
+      - SHARD_BY=title
       - WORKER_FIELD=categories
       - WORKER_VALUE=Fiction
 
@@ -451,7 +451,7 @@ services:
       - EOF_TO_RECEIVE=1
       - NEXT_POOL_WORKERS=5
       - FORWARD_TO=5.1
-      - DISTRIBUTE_BY=title
+      - SHARD_BY=title
       - WORKER_FIELD=categories
       - WORKER_VALUE=Fiction
 
@@ -470,7 +470,7 @@ services:
       - EOF_TO_RECEIVE=2
       - NEXT_POOL_WORKERS=1
       - FORWARD_TO=5.2
-      - DISTRIBUTE_BY=title
+      - SHARD_BY=title
       - WORKER_FIELD=review_text
       - WORKER_VALUE=
       - ACCUMULATE_BY=title
@@ -490,7 +490,7 @@ services:
       - EOF_TO_RECEIVE=2
       - NEXT_POOL_WORKERS=1
       - FORWARD_TO=5.2
-      - DISTRIBUTE_BY=title
+      - SHARD_BY=title
       - WORKER_FIELD=review_text
       - WORKER_VALUE=
       - ACCUMULATE_BY=title
@@ -510,7 +510,7 @@ services:
       - EOF_TO_RECEIVE=2
       - NEXT_POOL_WORKERS=1
       - FORWARD_TO=5.2
-      - DISTRIBUTE_BY=title
+      - SHARD_BY=title
       - WORKER_FIELD=review_text
       - WORKER_VALUE=
       - ACCUMULATE_BY=title
@@ -530,7 +530,7 @@ services:
       - EOF_TO_RECEIVE=2
       - NEXT_POOL_WORKERS=1
       - FORWARD_TO=5.2
-      - DISTRIBUTE_BY=title
+      - SHARD_BY=title
       - WORKER_FIELD=review_text
       - WORKER_VALUE=
       - ACCUMULATE_BY=title
@@ -550,7 +550,7 @@ services:
       - EOF_TO_RECEIVE=2
       - NEXT_POOL_WORKERS=1
       - FORWARD_TO=5.2
-      - DISTRIBUTE_BY=title
+      - SHARD_BY=title
       - WORKER_FIELD=review_text
       - WORKER_VALUE=
       - ACCUMULATE_BY=title
@@ -570,7 +570,7 @@ services:
       - EOF_TO_RECEIVE=5
       - NEXT_POOL_WORKERS=1
       - FORWARD_TO=Gateway
-      - DISTRIBUTE_BY=title
+      - SHARD_BY=
       - WORKER_FIELD=mean_sentiment_polarity
       - WORKER_VALUE=90
       - ACCUMULATE_BY=title
@@ -589,8 +589,9 @@ services:
       - PORT=12345
       - BOOK_QUERIES=1,2,3,5
       - REVIEW_QUERIES=3,5
-      - FORWARD_TO=5.0,1.0,2.0,3.0
-      - NEXT_POOL_WORKERS=2,2,2,4
+      - FORWARD_TO=1.0,2.0,3.0,5.0
+      - SHARD_BY=,authors,title,title
+      - NEXT_POOL_WORKERS=2,2,4,2
       - EOF_TO_RECEIVE=10
 
   client:

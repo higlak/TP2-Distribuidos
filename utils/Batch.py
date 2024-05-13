@@ -45,10 +45,10 @@ class Batch():
             byte_array.extend(message.to_bytes())
         return byte_array
     
-    def get_hashed_batchs(self, query_number, amount_of_workers):
+    def get_hashed_batchs(self, attribute, amount_of_workers):
         hashed_messages = {}
         for msg in self:
-            worker_to_send = msg.get_attribute_hash(query_number) % amount_of_workers
+            worker_to_send = msg.get_attribute_hash(attribute) % amount_of_workers
             hashed_messages[worker_to_send] = hashed_messages.get(worker_to_send, []) + [msg]
         
         return {w:Batch(messages) for w, messages in hashed_messages.items()}

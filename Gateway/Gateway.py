@@ -1,6 +1,7 @@
 import signal
 from multiprocessing import Process
 from CommunicationMiddleware.middleware import Communicator
+from utils.NextPools import NextPools
 from utils.QueryMessage import QueryMessage
 from utils.Batch import Batch
 from utils.auxiliar_functions import recv_exactly, send_all, get_env_list, append_extend, InstanceError
@@ -20,22 +21,22 @@ class Gateway():
         self.threads = []
         self.signal_queue_in = Queue()
         self.signal_queue_out = Queue()
-        signal.signal(signal.SIGTERM, self.handle_SIGTERM)
+        self.next_pools = NextPools.from_env()
         self.server_socket = None
+        if not self.next_pools:
+            raise InstanceError
+        signal.signal(signal.SIGTERM, self.handle_SIGTERM)
         
         try:
             port = int(os.getenv("PORT"))
             self.eof_to_receive = int(os.getenv("EOF_TO_RECEIVE"))
-            forward_to = get_env_list("FORWARD_TO")
-            next_pool_workers = get_env_list("NEXT_POOL_WORKERS") 
-            next_pool_queues = []
-            for i in range(len(next_pool_workers)):
-                next_pool_queues.append([f'{forward_to[i]}.{j}' for j in range(int(next_pool_workers[i]))])
+            self.book_query_numbers = get_env_list("BOOK_QUERIES")
+            self.review_query_numbers = get_env_list("REVIEW_QUERIES")
         except Exception as r:
             print(f"[Gateway] Failed converting env_vars ", r)
             raise InstanceError
         
-        self.com_in, self.com_out = Gateway.connect_in_out(self.signal_queue_in, self.signal_queue_out, forward_to, next_pool_queues)           
+        self.com_in, self.com_out = Gateway.connect_in_out(self.signal_queue_in, self.signal_queue_out, self.next_pools)           
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_socket.bind(('',port))
         self.server_socket.listen()
@@ -43,8 +44,8 @@ class Gateway():
         print(f"[Gateway] Listening on: {self.server_socket.getsockname()}")
      
     @classmethod   
-    def connect_in_out(cls, signal_queue_in, signal_queue_out, forward_to, next_pool_queues):
-        com_in = Communicator(signal_queue_in, dict(zip(forward_to, next_pool_queues)))
+    def connect_in_out(cls, signal_queue_in, signal_queue_out, next_pools):
+        com_in = Communicator(signal_queue_in, next_pools.worker_ids())
         com_out = Communicator(signal_queue_out)
         return com_in, com_out
 
@@ -65,7 +66,7 @@ class Gateway():
     def accept_client_receive_socket(self):
         client_socket, addr = self.server_socket.accept()
         print(f"[Gateway] Client connected with address: {addr}")
-        gateway_in = GatewayIn(client_socket, self.com_in)
+        gateway_in = GatewayIn(client_socket, self.com_in, self.next_pools, self.book_query_numbers, self.review_query_numbers)
         gateway_in_thread = Process(target=gateway_in.start)
         return gateway_in_thread
     
@@ -86,8 +87,8 @@ class Gateway():
         while True:
             try:
                 self.handle_new_client()
-            except:
-                print("[Gateway] Socket disconnected")
+            except Exception as e:
+                print("[Gateway] Socket disconnected \n", e)
                 break
             print("[Gateway] Client disconnected. Waiting for new client...")
         
@@ -139,14 +140,15 @@ class GatewayOut():
         self.socket.close()
     
 class GatewayIn():
-    def __init__(self, socket, com):
+    def __init__(self, socket, com, next_pools, book_query_numbers, review_query_numbers):
         self.socket = socket
         self.com = com
-        self.book_query_numbers = get_env_list("BOOK_QUERIES")
-        self.review_query_numbers = get_env_list("REVIEW_QUERIES")
+        self.book_query_numbers = book_query_numbers
+        self.review_query_numbers = review_query_numbers
+        self.next_pools = next_pools
     
     def handle_SIGTERM(self, _signum, _frame):
-        print("\n\n Entre al sigterm\n\n")
+        print("\n\n [GatewayIn] SIGTERM detected\n\n")
         self.close()
 
     def start(self):
@@ -224,12 +226,10 @@ class GatewayIn():
                 query_message = self.get_query_messages(obj, query_number)
                 if query_message:
                     append_extend(query_messages, query_message)
-            group = f'{query_number}.{FIRST_POOL}'
-            hashed_batchs = self.get_hashed_batchs(query_messages, query_number)
-            for worker_to_send, batch in hashed_batchs.items():
-                if not batch.is_empty():
-                    if not self.com.produce_message(batch.to_bytes(), group, worker_to_send):
-                        return False
+            pool = f'{query_number}.{FIRST_POOL}'
+            batch = Batch(query_messages)
+            if not self.com.produce_batch_of_messages(batch, pool, self.next_pools.shard_by_of_pool(pool)):
+                return False
         return True
             
 

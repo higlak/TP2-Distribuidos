@@ -1,6 +1,8 @@
+import hashlib
 import pika
 import pika.exceptions
 from queue import Queue, Empty
+from utils.Batch import Batch
 from utils.auxiliar_functions import InstanceError
 
 STARTING_RABBIT_WAIT = 1
@@ -106,6 +108,21 @@ class Communicator():
         except MIDDLEWARE_EXCEPTIONS:
             return False
         return True
+    
+    def produce_batch_of_messages(self, batch, group, shard_by=None):
+        """
+        Produces a batch into the group sharding it first by the field shard_by. 
+        Objects inside of batch must implement get_attribute_to_hash method that returns a string
+        """
+        if shard_by == None:
+            return self.produce_message(batch.to_bytes(), group, None)
+        hashed_batchs = get_sharded_batchs(batch, shard_by, self.amount_of_producer_group(group))
+        for batch_destination, batch in hashed_batchs.items():
+            if not batch.is_empty():
+                if not self.produce_message(batch.to_bytes(), group, batch_destination):
+                    return False
+        return True
+
 
     def produce_to_all_group_members(self, message):
         for group, members in self.producer_groups.items():
@@ -134,3 +151,13 @@ class Communicator():
     def close_connection(self):
         if not self.connection.is_closed:
             self.connection.close()
+
+def get_sharded_batchs(batch, shard_by, amount_of_shards):
+    hashed_messages = {}
+    for msg in batch:
+        string_to_hash = msg.get_attribute_to_hash(shard_by)
+        hash_object = hashlib.sha256(string_to_hash.lower().encode())
+        msg_destination = int(hash_object.hexdigest(), 16) % amount_of_shards
+        hashed_messages[msg_destination] = hashed_messages.get(msg_destination, []) + [msg]
+    
+    return {w:Batch(messages) for w, messages in hashed_messages.items()}

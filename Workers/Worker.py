@@ -5,12 +5,12 @@ import signal
 
 from CommunicationMiddleware.middleware import Communicator
 from utils.Batch import Batch
-from utils.auxiliar_functions import get_env_list, append_extend, InstanceError
+from utils.auxiliar_functions import append_extend, InstanceError
 from utils.QueryMessage import query_to_query_result
+from utils.NextPools import NextPools, GATEWAY_QUEUE_NAME 
 from queue import Queue
 
 ID_SEPARATOR = '.'
-GATEWAY_QUEUE_NAME = "Gateway"
 BATCH_SIZE = 25
 
 class Worker_ID():
@@ -25,6 +25,7 @@ class Worker_ID():
         if not env_id:
             return None
         query, pool_id, id = env_id.split(ID_SEPARATOR)
+        print("Invalid worker id")
         return Worker_ID(query, pool_id, id)
 
     def get_worker_name(self):
@@ -36,30 +37,21 @@ class Worker_ID():
 class Worker(ABC):
     def __init__(self):
         self.id = Worker_ID.from_env('WORKER_ID')
-        if not self.id:
-            print("Missing env variables")
-            return None
+        self.next_pools = NextPools.from_env()
+        if not self.id or not self.next_pools:
+            raise InstanceError
         
+        try:
+            self.eof_to_receive = int(os.getenv("EOF_TO_RECEIVE"))
+            print("Invalid eof_to_receive")
+        except:
+            raise InstanceError
+
         self.communicator = None
         self.signal_queue = Queue()
         signal.signal(signal.SIGTERM, self.handle_SIGTERM)
         
-        try:
-            next_pool_workers = get_env_list('NEXT_POOL_WORKERS')
-            forward_to = get_env_list("FORWARD_TO")
-            self.eof_to_receive = int(os.getenv("EOF_TO_RECEIVE"))
-            next_pool_queues = []
-            for i in range(len(next_pool_workers)):
-                if forward_to[i] == GATEWAY_QUEUE_NAME:
-                    l = [GATEWAY_QUEUE_NAME]
-                else:
-                    l = [f'{forward_to[i]}.{j}' for j in range(int(next_pool_workers[i]))]
-                next_pool_queues.append(l)
-        except Exception as r:
-            print(f"[Worker {self.id}] Failed converting env_vars: {r}")
-            raise InstanceError
-        
-        self.communicator = Communicator(self.signal_queue, dict(zip(forward_to, next_pool_queues)))
+        self.communicator = Communicator(self.signal_queue, self.next_pools.worker_ids())
 
     def handle_SIGTERM(self, _signum, _frame):
         print(f"\n\n [Worker [{self.id}]] SIGTERM detected \n\n")
@@ -118,7 +110,11 @@ class Worker(ABC):
         pass
 
     def reset(self):
-        self.eof_to_receive = int(os.getenv("EOF_TO_RECEIVE"))
+        try:
+            self.eof_to_receive = int(os.getenv("EOF_TO_RECEIVE"))
+            print("Invalid eof_to_receive")
+        except:
+            raise InstanceError
         self.reset_context()
         print(f"[Worker {self.id}] Client disconnected. Worker reset")
 
@@ -157,11 +153,7 @@ class Worker(ABC):
         if batch.is_empty():
             return self.communicator.produce_to_all_group_members(batch.to_bytes())
         else:
-            for group in self.communicator.producer_groups.keys():
-                amount_of_workers = self.communicator.amount_of_producer_group(group)
-                hashed_batchs = batch.get_hashed_batchs(self.id.query,amount_of_workers)
-                for worker_to_send, batch in hashed_batchs.items():
-                    if not batch.is_empty():
-                        if not self.communicator.produce_message(batch.to_bytes(), group, worker_to_send):
-                            return False
+            for pool, _next_pool_workers, shard_attribute in self.next_pools:
+                if not self.communicator.produce_batch_of_messages(batch, pool, shard_attribute):
+                    return False
         return True
