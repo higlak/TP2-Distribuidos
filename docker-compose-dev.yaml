@@ -459,6 +459,8 @@ services:
     build:
       context: ./
       dockerfile: Accumulator/Accumulator.dockerfile
+      args:
+        - TEXTBLOB=True
     restart: on-failure
     depends_on:
       - rabbitmq
@@ -479,6 +481,8 @@ services:
     build:
       context: ./
       dockerfile: Accumulator/Accumulator.dockerfile
+      args:
+        - TEXTBLOB=True
     restart: on-failure
     depends_on:
       - rabbitmq
@@ -499,6 +503,8 @@ services:
     build:
       context: ./
       dockerfile: Accumulator/Accumulator.dockerfile
+      args:
+        - TEXTBLOB=True
     restart: on-failure
     depends_on:
       - rabbitmq
@@ -519,6 +525,8 @@ services:
     build:
       context: ./
       dockerfile: Accumulator/Accumulator.dockerfile
+      args:
+        - TEXTBLOB=True
     restart: on-failure
     depends_on:
       - rabbitmq
@@ -539,6 +547,8 @@ services:
     build:
       context: ./
       dockerfile: Accumulator/Accumulator.dockerfile
+      args:
+        - TEXTBLOB=True
     restart: on-failure
     depends_on:
       - rabbitmq
@@ -589,8 +599,8 @@ services:
       - PORT=12345
       - BOOK_QUERIES=1,2,3,5
       - REVIEW_QUERIES=3,5
-      - FORWARD_TO=1.0,2.0,3.0,5.0
-      - SHARD_BY=,authors,title,title
+      - FORWARD_TO=5.0,1.0,3.0,2.0
+      - SHARD_BY=title,,title,authors
       - NEXT_POOL_WORKERS=2,2,4,2
       - EOF_TO_RECEIVE=10
 

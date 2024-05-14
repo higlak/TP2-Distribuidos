@@ -1,11 +1,15 @@
 from abc import ABC, abstractmethod
+import time
 from .Worker import Worker
 from utils.QueryMessage import QueryMessage, YEAR_FIELD, TITLE_FIELD, AUTHOR_FIELD, BOOK_MSG_TYPE, REVIEW_MSG_TYPE, RATING_FIELD, MSP_FIELD, REVIEW_TEXT_FIELD
 import unittest
 from unittest import TestCase
 import heapq
 import bisect
-from textblob import TextBlob
+try:
+    from textblob import TextBlob
+except:
+    pass
 
 REVIEW_COUNT = "review_count"
 

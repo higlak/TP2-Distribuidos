@@ -7,6 +7,7 @@ GATEWAY_CONFIG_FILE = "config/config_gateway.ini"
 CLIENT_CONFIG_FILE = "config/config_client.ini"
 FILTER_TYPE = 'filter'
 ACCUMULATOR_TYPE = 'accumulator'
+REVIEW_TEXT_FIELD = 'review_text'
 FORWARD_TO_SEPARATOR = ','
 QUERY_POOL_SEPARATOR = '.'
 GATEWAY = 'Gateway'
@@ -79,8 +80,11 @@ class QueryConfig():
                 result += f"""  {pool.worker_type}{worker_id}:
     build:
       context: ./
-      dockerfile: {pool.worker_type_dokerfile_path()}
-    restart: on-failure
+      dockerfile: {pool.worker_type_dokerfile_path()}\n"""
+                if pool.worker_type == ACCUMULATOR_TYPE and pool.worker_field == REVIEW_TEXT_FIELD:
+                  result += f"      args:"         
+                  result += f"\n        - TEXTBLOB=True\n"
+                result += f"""    restart: on-failure
     depends_on:
       - rabbitmq
     links: 
@@ -95,7 +99,7 @@ class QueryConfig():
       - WORKER_FIELD={pool.worker_field}
       - WORKER_VALUE={pool.worker_value}"""
                 if pool.worker_type == ACCUMULATOR_TYPE:
-                    result += f"\n      - ACCUMULATE_BY={pool.accumulate_by}"
+                  result += f"\n      - ACCUMULATE_BY={pool.accumulate_by}"
                 result += "\n\n"
                 
         return result
