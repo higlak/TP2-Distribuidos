@@ -43,8 +43,8 @@ class Worker(ABC):
         
         try:
             self.eof_to_receive = int(os.getenv("EOF_TO_RECEIVE"))
-            print("Invalid eof_to_receive")
         except:
+            print("Invalid eof_to_receive")
             raise InstanceError
 
         self.communicator = None
@@ -112,8 +112,8 @@ class Worker(ABC):
     def reset(self):
         try:
             self.eof_to_receive = int(os.getenv("EOF_TO_RECEIVE"))
-            print("Invalid eof_to_receive")
         except:
+            print("Invalid eof_to_receive")
             raise InstanceError
         self.reset_context()
         print(f"[Worker {self.id}] Client disconnected. Worker reset")

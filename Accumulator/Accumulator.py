@@ -41,7 +41,7 @@ def main():
     if not worker_field:
         return
     try:
-        worker = Accumulator(worker_field,worker_value, accumulate_by)
+        worker = Accumulator.new(worker_field,worker_value, accumulate_by)
     except InstanceError:
         return
     worker.start()
