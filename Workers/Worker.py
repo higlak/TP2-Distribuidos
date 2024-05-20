@@ -23,9 +23,9 @@ class Worker_ID():
     def from_env(cls, env_var):
         env_id = os.getenv(env_var)
         if not env_id:
+            print("Invalid worker id")
             return None
         query, pool_id, id = env_id.split(ID_SEPARATOR)
-        print("Invalid worker id")
         return Worker_ID(query, pool_id, id)
 
     def get_worker_name(self):
@@ -51,7 +51,7 @@ class Worker(ABC):
         self.signal_queue = Queue()
         signal.signal(signal.SIGTERM, self.handle_SIGTERM)
         
-        self.communicator = Communicator(self.signal_queue, self.next_pools.worker_ids())
+        self.communicator = Communicator.new(self.signal_queue, self.next_pools.worker_ids())
 
     def handle_SIGTERM(self, _signum, _frame):
         print(f"\n\n [Worker [{self.id}]] SIGTERM detected \n\n")

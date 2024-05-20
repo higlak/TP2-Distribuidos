@@ -13,7 +13,6 @@ except:
 
 REVIEW_COUNT = "review_count"
 
-
 def sentiment_analysis(texto):
     if isinstance(texto, str):
         blob = TextBlob(texto)

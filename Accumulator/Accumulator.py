@@ -45,6 +45,5 @@ def main():
     except InstanceError:
         return
     worker.start()
-    print("hola")
 
 main()
