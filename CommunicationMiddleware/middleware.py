@@ -3,7 +3,6 @@ import pika
 import pika.exceptions
 from queue import Queue, Empty
 from utils.Batch import Batch
-from utils.auxiliar_functions import InstanceError
 
 STARTING_RABBIT_WAIT = 1
 MAX_ATTEMPTS = 6

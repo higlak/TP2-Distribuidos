@@ -1,6 +1,5 @@
 from Workers.Accumulators import Accumulator, REVIEW_COUNT
 from utils.QueryMessage import ALL_MESSAGE_FIELDS, YEAR_FIELD
-from utils.auxiliar_functions import InstanceError
 import os
 
 def get_env_worker_field():
@@ -40,10 +39,8 @@ def main():
     print(f"Iniciando acumulador por {accumulate_by} => {worker_field} = {worker_value} ")
     if not worker_field:
         return
-    try:
-        worker = Accumulator.new(worker_field,worker_value, accumulate_by)
-    except InstanceError:
-        return
-    worker.start()
+    worker = Accumulator.new(worker_field, worker_value, accumulate_by)
+    if worker:
+        worker.start()
 
 main()

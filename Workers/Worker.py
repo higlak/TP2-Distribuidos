@@ -5,7 +5,7 @@ import signal
 
 from CommunicationMiddleware.middleware import Communicator
 from utils.Batch import Batch
-from utils.auxiliar_functions import append_extend, InstanceError
+from utils.auxiliar_functions import append_extend
 from utils.QueryMessage import query_to_query_result
 from utils.NextPools import NextPools, GATEWAY_QUEUE_NAME 
 from queue import Queue
@@ -35,23 +35,35 @@ class Worker_ID():
         return f'{self.query}.{self.pool_id}.{self.worker_num}'
     
 class Worker(ABC):
-    def __init__(self):
-        self.id = Worker_ID.from_env('WORKER_ID')
-        self.next_pools = NextPools.from_env()
-        if not self.id or not self.next_pools:
-            raise InstanceError
+    def __init__(self, id, next_pools, eof_to_receive):
         
-        try:
-            self.eof_to_receive = int(os.getenv("EOF_TO_RECEIVE"))
-        except:
-            print("Invalid eof_to_receive")
-            raise InstanceError
-
-        self.communicator = None
+        self.id = id
+        self.next_pools = next_pools
+        self.eof_to_receive = eof_to_receive
+        self.pending_eof = eof_to_receive
         self.signal_queue = Queue()
+        self.communicator = None
         signal.signal(signal.SIGTERM, self.handle_SIGTERM)
         
-        self.communicator = Communicator.new(self.signal_queue, self.next_pools.worker_ids())
+    @classmethod
+    def get_env(cls):
+        id = Worker_ID.from_env('WORKER_ID')
+        next_pools = NextPools.from_env()
+        if not id or not next_pools:
+            return None, None, None
+        try:
+            eof_to_receive = int(os.getenv("EOF_TO_RECEIVE"))
+        except:
+            print("Invalid eof_to_receive")
+            return None, None, None
+        
+        return id, next_pools, eof_to_receive
+
+    def connect(self):
+        communicator = Communicator.new(self.signal_queue, self.next_pools.worker_ids())
+        if not communicator:
+            return None
+        self.communicator = communicator
 
     def handle_SIGTERM(self, _signum, _frame):
         print(f"\n\n [Worker [{self.id}]] SIGTERM detected \n\n")
@@ -110,18 +122,14 @@ class Worker(ABC):
         pass
 
     def reset(self):
-        try:
-            self.eof_to_receive = int(os.getenv("EOF_TO_RECEIVE"))
-        except:
-            print("Invalid eof_to_receive")
-            raise InstanceError
+        self.pending_eof = self.eof_to_receive
         self.reset_context()
         print(f"[Worker {self.id}] Client disconnected. Worker reset")
 
     def handle_eof(self):
-        self.eof_to_receive -= 1
-        print(f"[Worker {self.id}] Pending EOF to receive: {self.eof_to_receive}")
-        if not self.eof_to_receive:
+        self.pending_eof -= 1
+        print(f"[Worker {self.id}] Pending EOF to receive: {self.pending_eof}")
+        if not self.pending_eof:
             print(f"[Worker {self.id}] No more eof to receive")
             if not self.send_final_results():
                 print(f"[Worker {self.id}] Disconnected from MOM, while sending final results")

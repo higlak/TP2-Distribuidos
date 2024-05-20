@@ -22,15 +22,28 @@ def sentiment_analysis(texto):
         return None
 
 class Accumulator(Worker, ABC):
-    def __init__(self, field, values, accumulate_by):
-        super().__init__()
+    def __init__(self,  id, next_pools, eof_to_receive, field, values, accumulate_by):
+        super().__init__(id, next_pools, eof_to_receive)
         self.field = field
         self.values = values
         self.accumulate_by = accumulate_by
         self.context = self.get_new_context()
 
-    @staticmethod
-    def new(field, values, accumulate_by):
+    @classmethod
+    def new(cls, field, values, accumulate_by):
+        accumulator_class = cls.accumulator_type(field, accumulate_by)
+        if not accumulator_class:
+            return None
+        
+        id, next_pools, eof_to_receive = accumulator_class.get_env()
+        if id == None or eof_to_receive == None or not next_pools:
+            return None
+        accumulator = accumulator_class(id, next_pools, eof_to_receive, field, values, accumulate_by)
+        accumulator.connect()
+        return accumulator
+
+    @classmethod
+    def accumulator_type(cls, field, accumulate_by):
         switch = {
             (YEAR_FIELD, AUTHOR_FIELD): DecadeByAuthorAccumulator,
             (REVIEW_COUNT, TITLE_FIELD): AmountOfReviewByTitleAccumulator,
@@ -38,8 +51,8 @@ class Accumulator(Worker, ABC):
             (REVIEW_TEXT_FIELD, TITLE_FIELD): ReviewTextByTitleAccumulator,
             (MSP_FIELD, TITLE_FIELD): MeanSentimentPolarityByTitleAccumulator,
         }
-        return switch[(field, accumulate_by)](field, values, accumulate_by)
-
+        return switch.get((field, accumulate_by), None)
+    
     @abstractmethod
     def get_new_context(cls):
         pass

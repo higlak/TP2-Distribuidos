@@ -1,7 +1,7 @@
 import signal
 from multiprocessing import Process
 from utils.NextPools import NextPools
-from utils.auxiliar_functions import get_env_list, InstanceError
+from utils.auxiliar_functions import get_env_list
 from GatewayInOut.GatewayIn import gateway_in_main
 from GatewayInOut.GatewayOut import gateway_out_main
 import socket
