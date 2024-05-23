@@ -21,7 +21,7 @@ class ClientReader():
         signal.signal(signal.SIGTERM, self.handle_SIGTERM)
         try: 
             self.send_all_from_dataset(BOOK_MSG_TYPE, self.book_reader)
-            #self.send_all_from_dataset(REVIEW_MSG_TYPE, self.review_reader)
+            self.send_all_from_dataset(REVIEW_MSG_TYPE, self.review_reader)
             self.send_eof()
         except OSError as r:
             print(f"[ClientReader] Socket disconnected, {r}")
