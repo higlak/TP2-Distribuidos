@@ -2,7 +2,7 @@ from .Worker import Worker
 from utils.QueryMessage import QueryMessage, CATEGORIES_FIELD, YEAR_FIELD, TITLE_FIELD, REVIEW_MSG_TYPE
 
 class Filter(Worker):
-    def __init__(self, id, next_pools, eof_to_receive, field, valid_values, droping_fields=[]):
+    def __init__(self, id, next_pools, eof_to_receive, field, valid_values, droping_fields):
         super().__init__(id, next_pools, eof_to_receive)
         self.field = field
         self.valid_values = valid_values
@@ -14,7 +14,7 @@ class Filter(Worker):
         id, next_pools, eof_to_receive = Filter.get_env()
         if id == None or eof_to_receive == None or not next_pools:
             return None
-        filter = Filter(id, next_pools, eof_to_receive, field, valid_values, droping_fields=[])
+        filter = Filter(id, next_pools, eof_to_receive, field, valid_values, droping_fields)
         filter.connect()
         return filter
 
