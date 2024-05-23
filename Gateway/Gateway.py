@@ -19,14 +19,14 @@ class Gateway():
         self.eof_to_receive = eof_to_receive 
         self.book_query_numbers = book_query_numbers 
         self.review_query_numbers = review_query_numbers
-        self.client_handlers = {}
+        self.client_handlers = {} 
         self.server_socket = None
         self.next_id = 0
         
         recv_conn, send_conn = Pipe(False)
-        self.gatewat_out_pipe = send_conn
-        self.gateway_out_handler = Process(target=gateway_out_main, args=[recv_conn, self.eof_to_receive]).start()
-        
+        self.gateway_out_pipe = send_conn
+        self.gateway_out_handler = Process(target=gateway_out_main, args=[recv_conn, self.eof_to_receive])
+        self.gateway_out_handler.start()
         signal.signal(signal.SIGTERM, self.handle_SIGTERM)
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_socket.settimeout(SERVER_SOCKET_TIMEOUT)
@@ -54,8 +54,6 @@ class Gateway():
 
     def handle_SIGTERM(self, _signum, _frame):
         print("\n\n [Gateway] SIGTERM detected\n\n")
-        self.signal_queue_in.put(True)
-        self.signal_queue_out.put(True)
         for client_handler in self.client_handlers.values():
             client_handler[JOIN_HANDLE_POS].terminate()
         self.gateway_out_handler.terminate()
@@ -73,20 +71,20 @@ class Gateway():
         except socket.timeout:
             return
         
-        print(f"[Gateway] Client connected with address: {addr}")
-        if addr in self.client_handlers:
-            id = self.client_handlers[addr][ID_POS] 
+        print(f"[Gateway] Client connected with ip: {addr[0]}")
+        if addr[0] in self.client_handlers:
+            id = self.client_handlers[addr[0]][ID_POS] 
             self.gateway_out_pipe.send((id, client_socket))
-            self.client_handlers[addr][JOIN_HANDLE_POS].start()
+            self.client_handlers[addr[0]][JOIN_HANDLE_POS].start()
         else:
-            gateway_in_thread = Process(target=gateway_in_main, args=[client_socket, self.next_pools, self.book_query_numbers, self.review_query_numbers])
             id = self.get_next_id()
-            self.client_handlers[addr] = (id, gateway_in_thread)
+            gateway_in_handler = Process(target=gateway_in_main, args=[id, client_socket, self.next_pools, self.book_query_numbers, self.review_query_numbers])
+            self.client_handlers[addr[0]] = (id, gateway_in_handler)
     
     def join_clients(self, blocking):
         finished = []
         for addr, client_handler in self.client_handlers.items():
-            if blocking or not client_handler[JOIN_HANDLE_POS].is_alive():
+            if (blocking or not client_handler[JOIN_HANDLE_POS].is_alive()) and client_handler[JOIN_HANDLE_POS].exitcode != None:
                 client_handler[JOIN_HANDLE_POS].join()
                 finished.append(addr)
         for addr in finished:
@@ -105,6 +103,7 @@ class Gateway():
     
     def close(self):
         self.join_clients(blocking=True)
+        self.gateway_out_handler.join()
         self.server_socket.close()
 
 def main():

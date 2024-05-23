@@ -1,3 +1,4 @@
+import os
 import signal
 from utils.Batch import Batch
 from utils.DatasetHandler import DatasetWriter
@@ -5,13 +6,16 @@ from utils.QueryMessage import QueryMessage, query_result_headers, query_to_quer
 
 
 class ClientWriter():
-    def __init__(self, socket, queries, query_path):
+    def __init__(self, id, socket, queries, query_path):
         self.socket = socket
         writers = {}
         for query in queries:
             query_result = query_to_query_result(query)
             header = query_result_headers(query_result)
-            path = query_path + query + '.csv'
+            dir_path = "." + query_path + "client" + str(id) + "/"  
+            if not os.path.exists(dir_path):
+                os.makedirs(dir_path)
+            path = dir_path + "result" + query + ".csv"
             dw = DatasetWriter(path, header)
             writers[query_result] = dw
         self.writers = writers

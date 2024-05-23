@@ -27,7 +27,7 @@ class Accumulator(Worker, ABC):
         self.field = field
         self.values = values
         self.accumulate_by = accumulate_by
-        self.context = self.get_new_context()
+        self.client_contexts = {}
 
     @classmethod
     def new(cls, field, values, accumulate_by):
@@ -57,73 +57,75 @@ class Accumulator(Worker, ABC):
     def get_new_context(cls):
         pass
 
-    def reset_context(self):
-        self.context = self.get_new_context()
+    def remove_client_context(self, client_id):
+        if client_id in self.client_contexts:
+            self.client_contexts.pop(client_id)
     
     @abstractmethod
-    def accumulate(cls):
+    def accumulate(cls, client_id, msg):
         pass
 
-    def process_message(self, msg: QueryMessage):        
-        results = self.accumulate(msg)
+    def process_message(self, client_id, msg: QueryMessage):
+        self.client_contexts[client_id] = self.client_contexts.get(client_id, self.get_new_context())
+        results = self.accumulate(client_id, msg)
         if not results:
             return None
         return [self.transform_to_result(m) for m in results]
     
     @abstractmethod
-    def final_results(cls):
+    def final_results(cls, client_id):
         pass
 
-    def get_final_results(self):
-        return [self.transform_to_result(msg) for msg in self.final_results()]
+    def get_final_results(self, client_id):
+        return [self.transform_to_result(msg) for msg in self.final_results(client_id)]
         
 
 class DecadeByAuthorAccumulator(Accumulator):
     def get_new_context(cls):
         return {}
     
-    def accumulate(self, msg):
+    def accumulate(self, client_id, msg):
         if msg.authors == None:
             return None
         results = []
         for author in msg.authors:
-            if self.accumulate_decade_by_author(author, msg.decade()):
+            if self.accumulate_decade_by_author(client_id, author, msg.decade()):
                 msg_aux = msg.copy_droping_fields([YEAR_FIELD])
                 msg_aux.authors = [author]
                 results.append(msg_aux)
         return results
     
-    def accumulate_decade_by_author(self, author, msg_decade):
-        author_decades = self.context.get(author, [])
+    def accumulate_decade_by_author(self, client_id, author, msg_decade):
+        author_decades = self.client_contexts[client_id].get(author, [])
         if len(author_decades) == self.values:
             return False
         if msg_decade == None:
             return False
-        if not (msg_decade in self.context.get(author, [])):
-            self.context[author] = self.context.get(author, []) + [msg_decade]
-            if len(self.context.get(author, [])) == self.values:
+        if not (msg_decade in self.client_contexts[client_id].get(author, [])):
+            self.client_contexts[client_id][author] = self.client_contexts[client_id].get(author, []) + [msg_decade]
+            if len(self.client_contexts[client_id].get(author, [])) == self.values:
                 return True
             
-    def final_results(self):
+    def final_results(self, client_id):
         return []
     
 class AmountOfReviewByTitleAccumulator(Accumulator):
     def get_new_context(cls):
         return {}
     
-    def accumulate(self, msg):
-        if msg.msg_type == BOOK_MSG_TYPE and not msg.title in self.context.keys():
-            self.context[msg.title] = [msg, 0, 0]
+    def accumulate(self, client_id, msg):
+        if msg.msg_type == BOOK_MSG_TYPE and not msg.title in self.client_contexts[client_id].keys():
+            self.client_contexts[client_id][msg.title] = [msg, 0, 0]
         if msg.msg_type == REVIEW_MSG_TYPE:
-            self.context[msg.title][1] += 1
-            self.context[msg.title][2] += msg.rating 
-            if self.context[msg.title][1] == int(self.values):
-                print(f"[Worker {self.id}] Accumulated {self.values} of {msg.title}")
+            self.client_contexts[client_id][msg.title][1] += 1
+            self.client_contexts[client_id][msg.title][2] += msg.rating 
+            if self.client_contexts[client_id][msg.title][1] == int(self.values):
+                print(f"[Worker {self.id}] Accumulated {self.values} of {msg.title} for client {client_id}")
         return None
     
-    def final_results(self):
+    def final_results(self, client_id):
         results = []
-        for potential_result in self.context.values():
+        for potential_result in self.client_contexts[client_id].values():
             if potential_result[1] >= int(self.values):
                 potential_result[0].rating = potential_result[2] / potential_result[1]
                 results.append(potential_result[0])
@@ -133,19 +135,19 @@ class RatingByTitleAccumulator(Accumulator):
     def get_new_context(cls):
         return []
     
-    def accumulate(self, msg):
+    def accumulate(self, client_id, msg):
         if msg.rating == None:
             return
-        if len(self.context) < int(self.values):
-            heapq.heappush(self.context, BookAtribute(msg.title, msg.rating))
-        elif self.context[0].attribute < msg.rating:
-            heapq.heappop(self.context)
-            heapq.heappush(self.context, BookAtribute(msg.title, msg.rating))
+        if len(self.client_contexts[client_id]) < int(self.values):
+            heapq.heappush(self.client_contexts[client_id], BookAtribute(msg.title, msg.rating))
+        elif self.client_contexts[client_id][0].attribute < msg.rating:
+            heapq.heappop(self.client_contexts[client_id])
+            heapq.heappush(self.client_contexts[client_id], BookAtribute(msg.title, msg.rating))
 
-    def final_results(self):
+    def final_results(self, client_id):
         results = []
-        while len(self.context) > 0:
-            result = heapq.heappop(self.context)
+        while len(self.client_contexts[client_id]) > 0:
+            result = heapq.heappop(self.client_contexts[client_id])
             results.append(QueryMessage(BOOK_MSG_TYPE, title=result.title, rating= result.attribute))
         results.reverse()
         return results
@@ -154,19 +156,19 @@ class ReviewTextByTitleAccumulator(Accumulator):
     def get_new_context(cls):
         return {}
     
-    def accumulate(self, msg):
+    def accumulate(self, client_id, msg):
         if msg.msg_type == REVIEW_MSG_TYPE:
-            if not msg.title in self.context.keys():
-                self.context[msg.title] = [0, 0]
+            if not msg.title in self.client_contexts[client_id].keys():
+                self.client_contexts[client_id][msg.title] = [0, 0]
             sent_analysis = sentiment_analysis(msg.review_text)
             if sent_analysis != None:
-                self.context[msg.title][0] += 1
-                self.context[msg.title][1] += sent_analysis
+                self.client_contexts[client_id][msg.title][0] += 1
+                self.client_contexts[client_id][msg.title][1] += sent_analysis
         return None
     
-    def final_results(self):
+    def final_results(self, client_id):
         results = []
-        for title, result in self.context.items():
+        for title, result in self.client_contexts[client_id].items():
             msp = result[1] / result[0]
             results.append(QueryMessage(msg_type=BOOK_MSG_TYPE, title=title, mean_sentiment_polarity=msp))
         return results
@@ -175,15 +177,15 @@ class MeanSentimentPolarityByTitleAccumulator(Accumulator):
     def get_new_context(cls):
         return []
     
-    def accumulate(self, msg):
+    def accumulate(self, client_id, msg):
         if msg.title and msg.mean_sentiment_polarity != None:
-            bisect.insort(self.context, BookAtribute(msg.title, msg.mean_sentiment_polarity))
+            bisect.insort(self.client_contexts[client_id], BookAtribute(msg.title, msg.mean_sentiment_polarity))
 
-    def final_results(self):
-        percentil_90_index = int(len(self.context) * (int(self.values) / 100))
+    def final_results(self, client_id):
+        percentil_90_index = int(len(self.client_contexts[client_id]) * (int(self.values) / 100))
         results = []
-        for a in self.context:
-            if a >= self.context[percentil_90_index]:
+        for a in self.client_contexts[client_id]:
+            if a >= self.client_contexts[client_id][percentil_90_index]:
                 results.append(a)
 
         return [QueryMessage(BOOK_MSG_TYPE, title=result.title) for result in results]

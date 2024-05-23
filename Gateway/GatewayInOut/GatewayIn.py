@@ -6,45 +6,57 @@ from utils.Batch import Batch
 from utils.Book import Book
 from utils.DatasetHandler import DatasetLine
 from utils.Review import Review
-from utils.auxiliar_functions import append_extend, recv_exactly
+from utils.auxiliar_functions import append_extend, recv_exactly, send_all
 
 FIRST_POOL = 0
 
 class GatewayIn():
-    def __init__(self, socket, com, next_pools, book_query_numbers, review_query_numbers):
+    def __init__(self, client_id, socket, next_pools, book_query_numbers, review_query_numbers):
         self.socket = socket
-        self.com = com
+        self.com = None
+        self.sigterm_queue = Queue()
+        self.client_id = client_id
         self.book_query_numbers = book_query_numbers
         self.review_query_numbers = review_query_numbers
         self.next_pools = next_pools
         signal.signal(signal.SIGTERM, self.handle_SIGTERM)
     
     def handle_SIGTERM(self, _signum, _frame):
-        print("\n\n [GatewayIn] SIGTERM detected\n\n")
+        self.sigterm_queue.put(True)
+        print(f"\n\n [GatewayIn {self.client_id}] SIGTERM detected\n\n")
         self.close()
 
     def start(self):
         try:
+            self.send_client_id()
             self.loop()
         except OSError:
-            print("[GatewayIn] Socket disconnected")
+            print(f"[GatewayIn {self.client_id}] Socket disconnected")
         self.close()
+
+    def send_client_id(self):
+        print(f"\n\npor mandar id{self.client_id}\n\n")
+        batch = Batch(self.client_id, [])
+        send_all(self.socket, batch.to_bytes())
+        print(f"\n\nMande\n\n")
 
     def loop(self):
         while True:
             datasetlines = self.recv_dataset_line_batch()
             if datasetlines == None:
-                print("[Gateway] Socket disconnected")
+                print(f"[GatewayIn {self.client_id}] Socket disconnected")
                 break
-            if not datasetlines:
+            if datasetlines.is_empty():
                 if not self.send_eof():
-                    print("[GatewayIn] MOM disconnected")
+                    print(f"[GatewayIn {self.client_id}] MOM disconnected")
                 break
             if not self.send_batch_to_all_queries(datasetlines):
-                print("[GatewayIn] MOM disconnected")
+                print(f"[GatewayIn {self.client_id}] MOM disconnected")
                 break
 
     def recv_dataset_line_batch(self):
+        return Batch.from_socket(self.socket, DatasetLine)
+        """
         ammount_of_dataset_lines = recv_exactly(self.socket,1)
         if ammount_of_dataset_lines == None:
             return None
@@ -60,9 +72,10 @@ class GatewayIn():
                 return None
             datasetlines.append(datasetline)
         return datasetlines
+        """
     
     def send_eof(self):
-        return self.com.produce_to_all_group_members(Batch([]).to_bytes())
+        return self.com.produce_to_all_group_members(Batch.eof(self.client_id).to_bytes())
         
     def get_query_messages(self, obj, query_number):
         switch = {
@@ -94,14 +107,14 @@ class GatewayIn():
                 if query_message:
                     append_extend(query_messages, query_message)
             pool = f'{query_number}.{FIRST_POOL}'
-            batch = Batch(query_messages)
+            batch = Batch(self.client_id, query_messages)
             if not self.com.produce_batch_of_messages(batch, pool, self.next_pools.shard_by_of_pool(pool)):
                 return False
         return True
             
 
     def get_hashed_batchs(self, query_messages, query_number):
-        batch = Batch(query_messages)
+        batch = Batch(self.client_id, query_messages)
         pool_to_send = f"{query_number}.{FIRST_POOL}"
         amount_of_workers = self.com.amount_of_producer_group(pool_to_send)
         return batch.get_hashed_batchs(query_number,amount_of_workers) 
@@ -111,6 +124,12 @@ class GatewayIn():
             return Book.from_datasetline(datasetLine)
         return Review.from_datasetline(datasetLine)
     
+    def connect(self):
+        self.com = Communicator.new(self.sigterm_queue, self.next_pools.worker_ids())
+        if not self.com:
+            return False
+        return True
+
     def close(self):
         self.socket.close()
         self.com.close_connection()
@@ -118,11 +137,9 @@ class GatewayIn():
 def unknown_query():
     print("[Gateway] Attempting to proccess unkwown query")
     
-def gateway_in_main(client_socket, next_pools, book_query_numbers, review_query_numbers):
-    signal_queue = Queue()
-    com = Communicator.new(signal_queue, next_pools.worker_ids())
-    if not com:
-        return
-    gateway_in = GatewayIn(client_socket, com, next_pools, book_query_numbers, review_query_numbers)
-    gateway_in.start()
+def gateway_in_main(client_id, client_socket, next_pools, book_query_numbers, review_query_numbers):
+    print("\n\nStarting gatewain in\n\n")
+    gateway_in = GatewayIn(client_id, client_socket, next_pools, book_query_numbers, review_query_numbers)
+    if gateway_in.connect():
+        gateway_in.start()
 

@@ -10,15 +10,17 @@ PENDING_EOF_POS = 1
 CLIENT_SOCKET_POS = 0
 
 class GatewayOut():
-    def __init__(self, com, recv_conn, eof_to_receive):
+    def __init__(self, recv_conn, eof_to_receive):
         self.clients = {}
-        self.com = com
+        self.com = None
+        self.sigterm_queue = Queue()
         self.eof_to_receive = eof_to_receive
         self.recv_clients = recv_conn
         signal.signal(signal.SIGTERM, self.handle_SIGTERM)
 
     def handle_SIGTERM(self, _signum, _frame):
         print("\n\n [GatewayOut] SIGTERM detected\n\n")
+        self.sigterm_queue.put(True)
         self.close()
 
     def start(self):
@@ -40,13 +42,13 @@ class GatewayOut():
 
     def get_new_clients(self):
         while self.recv_clients.poll():
-            id, client_socket = self.recv_conn.recv()
+            id, client_socket = self.recv_clients.recv()
             print(f"[GatewatOut] Received new client with id: {id}")
-            self.clients[id] = (client_socket, self.eof_to_receive)
+            self.clients[id] = [client_socket, self.eof_to_receive]
     
     def proccess_message(self, batch_bytes):
         batch = Batch.from_bytes(batch_bytes)
-        client_id = batch.cient_id
+        client_id = batch.client_id
         if batch.is_empty():
             self.clients[client_id][PENDING_EOF_POS] -= 1
             print(f"[GatewayOut] Pending EOF to receive: {self.clients[client_id][PENDING_EOF_POS]}")
@@ -59,8 +61,14 @@ class GatewayOut():
     
     def finished_client(self, client_id):
         print(f"[Gateway] No more EOF to receive. Sending EOF to client {client_id}")
-        send_all(self.clients[client_id][CLIENT_SOCKET_POS], Batch([]))
+        send_all(self.clients[client_id][CLIENT_SOCKET_POS], Batch.eof(client_id).to_bytes())
         self.clients.pop(client_id)
+
+    def connect(self):
+        self.com = Communicator.new(self.sigterm_queue)
+        if not self.com:
+            return False
+        return True
 
     def close(self):
         for socket, _pending_eof in self.clients.values():
@@ -68,9 +76,6 @@ class GatewayOut():
         self.com.close_connection()
 
 def gateway_out_main(recv_conn, eof_to_receive):
-    signal_queue = Queue()
-    com = Communicator.new(signal_queue)
-    if not com:
-        return
-    gateway_out = GatewayOut(com, recv_conn, eof_to_receive)
-    gateway_out.start()
+    gateway_out = GatewayOut(recv_conn, eof_to_receive)
+    if gateway_out.connect():
+        gateway_out.start()

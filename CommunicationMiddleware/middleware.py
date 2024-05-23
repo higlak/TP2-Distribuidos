@@ -164,4 +164,4 @@ def get_sharded_batchs(batch, shard_by, amount_of_shards):
         msg_destination = int(hash_object.hexdigest(), 16) % amount_of_shards
         hashed_messages[msg_destination] = hashed_messages.get(msg_destination, []) + [msg]
     
-    return {w:Batch(messages) for w, messages in hashed_messages.items()}
+    return {w:Batch(batch.client_id, messages) for w, messages in hashed_messages.items()}

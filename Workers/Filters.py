@@ -7,7 +7,7 @@ class Filter(Worker):
         self.field = field
         self.valid_values = valid_values
         self.droping_fields = droping_fields
-        self.filtered_books_titles = set()
+        self.filtered_client_books = {}
 
     @classmethod
     def new(cls, field, valid_values, droping_fields=[]):
@@ -18,17 +18,19 @@ class Filter(Worker):
         filter.connect()
         return filter
 
-    def process_message(self, msg: QueryMessage):
-        if msg.msg_type == REVIEW_MSG_TYPE and msg.title in self.filtered_books_titles:
+    def process_message(self, client_id, msg: QueryMessage):
+        self.filtered_client_books[client_id] = self.filtered_client_books.get(client_id, set())
+        if msg.msg_type == REVIEW_MSG_TYPE and msg.title in self.filtered_client_books[client_id]:
             return self.transform_to_result(msg)
         if self.filter_book(msg):
-            self.filtered_books_titles.add(msg.title)
+            self.filtered_client_books[client_id].add(msg.title)
             msg = msg.copy_droping_fields(self.droping_fields)
             return self.transform_to_result(msg)
         return None
     
-    def reset_context(self):
-        self.filtered_books_titles = set()        
+    def remove_client_context(self, client_id):
+        if client_id in self.filtered_client_books:
+            self.filtered_client_books.pop(client_id)
 
     def filter_book(self, msg:QueryMessage):
         switch = {
@@ -41,5 +43,5 @@ class Filter(Worker):
             return False
         return method(self.valid_values)
 
-    def get_final_results(self):
+    def get_final_results(self, _client_id):
         return []

@@ -16,8 +16,8 @@ class Batch():
     def from_bytes(cls, byte_array):
         client_id, amount_of_messages = cls.get_header_fields_from_bytes(byte_array)
         if amount_of_messages == 0:
-            return Batch(client_id, [])
-        byte_array = byte_array[1:]
+            return Batch.eof(client_id)
+        byte_array = byte_array[HEADER_LEN:]
         messages = []
         for _ in range(amount_of_messages):
             if len(byte_array) == 0:
@@ -28,24 +28,32 @@ class Batch():
     
     @classmethod
     def get_header_fields_from_bytes(cls, byte_array):
-        if len(byte_array) < HEADER_LEN:
-            return None
-        client_id = byte_array_to_big_endian_integer(remove_bytes(byte_array, AMOUNT_OF_CLIENT_ID_BYTES))
-        amount_of_messages = byte_array[0]
+        if byte_array == None or len(byte_array) < HEADER_LEN:
+            return None, None
+        byte_array = bytearray(byte_array)
+        client_id = byte_array_to_big_endian_integer(byte_array[:AMOUNT_OF_CLIENT_ID_BYTES])
+        amount_of_messages = byte_array[AMOUNT_OF_CLIENT_ID_BYTES]
         return client_id, amount_of_messages
 
     @classmethod
-    def from_socket(cls, sock, data_class):
+    def from_socket(cls, sock, data_class=None):
         header_bytes = recv_exactly(sock, HEADER_LEN)
         client_id, amount_of_messages = cls.get_header_fields_from_bytes(header_bytes)
+        if client_id == None or amount_of_messages == None:
+            return None
         instances = []
-        for _ in range(amount_of_messages):
-            instance = data_class.from_socket(sock)
-            if not instance:
-                return None
-            instances.append(instance)
+        if data_class:
+            for _ in range(amount_of_messages):
+                instance = data_class.from_socket(sock)
+                if not instance:
+                    return None
+                instances.append(instance)
         return Batch(client_id, instances)
     
+    @classmethod
+    def eof(cls, client_id):
+        return Batch(client_id, [])
+        
     def to_bytes(self):
         byte_array = integer_to_big_endian_byte_array(self.client_id, AMOUNT_OF_CLIENT_ID_BYTES)
         byte_array.extend(integer_to_big_endian_byte_array(len(self.messages), AMOUNT_OF_MESSAGES_BYTES))
