@@ -147,15 +147,8 @@ class QueryMessage():
             byte_array.extend(self.review_text.encode())  
         return byte_array
     
-    def get_attribute_hash(self, query_number):
-        if query_number == '2':
-            string_to_hash =  ','.join(self.authors)
-        else:
-            string_to_hash = self.title
-            
-        hash_object = hashlib.sha256(string_to_hash.lower().encode())
-        hash_int = int(hash_object.hexdigest(), 16)
-        return hash_int
+    def get_attribute_to_hash(self, attribute):
+        return str(getattr(self, attribute))
 
     def contains_category(self, category):
         if not self.categories:

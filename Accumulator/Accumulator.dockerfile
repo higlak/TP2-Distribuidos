@@ -3,8 +3,13 @@ FROM rabbitmq:latest
 # Instalar Python 3 y pika
 RUN apt-get update && apt-get install -y python3
 RUN apt-get update && apt-get install -y python3-pika
-RUN apt-get update && apt-get install -y python3-pip
-RUN pip install textblob
+
+ARG TEXTBLOB
+ENV TEXTBLOB=${TEXTBLOB}
+
+COPY ./Accumulator/textblob.sh /root/textblob.sh
+RUN chmod +x /root/textblob.sh
+RUN /root/textblob.sh
 
 COPY ./CommunicationMiddleware /root/CommunicationMiddleware
 COPY ./Workers /root/Workers

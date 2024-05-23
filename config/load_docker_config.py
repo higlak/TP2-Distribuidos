@@ -7,11 +7,12 @@ GATEWAY_CONFIG_FILE = "config/config_gateway.ini"
 CLIENT_CONFIG_FILE = "config/config_client.ini"
 FILTER_TYPE = 'filter'
 ACCUMULATOR_TYPE = 'accumulator'
+REVIEW_TEXT_FIELD = 'review_text'
 FORWARD_TO_SEPARATOR = ','
 QUERY_POOL_SEPARATOR = '.'
 GATEWAY = 'Gateway'
 QUERIES = 5
-DISTRIBUTE_BY_DEFAULT = 'title'
+DISTRIBUTE_BY_DEFAULT = ''
 
 FILENAME = 'docker-compose-dev.yaml'
 RABBIT = """  rabbitmq:
@@ -66,18 +67,24 @@ class QueryConfig():
     
     def worker_amount_of_pool(self, pool_num):
       return self.query_pools[pool_num].worker_amount
+    
+    def pool_distribute_by(self, pool_num):
+      return self.query_pools[pool_num].distribute_by
 
     def to_docker_string(self, queries, eof_to_receive):
         result = ""
         for p, pool in enumerate(self.query_pools):
             for i in range(pool.worker_amount):
-                next_pool_workers = get_next_pool_workers(queries, pool.forward_to) 
+                next_pool_workers, shard_by = get_next_pool_foward_info(queries, pool.forward_to) 
                 worker_id = f"{self.query_number}.{pool.pool_number}.{i}"
                 result += f"""  {pool.worker_type}{worker_id}:
     build:
       context: ./
-      dockerfile: {pool.worker_type_dokerfile_path()}
-    restart: on-failure
+      dockerfile: {pool.worker_type_dokerfile_path()}\n"""
+                if pool.worker_type == ACCUMULATOR_TYPE and pool.worker_field == REVIEW_TEXT_FIELD:
+                  result += f"      args:"         
+                  result += f"\n        - TEXTBLOB=True\n"
+                result += f"""    restart: on-failure
     depends_on:
       - rabbitmq
     links: 
@@ -88,11 +95,11 @@ class QueryConfig():
       - EOF_TO_RECEIVE={eof_to_receive.get(f"{self.query_number}.{pool.pool_number}", 1)}
       - NEXT_POOL_WORKERS={next_pool_workers}
       - FORWARD_TO={pool.forward_to}
-      - DISTRIBUTE_BY={pool.distribute_by}
+      - SHARD_BY={shard_by}
       - WORKER_FIELD={pool.worker_field}
       - WORKER_VALUE={pool.worker_value}"""
                 if pool.worker_type == ACCUMULATOR_TYPE:
-                    result += f"\n      - ACCUMULATE_BY={pool.accumulate_by}"
+                  result += f"\n      - ACCUMULATE_BY={pool.accumulate_by}"
                 result += "\n\n"
                 
         return result
@@ -123,7 +130,7 @@ def process_gateway(queries, eof_to_receive, file):
   config = config["DEFAULT"]
   book_queries = config["BOOK_QUERIES"]
   review_queries = config["REVIEW_QUERIES"]
-  forward_to, next_pool_workers = get_forward_gateway(queries, book_queries, review_queries)
+  forward_to, next_pool_workers, shard_by = get_forward_gateway(queries, book_queries, review_queries)
   gateway_str = f"""  gateway:
     build:
       context: ./
@@ -139,6 +146,7 @@ def process_gateway(queries, eof_to_receive, file):
       - BOOK_QUERIES={config["BOOK_QUERIES"]}
       - REVIEW_QUERIES={config["REVIEW_QUERIES"]}
       - FORWARD_TO={forward_to}
+      - SHARD_BY={shard_by}
       - NEXT_POOL_WORKERS={next_pool_workers}
       - EOF_TO_RECEIVE={eof_to_receive[GATEWAY]}\n\n"""
   file.write(gateway_str)
@@ -156,19 +164,26 @@ def get_forward_gateway(queries, book_queries, review_queries):
     forward_to.append(f"{query_name}.0")
   forward_to = ",".join(forward_to)
 
-  return forward_to, get_next_pool_workers(queries, forward_to)
+  next_pool_workers, shard_by = get_next_pool_foward_info(queries, forward_to)
+  return forward_to, next_pool_workers, shard_by
     
-def get_next_pool_workers(queries, forward_to):
+def get_next_pool_foward_info(queries, forward_to):
   next_pools = forward_to.split(FORWARD_TO_SEPARATOR)
   next_pool_workers = []
+  shard_by = []
   for next_pool in next_pools:
     if next_pool == GATEWAY:
       next_pool_workers.append(str(1))
+      shard_by.append(DISTRIBUTE_BY_DEFAULT)
     else:
       query_num, pool_num = next_pool.split(QUERY_POOL_SEPARATOR)
-      worker_amount = queries[int(query_num)].worker_amount_of_pool(int(pool_num))
+      query = queries[int(query_num)]
+      worker_amount = query.worker_amount_of_pool(int(pool_num))
       next_pool_workers.append(str(worker_amount))
-  return ','.join(next_pool_workers)
+      pool_shard_by = query.pool_distribute_by(int(pool_num))
+      shard_by.append(pool_shard_by)
+
+  return ','.join(next_pool_workers), ','.join(shard_by)
 
 def write_queries(file, queries, eof_to_receive):
    for query in queries.values():
