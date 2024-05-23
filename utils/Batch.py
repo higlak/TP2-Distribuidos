@@ -1,21 +1,22 @@
-from utils.auxiliar_functions import integer_to_big_endian_byte_array, recv_exactly
+from utils.auxiliar_functions import integer_to_big_endian_byte_array, byte_array_to_big_endian_integer, recv_exactly, remove_bytes
 from utils.QueryMessage import QueryMessage, query_result_headers
 import unittest
 from unittest import TestCase
 
+AMOUNT_OF_CLIENT_ID_BYTES = 4
 AMOUNT_OF_MESSAGES_BYTES = 1
+HEADER_LEN = AMOUNT_OF_CLIENT_ID_BYTES + AMOUNT_OF_MESSAGES_BYTES
 
 class Batch():
-    def __init__(self, messages):
+    def __init__(self, client_id, messages):
+        self.client_id = client_id
         self.messages = messages
     
     @classmethod
     def from_bytes(cls, byte_array):
-        if len(byte_array) == 0:
-            return None
-        amount_of_messages = byte_array[0]
+        client_id, amount_of_messages = cls.get_header_fields_from_bytes(byte_array)
         if amount_of_messages == 0:
-            return Batch([])
+            return Batch(client_id, [])
         byte_array = byte_array[1:]
         messages = []
         for _ in range(amount_of_messages):
@@ -23,24 +24,31 @@ class Batch():
                 break
             message = QueryMessage.from_bytes(byte_array)
             messages.append(message) 
-        return Batch(messages)
+        return Batch(client_id, messages)
     
     @classmethod
-    def from_socket(cls, sock, data_class):
-        amount_of_messages = recv_exactly(sock, AMOUNT_OF_MESSAGES_BYTES)
-        if amount_of_messages == None:
+    def get_header_fields_from_bytes(cls, byte_array):
+        if len(byte_array) < HEADER_LEN:
             return None
-        amount_of_messages = amount_of_messages[0]
+        client_id = byte_array_to_big_endian_integer(remove_bytes(byte_array, AMOUNT_OF_CLIENT_ID_BYTES))
+        amount_of_messages = byte_array[0]
+        return client_id, amount_of_messages
+
+    @classmethod
+    def from_socket(cls, sock, data_class):
+        header_bytes = recv_exactly(sock, HEADER_LEN)
+        client_id, amount_of_messages = cls.get_header_fields_from_bytes(header_bytes)
         instances = []
         for _ in range(amount_of_messages):
             instance = data_class.from_socket(sock)
             if not instance:
                 return None
             instances.append(instance)
-        return Batch(instances)
+        return Batch(client_id, instances)
     
     def to_bytes(self):
-        byte_array = integer_to_big_endian_byte_array(len(self.messages), AMOUNT_OF_MESSAGES_BYTES)
+        byte_array = integer_to_big_endian_byte_array(self.client_id, AMOUNT_OF_CLIENT_ID_BYTES)
+        byte_array.extend(integer_to_big_endian_byte_array(len(self.messages), AMOUNT_OF_MESSAGES_BYTES))
         for i, message in enumerate(self.messages):
             byte_array.extend(message.to_bytes())
         return byte_array
@@ -51,7 +59,7 @@ class Batch():
             worker_to_send = msg.get_attribute_hash(attribute) % amount_of_workers
             hashed_messages[worker_to_send] = hashed_messages.get(worker_to_send, []) + [msg]
         
-        return {w:Batch(messages) for w, messages in hashed_messages.items()}
+        return {w:Batch(self.client_id, messages) for w, messages in hashed_messages.items()}
     
     def keep_fields(self):
         new_messages = []
@@ -87,28 +95,33 @@ class TestBatch(TestCase):
         return QueryMessage(BOOK_MSG_TYPE, title='tiutlante')
 
     def test_expected_batch_bytes(self):
-        byte_array = bytearray([2])
+        byte_array = integer_to_big_endian_byte_array(0, AMOUNT_OF_CLIENT_ID_BYTES)
+        byte_array.append(2)
         byte_array.extend(self.test_book_message1().to_bytes())
         byte_array.extend(self.test_book_message2().to_bytes())
         return byte_array
+    
+    def test_expected_empty_batch_bytes(self):
+        byte_array = integer_to_big_endian_byte_array(0, AMOUNT_OF_CLIENT_ID_BYTES)
+        byte_array.append(0)
+        return byte_array
 
     def test_empty_batch_to_bytes(self):
-        batch = Batch([])
-        self.assertEqual(batch.to_bytes(), bytearray([0]))
+        batch = Batch(0, [])
+        self.assertEqual(batch.to_bytes(), self.test_expected_empty_batch_bytes())
 
     def test_empty_batch_from_bytes(self):
-        batch = Batch.from_bytes(bytearray([0]))
-        self.assertEqual(batch.to_bytes(), bytearray([0]))
+        batch = Batch.from_bytes(self.test_expected_empty_batch_bytes())
+        self.assertEqual(batch.to_bytes(), self.test_expected_empty_batch_bytes())
         
     def test_batch_to_bytes(self):
         batch_bytes = self.test_expected_batch_bytes()
-        batch = Batch([self.test_book_message1(), self.test_book_message2()])
+        batch = Batch(0, [self.test_book_message1(), self.test_book_message2()])
         self.assertEqual(batch.to_bytes(), batch_bytes)
 
     def test_batch_from_bytes(self):
-        batch_bytes = self.test_expected_batch_bytes()
-        batch = Batch.from_bytes(batch_bytes)
-        self.assertEqual(batch.to_bytes(), batch_bytes)
+        batch = Batch.from_bytes(self.test_expected_batch_bytes())
+        self.assertEqual(batch.to_bytes(), self.test_expected_batch_bytes())
 
 if __name__ == '__main__':
     from utils.QueryMessage import BOOK_MSG_TYPE
