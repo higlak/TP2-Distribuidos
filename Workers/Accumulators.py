@@ -77,7 +77,8 @@ class Accumulator(Worker, ABC):
         pass
 
     def get_final_results(self, client_id):
-        return [self.transform_to_result(msg) for msg in self.final_results(client_id)]
+        if client_id in self.client_contexts:
+            return [self.transform_to_result(msg) for msg in self.final_results(client_id)]
         
 
 class DecadeByAuthorAccumulator(Accumulator):

@@ -627,9 +627,8 @@ services:
       - PYTHONUNBUFFERED=1
       - BATCH_SIZE=25
       - QUERY_RESULTS_PATH=/data/
-      - QUERIES=1
+      - QUERIES=1,2,3,4,5
       - SERVER_PORT=12345
-      - A=test.csv
     volumes:
       - dataVolume:/data
 
