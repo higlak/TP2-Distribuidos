@@ -1,5 +1,5 @@
 import signal
-from multiprocessing import Process
+from multiprocessing import Process, Pipe
 from utils.NextPools import NextPools
 from utils.auxiliar_functions import get_env_list
 from GatewayInOut.GatewayIn import gateway_in_main
@@ -8,6 +8,10 @@ import socket
 import os
 
 QUERY_SEPARATOR = ","
+AMOUNT_OF_IDS = 2**32
+JOIN_HANDLE_POS = 1
+ID_POS = 0
+SERVER_SOCKET_TIMEOUT = 5
 
 class Gateway():
     def __init__(self, port, next_pools, eof_to_receive, book_query_numbers, review_query_numbers):
@@ -15,11 +19,17 @@ class Gateway():
         self.eof_to_receive = eof_to_receive 
         self.book_query_numbers = book_query_numbers 
         self.review_query_numbers = review_query_numbers
-        self.threads = []
+        self.client_handlers = {}
         self.server_socket = None
+        self.next_id = 0
+        
+        recv_conn, send_conn = Pipe(False)
+        self.gatewat_out_pipe = send_conn
+        self.gateway_out_handler = Process(target=gateway_out_main, args=[recv_conn, self.eof_to_receive]).start()
         
         signal.signal(signal.SIGTERM, self.handle_SIGTERM)
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.server_socket.settimeout(SERVER_SOCKET_TIMEOUT)
         self.server_socket.bind(('',port))
         self.server_socket.listen()
         
@@ -46,46 +56,55 @@ class Gateway():
         print("\n\n [Gateway] SIGTERM detected\n\n")
         self.signal_queue_in.put(True)
         self.signal_queue_out.put(True)
-        for thread in self.threads:
-            thread.terminate()
+        for client_handler in self.client_handlers.values():
+            client_handler[JOIN_HANDLE_POS].terminate()
+        self.gateway_out_handler.terminate()
         if self.server_socket:
             self.server_socket.close()
 
-    def handle_new_client(self):
-        self.threads.append(self.accept_client_receive_socket())
-        self.threads.append(self.accept_client_send_socket())
-        self.start_and_wait()
-    
-    def accept_client_receive_socket(self):
-        client_socket, addr = self.server_socket.accept()
+    def get_next_id(self):
+        id = self.next_id
+        self.next_id = (self.next_id + 1) % AMOUNT_OF_IDS
+        return id
+
+    def handle_new_client_connection(self):
+        try:
+            client_socket, addr = self.server_socket.accept()
+        except socket.timeout:
+            return
+        
         print(f"[Gateway] Client connected with address: {addr}")
-        gateway_in_thread = Process(target=gateway_in_main, args=[client_socket, self.next_pools, self.book_query_numbers, self.review_query_numbers])
-        return gateway_in_thread
+        if addr in self.client_handlers:
+            id = self.client_handlers[addr][ID_POS] 
+            self.gateway_out_pipe.send((id, client_socket))
+            self.client_handlers[addr][JOIN_HANDLE_POS].start()
+        else:
+            gateway_in_thread = Process(target=gateway_in_main, args=[client_socket, self.next_pools, self.book_query_numbers, self.review_query_numbers])
+            id = self.get_next_id()
+            self.client_handlers[addr] = (id, gateway_in_thread)
     
-    def accept_client_send_socket(self):
-        client_socket, addr = self.server_socket.accept()
-        print(f"[Gateway] Client connected with address: {addr}")
-        gateway_out_thread = Process(target=gateway_out_main, args=[client_socket, self.eof_to_receive])
-        return gateway_out_thread
-    
-    def start_and_wait(self):
-        for thread in self.threads:
-            thread.start()
-        for handle in self.threads:
-            handle.join()
+    def join_clients(self, blocking):
+        finished = []
+        for addr, client_handler in self.client_handlers.items():
+            if blocking or not client_handler[JOIN_HANDLE_POS].is_alive():
+                client_handler[JOIN_HANDLE_POS].join()
+                finished.append(addr)
+        for addr in finished:
+            del self.client_handlers[addr]
 
     def run(self):
         while True:
             try:
-                self.handle_new_client()
+                self.handle_new_client_connection()
+                self.join_clients(blocking=False)
             except Exception as e:
                 print("[Gateway] Socket disconnected \n", e)
                 break
-            print("[Gateway] Client disconnected. Waiting for new client...")
         
         self.close()
     
     def close(self):
+        self.join_clients(blocking=True)
         self.server_socket.close()
 
 def main():
