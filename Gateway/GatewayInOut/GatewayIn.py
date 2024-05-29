@@ -6,7 +6,7 @@ from utils.Batch import Batch
 from utils.Book import Book
 from utils.DatasetHandler import DatasetLine
 from utils.Review import Review
-from utils.auxiliar_functions import append_extend, recv_exactly, send_all
+from utils.auxiliar_functions import append_extend
 
 FIRST_POOL = 0
 
@@ -49,23 +49,6 @@ class GatewayIn():
 
     def recv_dataset_line_batch(self):
         return Batch.from_socket(self.socket, DatasetLine)
-        """
-        ammount_of_dataset_lines = recv_exactly(self.socket,1)
-        if ammount_of_dataset_lines == None:
-            return None
-        ammount_of_dataset_lines = ammount_of_dataset_lines[0]
-        if ammount_of_dataset_lines == 0:
-            print("[Gateway] EOF received")
-            return []
-        datasetlines = []
-        for _ in range(ammount_of_dataset_lines):
-            datasetline = DatasetLine.from_socket(self.socket)
-            if not datasetline:
-                print("[Gateway] Socket disconnected")
-                return None
-            datasetlines.append(datasetline)
-        return datasetlines
-        """
     
     def send_eof(self):
         return self.com.produce_to_all_group_members(Batch.eof(self.client_id).to_bytes())
