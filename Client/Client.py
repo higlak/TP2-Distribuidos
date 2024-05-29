@@ -1,7 +1,8 @@
 from multiprocessing import Process
-from utils.Batch import Batch
+from time import sleep
+from utils.Batch import AMOUNT_OF_CLIENT_ID_BYTES, Batch
 from utils.DatasetHandler import DatasetReader
-from utils.auxiliar_functions import get_env_list
+from utils.auxiliar_functions import get_env_list, send_all
 from ClientReadWriter.ClientWriter import ClientWriter
 from ClientReadWriter.ClientReader import ClientReader
 from queue import Queue, Empty
@@ -12,6 +13,7 @@ import signal
 
 STARTING_CLIENT_WAIT = 1
 MAX_ATTEMPTS = 6
+NO_CLIENT_ID = 2**(8*AMOUNT_OF_CLIENT_ID_BYTES) - 1
 
 def get_file_paths():
     if len(sys.argv) != 3:
@@ -53,10 +55,19 @@ class Client():
         return client
     
     def connect(self,  server_port):
-        send_socket, receive_socket = Client.connect_both_ways_to_gateway(server_port, self.signal_queue)
-        id = None
-        if send_socket and receive_socket:      
-            id = self.receive_id(send_socket)
+        send_socket = Client.connect_to_gateway(server_port, self.signal_queue, NO_CLIENT_ID)
+        if not send_socket:
+            return None, None, None
+        
+        id = self.receive_id(send_socket)
+        if id == None:
+            return None, None, None
+        
+        receive_socket = Client.connect_to_gateway(server_port, self.signal_queue, id)
+        if not receive_socket:
+            send_socket.close()
+            return None, None, None
+        
         return send_socket, receive_socket, id
 
     def create_read_writers(self, id, send_socket, receive_socket, queries, query_result_path, batch_size):
@@ -76,6 +87,7 @@ class Client():
     def receive_id(self, socket):
         batch = Batch.from_socket(socket)
         if batch:
+            print(f"[Client] Starting with client id: {batch.client_id}")
             return batch.client_id
         return None
 
@@ -86,19 +98,7 @@ class Client():
             thread.terminate()
 
     @classmethod
-    def connect_both_ways_to_gateway(cls, port, signal_queue):
-        send_socket = Client.connect_to_gateway(port, signal_queue)
-        if not send_socket:
-            return None, None
-        receive_socket = Client.connect_to_gateway(port, signal_queue)
-        if not receive_socket:
-            send_socket.close()
-            return None, None
-        return send_socket, receive_socket
-        
-
-    @classmethod
-    def connect_to_gateway(cls, port, signal_queue):
+    def connect_to_gateway(cls, port, signal_queue, id):
         i = STARTING_CLIENT_WAIT
         while True:
             try:
@@ -106,6 +106,8 @@ class Client():
                 client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 client_socket.connect(('gateway', port))
                 print("[Client] Client Connected to gateway")
+                batch = Batch(id, [])
+                send_all(client_socket, batch.to_bytes())
                 return client_socket
             except:
                 if i > 2**MAX_ATTEMPTS:

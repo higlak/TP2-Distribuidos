@@ -28,17 +28,10 @@ class GatewayIn():
 
     def start(self):
         try:
-            self.send_client_id()
             self.loop()
         except OSError:
             print(f"[GatewayIn {self.client_id}] Socket disconnected")
         self.close()
-
-    def send_client_id(self):
-        print(f"\n\npor mandar id{self.client_id}\n\n")
-        batch = Batch(self.client_id, [])
-        send_all(self.socket, batch.to_bytes())
-        print(f"\n\nMande\n\n")
 
     def loop(self):
         while True:

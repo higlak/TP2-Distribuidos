@@ -1,17 +1,19 @@
 import signal
 from multiprocessing import Process, Pipe
 from utils.NextPools import NextPools
-from utils.auxiliar_functions import get_env_list
+from utils.Batch import Batch, AMOUNT_OF_CLIENT_ID_BYTES
+from utils.auxiliar_functions import get_env_list, send_all
 from GatewayInOut.GatewayIn import gateway_in_main
 from GatewayInOut.GatewayOut import gateway_out_main
 import socket
 import os
 
 QUERY_SEPARATOR = ","
-AMOUNT_OF_IDS = 2**32
+AMOUNT_OF_IDS = 2**(8*AMOUNT_OF_CLIENT_ID_BYTES) - 1
 JOIN_HANDLE_POS = 1
 ID_POS = 0
 SERVER_SOCKET_TIMEOUT = 5
+NO_CLIENT_ID = AMOUNT_OF_IDS
 
 class Gateway():
     def __init__(self, port, next_pools, eof_to_receive, book_query_numbers, review_query_numbers):
@@ -55,7 +57,7 @@ class Gateway():
     def handle_SIGTERM(self, _signum, _frame):
         print("\n\n [Gateway] SIGTERM detected\n\n")
         for client_handler in self.client_handlers.values():
-            client_handler[JOIN_HANDLE_POS].terminate()
+            client_handler.terminate()
         self.gateway_out_handler.terminate()
         if self.server_socket:
             self.server_socket.close()
@@ -70,25 +72,42 @@ class Gateway():
             client_socket, addr = self.server_socket.accept()
         except socket.timeout:
             return
-        
-        print(f"[Gateway] Client connected with ip: {addr[0]}")
-        if addr[0] in self.client_handlers:
-            id = self.client_handlers[addr[0]][ID_POS] 
-            self.gateway_out_pipe.send((id, client_socket))
-            self.client_handlers[addr[0]][JOIN_HANDLE_POS].start()
+
+        client_id = self.rcv_client_id(client_socket)
+        if client_id == None:
+            return
+
+        if client_id == NO_CLIENT_ID:
+            client_id = self.send_next_client_id(client_socket)
+            gateway_in_handler = Process(target=gateway_in_main, args=[client_id, client_socket, self.next_pools, self.book_query_numbers, self.review_query_numbers])
+            self.client_handlers[client_id] = gateway_in_handler
         else:
-            id = self.get_next_id()
-            gateway_in_handler = Process(target=gateway_in_main, args=[id, client_socket, self.next_pools, self.book_query_numbers, self.review_query_numbers])
-            self.client_handlers[addr[0]] = (id, gateway_in_handler)
+            self.gateway_out_pipe.send((client_id, client_socket))
+            self.client_handlers[client_id].start()
+
+        print(f"[Gateway] Client {client_id} connected")
     
+    def send_next_client_id(self, sock):
+        id = self.get_next_id()
+        batch = Batch(id, [])
+        send_all(sock, batch.to_bytes())
+        print(f"[Gateway] Assigning client id {id}")
+        return id
+
+    def rcv_client_id(self, sock):
+        id_batch = Batch.from_socket(sock)
+        if id_batch:
+            return id_batch.client_id
+        return None
+
     def join_clients(self, blocking):
         finished = []
-        for addr, client_handler in self.client_handlers.items():
-            if (blocking or not client_handler[JOIN_HANDLE_POS].is_alive()) and client_handler[JOIN_HANDLE_POS].exitcode != None:
-                client_handler[JOIN_HANDLE_POS].join()
-                finished.append(addr)
-        for addr in finished:
-            del self.client_handlers[addr]
+        for id, client_handler in self.client_handlers.items():
+            if (blocking or not client_handler.is_alive()) and client_handler.exitcode != None:
+                client_handler.join()
+                finished.append(id)
+        for id in finished:
+            self.client_handlers.pop(id)
 
     def run(self):
         while True:
