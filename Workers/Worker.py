@@ -62,8 +62,9 @@ class Worker(ABC):
     def connect(self):
         communicator = Communicator.new(self.signal_queue, self.next_pools.worker_ids())
         if not communicator:
-            return None
+            return False
         self.communicator = communicator
+        return True
 
     def handle_SIGTERM(self, _signum, _frame):
         print(f"\n\n [Worker [{self.id}]] SIGTERM detected \n\n")
@@ -128,7 +129,7 @@ class Worker(ABC):
 
     def handle_eof(self, client_id):
         self.pending_eof[client_id] = self.pending_eof.get(client_id, self.eof_to_receive) - 1
-        print(f"[Worker {self.id}] Pending EOF to receive: {self.pending_eof}")
+        print(f"[Worker {self.id}] Pending EOF to receive for client {client_id}: {self.pending_eof[client_id]}")
         if not self.pending_eof[client_id]:
             print(f"[Worker {self.id}] No more eof to receive")
             if not self.send_final_results(client_id):

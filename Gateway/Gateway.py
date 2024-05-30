@@ -114,8 +114,8 @@ class Gateway():
             try:
                 self.handle_new_client_connection()
                 self.join_clients(blocking=False)
-            except Exception as e:
-                print("[Gateway] Socket disconnected \n", e)
+            except Exception:
+                print("[Gateway] Socket disconnected \n")
                 break
         
         self.close()

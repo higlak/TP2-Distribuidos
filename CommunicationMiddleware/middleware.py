@@ -1,4 +1,5 @@
 import hashlib
+from time import sleep
 import pika
 import pika.exceptions
 from queue import Queue, Empty
@@ -15,6 +16,7 @@ MIDDLEWARE_EXCEPTIONS = (pika.exceptions.AMQPError,
             pika.exceptions.StreamLostError,
             pika.exceptions.ChannelWrongStateError,
             OSError,
+            AttributeError,
             StopIteration)
 
 class ConsumerQueues():
@@ -138,13 +140,18 @@ class Communicator():
     def consume_message(self, queue_name):
         if self.connection.is_closed:
             return bytearray([])
-        if not self.consumer_queues.contains(queue_name):
-            self.set_consumer_queue(queue_name)
-        message, method = self.consumer_queues.recv_from(queue_name)
-        if message == None:
+        try:
+            if not self.consumer_queues.contains(queue_name):
+                self.set_consumer_queue(queue_name)
+            message, method = self.consumer_queues.recv_from(queue_name)
+            if message == None:
+                return bytearray([])
+            
+            self.channel.basic_ack(delivery_tag=method.delivery_tag)
+            return bytearray(message)
+        except MIDDLEWARE_EXCEPTIONS:
             return bytearray([])
-        self.channel.basic_ack(delivery_tag=method.delivery_tag)
-        return bytearray(message)
+
 
     def amount_of_producer_group(self, group):
         return len(self.producer_groups[group])

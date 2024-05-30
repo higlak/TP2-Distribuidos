@@ -15,7 +15,9 @@ class Filter(Worker):
         if id == None or eof_to_receive == None or not next_pools:
             return None
         filter = Filter(id, next_pools, eof_to_receive, field, valid_values, droping_fields)
-        filter.connect()
+        
+        if not filter.connect():
+            return None
         return filter
 
     def process_message(self, client_id, msg: QueryMessage):
