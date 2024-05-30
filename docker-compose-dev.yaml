@@ -599,12 +599,12 @@ services:
       - PORT=12345
       - BOOK_QUERIES=1,2,3,5
       - REVIEW_QUERIES=3,5
-      - FORWARD_TO=5.0,1.0,3.0,2.0
-      - SHARD_BY=title,,title,authors
-      - NEXT_POOL_WORKERS=2,2,4,2
+      - FORWARD_TO=5.0,2.0,1.0,3.0
+      - SHARD_BY=title,authors,,title
+      - NEXT_POOL_WORKERS=2,2,2,4
       - EOF_TO_RECEIVE=10
 
-  client:
+  client0:
     build:
       context: ./
       dockerfile: Client/Client.dockerfile
@@ -612,7 +612,35 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - BATCH_SIZE=25
-      - QUERY_RESULTS_PATH=/data/query_results
+      - QUERY_RESULTS_PATH=/data/
+      - QUERIES=1,2,3,4,5
+      - SERVER_PORT=12345
+    volumes:
+      - dataVolume:/data
+
+  client1:
+    build:
+      context: ./
+      dockerfile: Client/Client.dockerfile
+    restart: on-failure
+    environment:
+      - PYTHONUNBUFFERED=1
+      - BATCH_SIZE=25
+      - QUERY_RESULTS_PATH=/data/
+      - QUERIES=1,2,3,4,5
+      - SERVER_PORT=12345
+    volumes:
+      - dataVolume:/data
+
+  client2:
+    build:
+      context: ./
+      dockerfile: Client/Client.dockerfile
+    restart: on-failure
+    environment:
+      - PYTHONUNBUFFERED=1
+      - BATCH_SIZE=25
+      - QUERY_RESULTS_PATH=/data/
       - QUERIES=1,2,3,4,5
       - SERVER_PORT=12345
     volumes:
