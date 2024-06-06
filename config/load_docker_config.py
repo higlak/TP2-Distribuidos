@@ -197,15 +197,8 @@ def eof_to_receive(queries):
         eof_to_receive[next_to_send] = eof_to_receive.get(next_to_send, 0) + pool.worker_amount
   return eof_to_receive 
 
-def process_client(queries, port, file):
-  config = ConfigParser()
-  try:
-    config.read(CLIENT_CONFIG_FILE)
-  except:
-    print("No valid flename for client")
-    return False
-  config = config["DEFAULT"]
-  client_str = f"""  client:
+def process_client(queries, port, file, config, i):
+  client_str = f"""  client{i}:
     build:
       context: ./
       dockerfile: Client/Client.dockerfile
@@ -220,6 +213,20 @@ def process_client(queries, port, file):
       - dataVolume:/data\n\n"""
   file.write(client_str)
   return True
+  
+def process_clients(queries, port, file):
+  config = ConfigParser()
+  try:
+    config.read(CLIENT_CONFIG_FILE)
+  except:
+    print("No valid flename for client")
+    return False
+  config = config["DEFAULT"]
+  n_clients = int(config['AMOUNT_OF_CLIENTS'])
+  for i in range(n_clients):
+    if not process_client(queries, port, file, config, i):
+      return False
+  return True      
   
 def main():
 
@@ -244,7 +251,7 @@ def main():
     port = process_gateway(queries, eof, file)
     if not port:
       return
-    if not process_client(queries, port, file):
+    if not process_clients(queries, port, file):
       return      
     file.write(VOLUMES)
 

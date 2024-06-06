@@ -23,8 +23,8 @@ class ClientReader():
             self.send_all_from_dataset(BOOK_MSG_TYPE, self.book_reader)
             self.send_all_from_dataset(REVIEW_MSG_TYPE, self.review_reader)
             self.send_eof()
-        except OSError as r:
-            print(f"[ClientReader] Socket disconnected, {r}")
+        except OSError:
+            print(f"[ClientReader] Socket disconnected")
         self.close_readers()
 
     def send_all_from_dataset(self, object_type, reader):
