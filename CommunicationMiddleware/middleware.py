@@ -1,8 +1,11 @@
 import hashlib
 from time import sleep
 import pika
+import pika.channel, pika.connection
 import pika.exceptions
 from queue import Queue, Empty
+
+import pika.spec
 from utils.Batch import Batch
 
 STARTING_RABBIT_WAIT = 1
@@ -60,8 +63,9 @@ class ProducerGroup():
     
     def __repr__(self):
         return f"{self.producer_queues}"
-
+        
 class Communicator():
+        
     def __init__(self, connection, producer_groups={}, prefetch_count=1):
         self.connection = connection
         self.consumer_queues = ConsumerQueues()     
@@ -69,7 +73,8 @@ class Communicator():
         self.channel = self.connection.channel()
         self.channel.basic_qos(prefetch_count=prefetch_count)
         self.set_producer_queues()
-    
+        self.channel.confirm_delivery()
+
     @classmethod
     def new(cls, signal_queue: Queue, producer_groups={}, prefetch_count=1):
         i = STARTING_RABBIT_WAIT
@@ -93,10 +98,10 @@ class Communicator():
     def set_producer_queues(self):
         for members in self.producer_groups.values():
             for queue_name in members:
-                self.channel.queue_declare(queue=queue_name)
+                self.channel.queue_declare(queue=queue_name, durable=True)
 
     def set_consumer_queue(self, queue_name):
-        self.channel.queue_declare(queue=queue_name)
+        self.channel.queue_declare(queue=queue_name, durable=True)
         generator = self.channel.consume(queue=queue_name)
         self.consumer_queues.add_queue(queue_name, generator)
 
@@ -108,11 +113,16 @@ class Communicator():
             queue_name = group_to_send.next()
         else:
             queue_name = group_to_send.producer_queues[queue_pos]
-    
-        try:
-            self.channel.basic_publish(exchange="", body=message, routing_key=queue_name)
-        except MIDDLEWARE_EXCEPTIONS:
-            return False
+        
+        acked = False
+        while not acked:
+            try:
+                self.channel.basic_publish(exchange="", body=message, routing_key=queue_name)
+                acked = True 
+            except pika.exceptions.UnroutableError:
+                print("\n\nRabbit perdio un mensaje, reenviando\n\n")
+            except MIDDLEWARE_EXCEPTIONS:
+                return False 
         return True
     
     def produce_batch_of_messages(self, batch, group, shard_by=None):
