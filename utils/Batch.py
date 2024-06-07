@@ -90,47 +90,48 @@ class Batch():
     def __getitem__(self, index):
         return self.messages[index]
                  
-class TestBatch(TestCase):
-    def test_book_message1(self):
-        return QueryMessage(BOOK_MSG_TYPE, 
-                      year=1990, 
-                      mean_sentiment_polarity=0.8, 
-                      title='titulo', 
-                      authors=['autor1', 'autor2'], 
-                      review_text='review del texto')
-    
-    def test_book_message2(self):
-        return QueryMessage(BOOK_MSG_TYPE, title='tiutlante')
-
-    def test_expected_batch_bytes(self):
-        byte_array = integer_to_big_endian_byte_array(0, AMOUNT_OF_CLIENT_ID_BYTES)
-        byte_array.append(2)
-        byte_array.extend(self.test_book_message1().to_bytes())
-        byte_array.extend(self.test_book_message2().to_bytes())
-        return byte_array
-    
-    def test_expected_empty_batch_bytes(self):
-        byte_array = integer_to_big_endian_byte_array(0, AMOUNT_OF_CLIENT_ID_BYTES)
-        byte_array.append(0)
-        return byte_array
-
-    def test_empty_batch_to_bytes(self):
-        batch = Batch(0, [])
-        self.assertEqual(batch.to_bytes(), self.test_expected_empty_batch_bytes())
-
-    def test_empty_batch_from_bytes(self):
-        batch = Batch.from_bytes(self.test_expected_empty_batch_bytes())
-        self.assertEqual(batch.to_bytes(), self.test_expected_empty_batch_bytes())
-        
-    def test_batch_to_bytes(self):
-        batch_bytes = self.test_expected_batch_bytes()
-        batch = Batch(0, [self.test_book_message1(), self.test_book_message2()])
-        self.assertEqual(batch.to_bytes(), batch_bytes)
-
-    def test_batch_from_bytes(self):
-        batch = Batch.from_bytes(self.test_expected_batch_bytes())
-        self.assertEqual(batch.to_bytes(), self.test_expected_batch_bytes())
 
 if __name__ == '__main__':
     from utils.QueryMessage import BOOK_MSG_TYPE
+
+    class TestBatch(TestCase):
+        def test_book_message1(self):
+            return QueryMessage(BOOK_MSG_TYPE, 
+                        year=1990, 
+                        mean_sentiment_polarity=0.8, 
+                        title='titulo', 
+                        authors=['autor1', 'autor2'], 
+                        review_text='review del texto')
+        
+        def test_book_message2(self):
+            return QueryMessage(BOOK_MSG_TYPE, title='tiutlante')
+
+        def test_expected_batch_bytes(self):
+            byte_array = integer_to_big_endian_byte_array(0, AMOUNT_OF_CLIENT_ID_BYTES)
+            byte_array.append(2)
+            byte_array.extend(self.test_book_message1().to_bytes())
+            byte_array.extend(self.test_book_message2().to_bytes())
+            return byte_array
+        
+        def test_expected_empty_batch_bytes(self):
+            byte_array = integer_to_big_endian_byte_array(0, AMOUNT_OF_CLIENT_ID_BYTES)
+            byte_array.append(0)
+            return byte_array
+
+        def test_empty_batch_to_bytes(self):
+            batch = Batch(0, [])
+            self.assertEqual(batch.to_bytes(), self.test_expected_empty_batch_bytes())
+
+        def test_empty_batch_from_bytes(self):
+            batch = Batch.from_bytes(self.test_expected_empty_batch_bytes())
+            self.assertEqual(batch.to_bytes(), self.test_expected_empty_batch_bytes())
+            
+        def test_batch_to_bytes(self):
+            batch_bytes = self.test_expected_batch_bytes()
+            batch = Batch(0, [self.test_book_message1(), self.test_book_message2()])
+            self.assertEqual(batch.to_bytes(), batch_bytes)
+
+        def test_batch_from_bytes(self):
+            batch = Batch.from_bytes(self.test_expected_batch_bytes())
+            self.assertEqual(batch.to_bytes(), self.test_expected_batch_bytes())
     unittest.main()
