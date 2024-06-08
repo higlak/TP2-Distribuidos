@@ -1,14 +1,15 @@
 from abc import ABC, abstractmethod
 from enum import IntEnum
 from utils.auxiliar_functions import integer_to_big_endian_byte_array, byte_array_to_big_endian_integer, remove_bytes
+import io
 
 STRING_LENGTH_BYTES = 1
 NUM_BYTES = 4
 LOG_TYPE_BYTES = 1
 LEN_LIST_BYTES = 1
 
-END_OF_FILE_POS = 2
-CURRENT_FILE_POS = 1        
+END_OF_FILE_POS = io.SEEK_END
+CURRENT_FILE_POS = io.SEEK_END 
     
 class LogReadWriter():
     def __init__(self, file):
@@ -260,7 +261,7 @@ if __name__ == '__main__':
     from unittest import TestCase
 
     from io import BytesIO
-
+    
     class TestLog(TestCase):
         def get_mock_file(self):
             logs_bytes = ChangedContextStringNum("a",1).get_log_bytes()
