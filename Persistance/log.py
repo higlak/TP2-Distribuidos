@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
 from enum import IntEnum
+import struct
+from Persistance.storage_errors import KeysMustBeEqualToValuesOr0
 from utils.auxiliar_functions import integer_to_big_endian_byte_array, byte_array_to_big_endian_integer, remove_bytes
 import io
 
@@ -7,10 +9,12 @@ STRING_LENGTH_BYTES = 1
 NUM_BYTES = 4
 LOG_TYPE_BYTES = 1
 LEN_LIST_BYTES = 1
+FLOAT_BYTES = 4
+AMOUNT_OF_CONTEXT_ENTRY_BYTES = 2
 
 END_OF_FILE_POS = io.SEEK_END
-CURRENT_FILE_POS = io.SEEK_END 
-    
+CURRENT_FILE_POS = io.SEEK_CUR
+
 class LogReadWriter():
     def __init__(self, file):
         self.file = file
@@ -58,7 +62,7 @@ class LogType(IntEnum):
         if len(log_type_bytes) == 0:
             return None
         log_type = LogType(byte_array_to_big_endian_integer(log_type_bytes))
-        file.seek(-LOG_TYPE_BYTES, pos)
+        file.seek(-LOG_TYPE_BYTES, CURRENT_FILE_POS)
         return log_type
 
 class Log(ABC):
@@ -74,9 +78,9 @@ class Log(ABC):
     @classmethod
     def get_log_subclass(self, log_type):
         switch = {
-            LogType.ChangedContextStringNum: ChangedContextStringNum,
-            LogType.ChangedContextStringString: ChangedContextStringString,
-            LogType.ChangedContextStringListU16: ChangedContextStringListU16,
+            LogType.ChangedContextStringNum: ChangeContextFloat,
+            LogType.ChangedContextStringString: ChangeContextFloatU32,
+            LogType.ChangedContextStringListU16: ChangeContextListU16,
             LogType.FinishedWriting: FinishedWriting,
             LogType.SentBatch: SentBatch,
             LogType.AckedBatch: AckedBatch,
@@ -117,54 +121,57 @@ class NoArgsLog(Log, ABC):
     def params_eq(self, other):
         return True
 
-class ChangedContextStringNum(Log):
-    def __init__(self, string, num):
+class ChangeContextFloat(Log):
+    def __init__(self, key, num_float):
         self.log_type = LogType.ChangedContextStringNum
-        self.string = string
+        self.key = key
+        self.num_float = num_float
+
+    def get_log_arg_bytes(self):
+        byte_array = get_string_byte_array(self.key)
+        byte_array.extend(get_float_byte_array(self.num_float))
+        return byte_array
+    
+    @classmethod
+    def from_file_pos(cls, file, pos):
+        num_float = float_from_file_pos(file, pos)
+        string = string_from_file_pos(file, CURRENT_FILE_POS)
+        return cls(string, num_float)
+    
+    def params_eq(self, other):
+        return self.key == other.key and get_float_byte_array(self.num_float) == get_float_byte_array(other.num_float)
+    
+class ChangeContextFloatU32(Log):
+    def __init__(self, key, num_float, num):
+        self.log_type = LogType.ChangedContextStringString
+        self.key = key
+        self.num_float = num_float
         self.num = num
 
     def get_log_arg_bytes(self):
-        byte_array = get_string_byte_array(self.string)
-        byte_array.extend(integer_to_big_endian_byte_array(self.num, NUM_BYTES))
+        byte_array = get_string_byte_array(self.key)
+        byte_array.extend(get_float_byte_array(self.num_float))
+        byte_array.extend(get_number_byte_array(self.num))
         return byte_array
-    
+
     @classmethod
     def from_file_pos(cls, file, pos):
         num = numbers_from_file_pos(file, pos, 1)[0]
-        string = string_from_file_pos(file, CURRENT_FILE_POS)
-        return cls(string, num)
+        num_float = float_from_file_pos(file, CURRENT_FILE_POS)
+        key = string_from_file_pos(file, CURRENT_FILE_POS)
+        return cls(key, num_float, num)
     
     def params_eq(self, other):
-        return self.string == other.string and self.num == other.num
-    
-class ChangedContextStringString(Log):
-    def __init__(self, string1, string2):
-        self.log_type = LogType.ChangedContextStringString
-        self.string1 = string1
-        self.string2 = string2
+        return self.key == other.key and get_float_byte_array(self.num_float) == get_float_byte_array(other.num_float) and self.num == other.num
 
-    def get_log_arg_bytes(self):
-        byte_array = get_string_byte_array(self.string1)
-        byte_array.extend(get_string_byte_array(self.string2))
-        return byte_array
-
-    @classmethod
-    def from_file_pos(cls, file, pos):
-        string1 = string_from_file_pos(file, pos)
-        string2 = string_from_file_pos(file, CURRENT_FILE_POS)
-        return cls(string1,string2)
-    
-    def params_eq(self, other):
-        return self.string1 == other.string1 and self.string2 == other.string2
-
-class ChangedContextStringListU16(Log):
-    def __init__(self, string, numbers):
+class ChangeContextListU16(Log):
+    def __init__(self, key, numbers):
         self.log_type = LogType.ChangedContextStringListU16
-        self.string = string
+        self.key = key
         self.numbers = numbers
 
     def get_log_arg_bytes(self):
-        byte_array = get_string_byte_array(self.string)
+        byte_array = get_string_byte_array(self.key)
         for u16 in self.numbers:
             byte_array.extend(integer_to_big_endian_byte_array(u16, NUM_BYTES))
         byte_array.extend(integer_to_big_endian_byte_array(len(self.numbers), LEN_LIST_BYTES))
@@ -180,7 +187,7 @@ class ChangedContextStringListU16(Log):
         return cls(string, numbers)
     
     def params_eq(self, other):
-        return self.string == other.string and self.numbers == other.numbers
+        return self.key == other.key and self.numbers == other.numbers
         
 class FinishedWriting(NoArgsLog):
     def __init__(self):
@@ -195,24 +202,24 @@ class AckedBatch(NoArgsLog):
         self.log_type = LogType.AckedBatch
     
 class SentFinalResult(Log):
-    def __init__(self, string, client_id):
+    def __init__(self, key, client_id):
         self.log_type = LogType.SentFinalResult
-        self.string = string
+        self.key = key
         self.client_id = client_id
 
     def get_log_arg_bytes(self):
-        byte_array = get_string_byte_array(self.string)
-        byte_array.extend(integer_to_big_endian_byte_array(self.client_id, NUM_BYTES))
+        byte_array = get_string_byte_array(self.key)
+        byte_array.extend(get_number_byte_array(self.client_id))
         return byte_array
     
     @classmethod
     def from_file_pos(cls, file, pos):
         client_id = numbers_from_file_pos(file, pos, 1)[0]
-        string = string_from_file_pos(file, CURRENT_FILE_POS)
-        return cls(string, client_id)
+        key = string_from_file_pos(file, CURRENT_FILE_POS)
+        return cls(key, client_id)
     
     def params_eq(self, other):
-        return self.string == other.string and self.client_id == other.client_id
+        return self.key == other.key and self.client_id == other.client_id
 
 class FinishedSendingResultsOfClient(Log):
     def __init__(self, client_id):
@@ -220,7 +227,7 @@ class FinishedSendingResultsOfClient(Log):
         self.client_id = client_id
     
     def get_log_arg_bytes(self):
-        return integer_to_big_endian_byte_array(self.client_id, NUM_BYTES)
+        return get_number_byte_array(self.client_id)
     
     @classmethod
     def from_file_pos(cls, file, pos):
@@ -250,6 +257,25 @@ def numbers_from_file_pos(file, pos, amount):
     file.seek(-NUM_BYTES*amount, pos)
     return numbers
 
+def float_from_file_pos(file, pos):
+    file.seek(-FLOAT_BYTES, pos)
+    num = struct.unpack('f', file.read(FLOAT_BYTES))[0]
+    file.seek(-FLOAT_BYTES, pos)
+    return num 
+
+def get_number_byte_array(num):
+    return integer_to_big_endian_byte_array(num, NUM_BYTES)
+
+def get_u32list_byte_array(numbers):
+    byte_array = bytearray(b"")
+    for num in numbers:
+        byte_array.extend(get_number_byte_array(num))
+    byte_array.extend(integer_to_big_endian_byte_array(len(numbers), LEN_LIST_BYTES))
+    return byte_array
+
+def get_float_byte_array(num):
+    return bytearray(struct.pack('f',num))
+
 def get_string_byte_array(string):
     string = string[:2**(8*STRING_LENGTH_BYTES)]
     byte_array = bytearray(string.encode())
@@ -259,14 +285,13 @@ def get_string_byte_array(string):
 if __name__ == '__main__':
     import unittest
     from unittest import TestCase
-
     from io import BytesIO
     
     class TestLog(TestCase):
         def get_mock_file(self):
-            logs_bytes = ChangedContextStringNum("a",1).get_log_bytes()
-            logs_bytes.extend(ChangedContextStringString("a", "a").get_log_bytes())
-            logs_bytes.extend(ChangedContextStringListU16("a", [256, 1]).get_log_bytes())
+            logs_bytes = ChangeContextFloat("a",1.1).get_log_bytes()
+            logs_bytes.extend(ChangeContextFloatU32("a", 1.1, 1).get_log_bytes())
+            logs_bytes.extend(ChangeContextListU16("a", [256, 1]).get_log_bytes())
             logs_bytes.extend(FinishedWriting().get_log_bytes())
             logs_bytes.extend(SentBatch().get_log_bytes())
             logs_bytes.extend(AckedBatch().get_log_bytes())
@@ -277,9 +302,10 @@ if __name__ == '__main__':
 
         def test_log_to_bytes(self):
             str_bytes = list("a".encode())
-            self.assertEqual(ChangedContextStringNum("a",1).get_log_bytes(), bytearray(str_bytes + [1] + [0,0,0,1,0]))
-            self.assertEqual(ChangedContextStringString("a", "a").get_log_bytes(), bytearray(str_bytes + [1] + str_bytes + [1] + [1]))
-            self.assertEqual(ChangedContextStringListU16("a", [256, 1]).get_log_bytes(), bytearray(str_bytes + [1] + [0,0,1,0,0,0,0,1,2,2]))
+            float_bytes = list(get_float_byte_array(1.1))
+            self.assertEqual(ChangeContextFloat("a",1.1).get_log_bytes(), bytearray(str_bytes + [1] + float_bytes + [0]))
+            self.assertEqual(ChangeContextFloatU32("a", 1.1, 1).get_log_bytes(), bytearray(str_bytes + [1] + float_bytes + [0,0,0,1] + [1]))
+            self.assertEqual(ChangeContextListU16("a", [256, 1]).get_log_bytes(), bytearray(str_bytes + [1] + [0,0,1,0,0,0,0,1,2,2]))
             self.assertEqual(FinishedWriting().get_log_bytes(), bytearray([3]))
             self.assertEqual(SentBatch().get_log_bytes(), bytearray([4]))
             self.assertEqual(AckedBatch().get_log_bytes(), bytearray([5]))
@@ -290,9 +316,9 @@ if __name__ == '__main__':
         def test_write_logs(self):
             mock_file = BytesIO(b"")
             logger = LogReadWriter(mock_file)
-            logger.log(ChangedContextStringNum("a",1))
-            logger.log(ChangedContextStringString("a", "a"))
-            logger.log(ChangedContextStringListU16("a", [256, 1]))
+            logger.log(ChangeContextFloat("a",1.1))
+            logger.log(ChangeContextFloatU32("a", 1.1, 1))
+            logger.log(ChangeContextListU16("a", [256, 1]))
             logger.log(FinishedWriting())
             logger.log(SentBatch())
             logger.log(AckedBatch())
@@ -316,8 +342,8 @@ if __name__ == '__main__':
             self.assertEqual(AckedBatch(), logger.read_curr_log())
             self.assertEqual(SentBatch(), logger.read_curr_log())
             self.assertEqual(FinishedWriting(), logger.read_curr_log())
-            self.assertEqual(ChangedContextStringListU16("a", [256, 1]), logger.read_curr_log())
-            self.assertEqual(ChangedContextStringString("a", "a"), logger.read_curr_log())
-            self.assertEqual(ChangedContextStringNum("a",1), logger.read_curr_log())
+            self.assertEqual(ChangeContextListU16("a", [256, 1]), logger.read_curr_log())
+            self.assertEqual(ChangeContextFloatU32("a", 1.1, 1), logger.read_curr_log())
+            self.assertEqual(ChangeContextFloat("a", 1.1), logger.read_curr_log())
 
     unittest.main()

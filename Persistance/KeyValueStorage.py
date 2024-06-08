@@ -1,11 +1,12 @@
 from abc import ABC, abstractmethod
 import struct
+from Persistance.storage_errors import *
 from utils.auxiliar_functions import integer_to_big_endian_byte_array, byte_array_to_big_endian_integer, remove_bytes
 import io
 
-#lista de u32, u16
+#lista de u32
 #u32 float
-#float 4bytes
+#float 
 #u32 float
 #float
 
@@ -16,15 +17,6 @@ FIXED_STR_LEN = 128
 U32_BYTES = 4
 FIXED_FLOAT_BYTES = 4
 STR_PADDING = bytes([0xff])
-
-class UnsupportedType(Exception):
-    pass
-
-class TypeDoesNotMatchSetType(Exception):
-    pass
-
-class InvalidFile(Exception):
-    pass
 
 class StorableTypes(ABC):
     @abstractmethod
@@ -137,7 +129,7 @@ class FixedFloat(StorableTypes):
 
     @classmethod
     def from_bytes(self, byte_array):
-        return FixedFloat(struct.unpack('f', byte_array))
+        return FixedFloat(struct.unpack('f', byte_array)[0])
 
     @classmethod
     def size(cls):
@@ -210,8 +202,8 @@ class KeyValueStorage():
         self.file.write(byte_array)
 
     def store(self, key, values):
-        if len(values) != len(self.value_types):
-            raise TypeDoesNotMatchSetType
+        if (len(values) != len(self.value_types)) and len(values) != 0:
+            raise KeysMustBeEqualToValuesOr0
         converted_values = []
         for value, value_type in zip(values, self.value_types):
             converted_values.append(value_type(value))
