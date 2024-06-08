@@ -1,5 +1,6 @@
 from .Worker import Worker
 from utils.QueryMessage import QueryMessage, CATEGORIES_FIELD, YEAR_FIELD, TITLE_FIELD, REVIEW_MSG_TYPE
+from Persistance.log import ChangeContextNoArgs
 
 class Filter(Worker):
     def __init__(self, id, next_pools, eof_to_receive, field, valid_values, droping_fields):
@@ -20,6 +21,11 @@ class Filter(Worker):
             return None
         return filter
 
+    def dump_context_to_disc(self):
+        self.logger.log(ChangeContextNoArgs())
+        #dump context
+        pass
+    
     def process_message(self, client_id, msg: QueryMessage):
         self.filtered_client_books[client_id] = self.filtered_client_books.get(client_id, set())
         if msg.msg_type == REVIEW_MSG_TYPE and msg.title in self.filtered_client_books[client_id]:

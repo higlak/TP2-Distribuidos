@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 import signal
 
 from CommunicationMiddleware.middleware import Communicator
+from Persistance.log import *
 from utils.Batch import Batch
 from utils.auxiliar_functions import append_extend
 from utils.QueryMessage import query_to_query_result
@@ -11,6 +12,7 @@ from utils.NextPools import NextPools, GATEWAY_QUEUE_NAME
 from queue import Queue
 
 ID_SEPARATOR = '.'
+LOG_PATH = './log.bin'
 BATCH_SIZE = 25
 
 class Worker_ID():
@@ -43,6 +45,7 @@ class Worker(ABC):
         self.pending_eof = {}
         self.signal_queue = Queue()
         self.communicator = None
+        self.log = LogReadWriter.new(LOG_PATH)
         signal.signal(signal.SIGTERM, self.handle_SIGTERM)
         
     @classmethod
@@ -108,6 +111,8 @@ class Worker(ABC):
             result = self.process_message(batch.client_id, message)
             if result:
                 append_extend(results, result)
+        # self.dump_context_changes
+        # self.dump
         return Batch(batch.client_id, results)
     
     def receive_message(self):
@@ -141,6 +146,20 @@ class Worker(ABC):
             self.remove_client(client_id)
         return True
 
+    @abstractmethod
+    def dump_context_to_disc():
+        pass
+
+    def dump_metadata_to_disk(self, client_id):
+        self.log.log(ChangeMetadata(client_id, self.pending_eof[client_id]))
+        #dump metadata
+        pass
+    
+    def dump_to_disk(self, client_id):
+        #self.dump_context_to_disk()
+        self.dump_metadata_to_disk(client_id)
+        pass
+    
     def loop(self):
         while True:
             batch_bytes = self.receive_message()
@@ -154,6 +173,7 @@ class Worker(ABC):
                     break
             else:
                 result_batch = self.process_batch(batch)
+                self.dump_to_disk(batch.client_id)
                 if not result_batch.is_empty():
                     if not self.send_batch(result_batch):
                         print(f"[Worker {self.id}] Disconnected from MOM, while sending_message")

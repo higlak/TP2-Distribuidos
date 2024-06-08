@@ -59,6 +59,10 @@ class Accumulator(Worker, ABC):
     def get_new_context(cls):
         pass
 
+    @abstractmethod
+    def dump_context_to_disc():
+        pass
+
     def remove_client_context(self, client_id):
         if client_id in self.client_contexts:
             self.client_contexts.pop(client_id)
