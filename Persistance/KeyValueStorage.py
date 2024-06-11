@@ -10,12 +10,9 @@ import io
 #u32 float
 #float
 
-MAX_LEN_LIST = 10
+U32_BYTES = 4
 LEN_LIST_BYTES = 1
 STARTING_FILE_POS = io.SEEK_SET
-FIXED_STR_LEN = 128
-U32_BYTES = 4
-FIXED_FLOAT_BYTES = 4
 STR_PADDING = bytes([0xff])
 
 class StorableTypes(ABC):
@@ -31,7 +28,7 @@ class StorableTypes(ABC):
     def from_types(t):
         switch = {
             str: FixedStr,
-            int: U32,
+            int: FixedInt,
             (list, int): FixedU32List,
             float: FixedFloat
         }
@@ -39,11 +36,6 @@ class StorableTypes(ABC):
         if storable_t == None:
             raise UnsupportedType(f"{t.__name__} not supported")
         return switch[t]
-    
-    @classmethod
-    @abstractmethod
-    def size(cls):
-        pass
 
     def __eq__(self, other):
         if type(self) != type(other):
@@ -54,51 +46,53 @@ class StorableTypes(ABC):
         return hash(self.value)
 
 class FixedStr(StorableTypes):
-    def __init__(self, string):
+    def __init__(self, string, size):
         if not isinstance(string, str):
             raise TypeDoesNotMatchSetType
         self.value = string
+        self.size = size
     
     def to_bytes(self):
-        return bytearray(self.value.encode()).ljust(FIXED_STR_LEN, STR_PADDING)
+        return bytearray(self.value.encode()).ljust(self.size, STR_PADDING)
     
     @classmethod
     def from_bytes(self, byte_array):
-        return FixedStr(byte_array.strip(STR_PADDING).decode())
+        return FixedStr(byte_array.strip(STR_PADDING).decode(), len(byte_array))
+    
+    def __str__(self) -> str:
+        return self.value
+    
+    def __repr__(self):
+        return self.value
+        
 
-    @classmethod
-    def size(cls):
-        return FIXED_STR_LEN
-
-class U32(StorableTypes):
-    def __init__(self, num):
+class FixedInt(StorableTypes):
+    def __init__(self, num, size):
         if not isinstance(num, int):
             raise TypeDoesNotMatchSetType
         self.value = num
+        self.size = size
 
     def to_bytes(self):
-        return integer_to_big_endian_byte_array(self.value, U32_BYTES)
+        return integer_to_big_endian_byte_array(self.value, self.size)
 
     @classmethod
     def from_bytes(self, byte_array):
-        return U32(byte_array_to_big_endian_integer(byte_array))
-
-    @classmethod
-    def size(cls):
-        return U32_BYTES
+        return FixedInt(byte_array_to_big_endian_integer(byte_array), len(byte_array))
     
 class FixedU32List(StorableTypes):
-    def __init__(self, numbers):
+    def __init__(self, numbers, size):
         if not isinstance(numbers, list):
             raise TypeDoesNotMatchSetType
         for num in numbers:
             if not isinstance(num, int):
                 raise TypeDoesNotMatchSetType
-        self.value = numbers[:MAX_LEN_LIST]
+        self.value = numbers[:size]
+        self.size = size
 
     def to_bytes(self):
         byte_array = bytearray(integer_to_big_endian_byte_array(len(self.value), LEN_LIST_BYTES))
-        numbers = self.value + [0] * (MAX_LEN_LIST - len(self.value))
+        numbers = self.value + [0] * (self.size - len(self.value))
         for num in numbers:
             byte_array.extend(integer_to_big_endian_byte_array(num, U32_BYTES))
         return byte_array
@@ -113,50 +107,57 @@ class FixedU32List(StorableTypes):
             else:
                 break
         return FixedU32List(numbers)
-
-    @classmethod
-    def size(cls):
-        return MAX_LEN_LIST * U32_BYTES
     
+"""
+Se le puede unicamente pasar '4' u '8' como size
+"""
 class FixedFloat(StorableTypes):
-    def __init__(self, number):
+    def __init__(self, number, size):
         if not isinstance(number, float):
             raise TypeDoesNotMatchSetType
         self.value = number
+        if size == 4:
+            self.size = 'f'
+        elif size == 8:
+            self.size = 'd'
+        else:
+            raise UnsupportedType
 
     def to_bytes(self):
-        return bytearray(struct.pack('f',self.value))
+        return bytearray(struct.pack(self.size,self.value))
 
     @classmethod
     def from_bytes(self, byte_array):
-        return FixedFloat(struct.unpack('f', byte_array)[0])
-
-    @classmethod
-    def size(cls):
-        return FIXED_FLOAT_BYTES
+        return FixedFloat(struct.unpack(self.size, byte_array)[0])
 
 class KeyValueStorage():
-    def __init__(self, file, key_type, value_types):
+    def __init__(self, file, key_type, fixed_key_size, value_types, values_fixed_size):
         self.value_types = []
+        self.value_sizes = values_fixed_size
         self.key_type = StorableTypes.from_types(key_type)
+        self.fixed_key_size = fixed_key_size
         self.key_pos = {}
         self.next_pos = 0
         self.file = file
-        self.entry_size = self.key_type.size()
+        self.entry_size = self.fixed_key_size
 
         for t in value_types:
             self.value_types.append(StorableTypes.from_types(t))
-        for value_type in self.value_types:
-            self.entry_size += value_type.size()
+        for value_size in self.value_sizes:
+            self.entry_size += value_size
         
     @classmethod
-    def new(cls, path, key_type, value_types):
+    def new(cls, path, key_type, fixed_key_size, value_types, values_fixed_size):
         try:
+            file = open(path, 'rb+')
+        except FileNotFoundError:
             file = open(path, 'wb+')
-            storage = cls(file, key_type, value_types)
-            return storage, storage.get_all_items()
-        except:
+        except OSError as e:
+            print(f"Error Opening Storage: {e}")
             return None, None
+        
+        storage = cls(file, key_type, fixed_key_size, value_types, values_fixed_size)
+        return storage, storage.get_all_entries()
 
     def get_entry(self):
         byte_array = bytearray(self.file.read(self.entry_size))
@@ -164,11 +165,13 @@ class KeyValueStorage():
             return None
         if len(byte_array) < self.entry_size:
             raise InvalidFile 
-        key = self.key_type.from_bytes(remove_bytes(byte_array, self.key_type.size()))
-        entry = (key, [])
-        for t in self.value_types:
-            entry[1].append(t.from_bytes(remove_bytes(byte_array, t.size())).value)
-        return entry
+        key = self.key_type.from_bytes(remove_bytes(byte_array, self.fixed_key_size))
+        values = []
+        for value_type, value_size in zip(self.value_types, self.value_sizes):
+            values.append(value_type.from_bytes(remove_bytes(byte_array, value_size)).value)
+        if len(values) == 1:
+            return key, values[0]
+        return key, values
 
     def get_all_entries(self):
         self.file.seek(STARTING_FILE_POS)
@@ -188,7 +191,7 @@ class KeyValueStorage():
         return self.entry_size * self.key_pos[key]
 
     def get_values_pos(self, key):
-        return self.get_key_pos(key) + self.key_type.size()
+        return self.get_key_pos(key) + self.fixed_key_size
 
     def write_key(self, key):
         self.file.seek(self.get_key_pos(key), STARTING_FILE_POS)
@@ -202,13 +205,15 @@ class KeyValueStorage():
         self.file.write(byte_array)
 
     def store(self, key, values):
+        if type(values) != list:
+            values = [values]
         if (len(values) != len(self.value_types)) and len(values) != 0:
             raise KeysMustBeEqualToValuesOr0
         converted_values = []
-        for value, value_type in zip(values, self.value_types):
-            converted_values.append(value_type(value))
+        for value, value_type, value_size in zip(values, self.value_types, self.value_sizes):
+            converted_values.append(value_type(value, value_size))
 
-        key = self.key_type(key)
+        key = self.key_type(key, self.fixed_key_size)
         pos = self.key_pos.get(key, self.next_pos)
         if pos == self.next_pos:
             self.key_pos[key] = pos
@@ -222,26 +227,30 @@ if __name__ == '__main__':
 
     from io import BytesIO
 
+    MAX_LEN_LIST = 10
+    FIXED_FLOAT_BYTES = 4
+    FIXED_STR_LEN = 128
+
     class TestKeyValueStorage(TestCase):
         def str_to_bytes(self, string):
             return bytearray(string.encode()).ljust(FIXED_STR_LEN, STR_PADDING)
 
         def test_store_on_empty_storage(self):
             file = BytesIO(b"")
-            storage = KeyValueStorage(file, str, [str, int])
+            storage = KeyValueStorage(file, str, FIXED_STR_LEN, [str, int], [FIXED_STR_LEN, U32_BYTES])
             storage.store("clave", ["valor", 1])
             expected_bytes = self.str_to_bytes("clave")
             expected_bytes.extend(self.str_to_bytes("valor"))
             expected_bytes.extend([0,0,0,1])
             file.seek(STARTING_FILE_POS)
             self.assertEqual(expected_bytes, file.read(1000))
-            self.assertEqual(storage.key_pos, {FixedStr("clave"):0})
+            self.assertEqual(storage.key_pos, {FixedStr("clave", FIXED_STR_LEN):0})
             self.assertEqual(storage.next_pos, 1)
 
         
         def test_store_multiple_on_empty_storage(self):
             file = BytesIO(b"")
-            storage = KeyValueStorage(file, str, [str, int])
+            storage = KeyValueStorage(file, str, FIXED_STR_LEN, [str, int], [FIXED_STR_LEN, U32_BYTES])
             
             storage.store("clave1", ["valor1", 1])
             storage.store("clave2", ["valor2", 2])
@@ -256,12 +265,12 @@ if __name__ == '__main__':
             file.seek(STARTING_FILE_POS)
 
             self.assertEqual(expected_bytes, file.read(1000))
-            self.assertEqual(storage.key_pos, {FixedStr("clave1"):0, FixedStr("clave2"): 1})
+            self.assertEqual(storage.key_pos, {FixedStr("clave1", FIXED_STR_LEN):0, FixedStr("clave2", FIXED_STR_LEN): 1})
             self.assertEqual(storage.next_pos, 2)
 
         def test_store_already_existing_key(self):
             file = BytesIO(b"")
-            storage = KeyValueStorage(file, str, [str, int])
+            storage = KeyValueStorage(file, str, FIXED_STR_LEN, [str, int], [FIXED_STR_LEN, U32_BYTES])
             
             storage.store("clave1", ["valor1", 1])
             storage.store("clave2", ["valor2", 2])
@@ -277,33 +286,33 @@ if __name__ == '__main__':
             file.seek(STARTING_FILE_POS)
 
             self.assertEqual(expected_bytes, file.read(1000))
-            self.assertEqual(storage.key_pos, {FixedStr("clave1"):0, FixedStr("clave2"): 1})
+            self.assertEqual(storage.key_pos, {FixedStr("clave1", FIXED_STR_LEN):0, FixedStr("clave2", FIXED_STR_LEN): 1})
             self.assertEqual(storage.next_pos, 2)
 
         def test_store_all_types(self):
             file = BytesIO(b"")
-            storage = KeyValueStorage(file, str, [str, int, float, (list, int)])
+            storage = KeyValueStorage(file, str, FIXED_STR_LEN, [str, int, float, (list, int)], [FIXED_STR_LEN, 8, FIXED_FLOAT_BYTES, MAX_LEN_LIST])
             storage.store("clave", ["valor", 1, 0.8, [5,5,5,5,5]])
 
             expected_bytes = bytearray("clave".encode()).ljust(FIXED_STR_LEN, STR_PADDING)
             expected_bytes.extend(bytearray("valor".encode()).ljust(FIXED_STR_LEN, STR_PADDING))
-            expected_bytes.extend([0,0,0,1])
+            expected_bytes.extend([0,0,0,0,0,0,0,1])
             expected_bytes.extend(struct.pack('f', 0.8))
             expected_bytes.extend([5] + [0,0,0,5] * 5 + [0,0,0,0] * (MAX_LEN_LIST - 5))
             
             file.seek(STARTING_FILE_POS)
 
             self.assertEqual(expected_bytes, file.read(1000))
-            self.assertEqual(storage.key_pos, {FixedStr("clave"):0})
+            self.assertEqual(storage.key_pos, {FixedStr("clave", FIXED_STR_LEN):0})
             self.assertEqual(storage.next_pos, 1)
 
         def test_load_an_entry(self):
             file = BytesIO(b"")
-            storage = KeyValueStorage(file, str, [str, int])
+            storage = KeyValueStorage(file, str, FIXED_STR_LEN, [str, int], [FIXED_STR_LEN, U32_BYTES])
             
             storage.store("clave", ["valor1", 1])
             file.seek(STARTING_FILE_POS)
-            self.assertEqual((FixedStr("clave"), ["valor1",1]), storage.get_entry())
+            self.assertEqual((FixedStr("clave", FIXED_STR_LEN), ["valor1",1]), storage.get_entry())
             self.assertEqual(None, storage.get_entry())
 
         def test_load_all_entries(self):
@@ -314,15 +323,15 @@ if __name__ == '__main__':
             initial_bytes.extend(self.str_to_bytes("valor2"))
             initial_bytes.extend([0,0,0,2])
             file = BytesIO(initial_bytes)
-            storage = KeyValueStorage(file, str, [str, int])
+            storage = KeyValueStorage(file, str, FIXED_STR_LEN, [str, int], [FIXED_STR_LEN, U32_BYTES])
 
             expected_entries = {
                 "clave1": ["valor1", 1],
                 "clave2": ["valor2", 2],
             }
             expected_pos = {
-                FixedStr("clave1"): 0,
-                FixedStr("clave2"): 1,
+                FixedStr("clave1", FIXED_STR_LEN): 0,
+                FixedStr("clave2", FIXED_STR_LEN): 1,
             }
             entries = storage.get_all_entries()
             self.assertEqual(entries, expected_entries)

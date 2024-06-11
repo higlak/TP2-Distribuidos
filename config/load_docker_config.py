@@ -30,6 +30,12 @@ VOLUMES = """volumes:
     driver_opts:
       type: none
       device: ./data
+      o: bind
+  metadataVolume:
+    driver: local
+    driver_opts:
+      type: none
+      device: ./metadata
       o: bind"""
 
 class Pool():
@@ -84,8 +90,7 @@ class QueryConfig():
                 if pool.worker_type == ACCUMULATOR_TYPE and pool.worker_field == REVIEW_TEXT_FIELD:
                   result += f"      args:"         
                   result += f"\n        - TEXTBLOB=True\n"
-                result += f"""    restart: on-failure
-    depends_on:
+                result += f"""    depends_on:
       - rabbitmq
     links: 
       - rabbitmq
@@ -99,8 +104,9 @@ class QueryConfig():
       - WORKER_FIELD={pool.worker_field}
       - WORKER_VALUE={pool.worker_value}"""
                 if pool.worker_type == ACCUMULATOR_TYPE:
-                  result += f"\n      - ACCUMULATE_BY={pool.accumulate_by}"
-                result += "\n\n"
+                  result += f"\n      - ACCUMULATE_BY={pool.accumulate_by}\n"
+                result += "\n    volumes:\n"
+                result += "      - metadataVolume:/metadata\n\n"
                 
         return result
 

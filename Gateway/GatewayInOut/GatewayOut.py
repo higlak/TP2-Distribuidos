@@ -3,9 +3,11 @@ import signal
 
 from CommunicationMiddleware.middleware import Communicator
 from utils.Batch import Batch
+from utils.SenderID import SenderID
 from utils.auxiliar_functions import send_all
 
 GATEWAY_QUEUE_NAME = 'Gateway'
+GATEWAY_SENDER_ID = SenderID(0,0,1)
 PENDING_EOF_POS = 1
 CLIENT_SOCKET_POS = 0
 
@@ -48,6 +50,8 @@ class GatewayOut():
     
     def proccess_message(self, batch_bytes):
         batch = Batch.from_bytes(batch_bytes)
+        if not batch:
+            return
         client_id = batch.client_id
         if batch.is_empty():
             self.clients[client_id][PENDING_EOF_POS] -= 1
@@ -61,7 +65,7 @@ class GatewayOut():
     
     def finished_client(self, client_id):
         print(f"[Gateway] No more EOF to receive. Sending EOF to client {client_id}")
-        send_all(self.clients[client_id][CLIENT_SOCKET_POS], Batch.eof(client_id).to_bytes())
+        send_all(self.clients[client_id][CLIENT_SOCKET_POS], Batch.eof(client_id, GATEWAY_SENDER_ID).to_bytes())
         self.clients.pop(client_id)
 
     def connect(self):

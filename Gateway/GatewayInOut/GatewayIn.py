@@ -7,8 +7,10 @@ from utils.Book import Book
 from utils.DatasetHandler import DatasetLine
 from utils.Review import Review
 from utils.auxiliar_functions import append_extend
+from utils.SenderID import SenderID
 
 FIRST_POOL = 0
+GATEWAY_SENDER_ID = SenderID(0,0,1)
 
 class GatewayIn():
     def __init__(self, client_id, socket, next_pools, book_query_numbers, review_query_numbers):
@@ -51,7 +53,7 @@ class GatewayIn():
         return Batch.from_socket(self.socket, DatasetLine)
     
     def send_eof(self):
-        return self.com.produce_to_all_group_members(Batch.eof(self.client_id).to_bytes())
+        return self.com.produce_to_all_group_members(Batch.eof(self.client_id, GATEWAY_SENDER_ID).to_bytes())
         
     def get_query_messages(self, obj, query_number):
         switch = {
@@ -83,17 +85,18 @@ class GatewayIn():
                 if query_message:
                     append_extend(query_messages, query_message)
             pool = f'{query_number}.{FIRST_POOL}'
-            batch = Batch(self.client_id, query_messages)
+            batch = Batch.new(self.client_id, GATEWAY_SENDER_ID, query_messages)
             if not self.com.produce_batch_of_messages(batch, pool, self.next_pools.shard_by_of_pool(pool)):
                 return False
         return True
             
-
+    """
     def get_hashed_batchs(self, query_messages, query_number):
         batch = Batch(self.client_id, query_messages)
         pool_to_send = f"{query_number}.{FIRST_POOL}"
         amount_of_workers = self.com.amount_of_producer_group(pool_to_send)
         return batch.get_hashed_batchs(query_number,amount_of_workers) 
+    """
 
     def get_object_from_line(self, datasetLine):
         if datasetLine.is_book():

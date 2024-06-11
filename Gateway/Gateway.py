@@ -3,7 +3,7 @@ from multiprocessing import Process, Pipe
 from utils.NextPools import NextPools
 from utils.Batch import Batch, AMOUNT_OF_CLIENT_ID_BYTES
 from utils.auxiliar_functions import get_env_list, send_all
-from GatewayInOut.GatewayIn import gateway_in_main
+from GatewayInOut.GatewayIn import gateway_in_main, GATEWAY_SENDER_ID
 from GatewayInOut.GatewayOut import gateway_out_main
 import socket
 import os
@@ -89,7 +89,7 @@ class Gateway():
     
     def send_next_client_id(self, sock):
         id = self.get_next_id()
-        batch = Batch(id, [])
+        batch = Batch.new(id, GATEWAY_SENDER_ID, [])
         send_all(sock, batch.to_bytes())
         print(f"[Gateway] Assigning client id {id}")
         return id

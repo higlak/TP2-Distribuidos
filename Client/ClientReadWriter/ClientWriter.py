@@ -15,7 +15,7 @@ class ClientWriter():
             dir_path = "." + query_path + "client" + str(id) + "/"  
             if not os.path.exists(dir_path):
                 os.makedirs(dir_path)
-            path = dir_path + "result" + query + ".csv"
+            path = dir_path + "result" + str(query) + ".csv"
             dw = DatasetWriter(path, header)
             writers[query_result] = dw
         self.writers = writers

@@ -3,7 +3,9 @@ import signal
 from utils.Batch import Batch
 from utils.QueryMessage import BOOK_MSG_TYPE, REVIEW_MSG_TYPE
 from utils.DatasetHandler import DatasetReader
+from utils.SenderID import SenderID
 
+CLIENTS_SENDER_ID = SenderID(0,0,0)
 
 class ClientReader():
     def __init__(self, id, socket, book_reader:DatasetReader, review_reader:DatasetReader, batch_size):
@@ -32,11 +34,11 @@ class ClientReader():
             datasetLines = reader.read_lines(self.batch_size, object_type)
             if len(datasetLines) == 0:
                 return True
-            batch = Batch(self.id, datasetLines)
+            batch = Batch.new(self.id, CLIENTS_SENDER_ID, datasetLines)
             self.socket.send(batch.to_bytes())
     
     def send_eof(self):
-        self.socket.send(Batch.eof(self.id).to_bytes())
+        self.socket.send(Batch.eof(self.id, CLIENTS_SENDER_ID).to_bytes())
 
     def close_readers(self):
         self.book_reader.close()

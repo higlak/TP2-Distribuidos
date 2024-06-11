@@ -4,7 +4,7 @@ from utils.Batch import AMOUNT_OF_CLIENT_ID_BYTES, Batch
 from utils.DatasetHandler import DatasetReader
 from utils.auxiliar_functions import get_env_list, send_all
 from ClientReadWriter.ClientWriter import ClientWriter
-from ClientReadWriter.ClientReader import ClientReader
+from ClientReadWriter.ClientReader import ClientReader, CLIENTS_SENDER_ID
 from queue import Queue, Empty
 import socket
 import os
@@ -14,6 +14,7 @@ import signal
 STARTING_CLIENT_WAIT = 1
 MAX_ATTEMPTS = 6
 NO_CLIENT_ID = 2**(8*AMOUNT_OF_CLIENT_ID_BYTES) - 1
+
 
 def get_file_paths():
     if len(sys.argv) != 3:
@@ -37,7 +38,10 @@ class Client():
     @classmethod
     def new(cls):
         try:
-            queries = get_env_list("QUERIES")
+            queries_str = get_env_list("QUERIES")
+            queries = []
+            for query in queries_str:
+                queries.append(int(query))
             query_result_path = os.getenv("QUERY_RESULTS_PATH")
             batch_size = int(os.getenv("BATCH_SIZE"))
             server_port = int(os.getenv("SERVER_PORT"))
@@ -106,10 +110,10 @@ class Client():
                 client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 client_socket.connect(('gateway', port))
                 print("[Client] Client Connected to gateway")
-                batch = Batch(id, [])
+                batch = Batch.new(id, CLIENTS_SENDER_ID, [])
                 send_all(client_socket, batch.to_bytes())
                 return client_socket
-            except:
+            except OSError as e:
                 if i > 2**MAX_ATTEMPTS:
                     print("[Client] Could not connect to Gateway. Max attempts reached")
                     return None

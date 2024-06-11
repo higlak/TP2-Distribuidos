@@ -66,17 +66,19 @@ class ProducerGroup():
         
 class Communicator():
         
-    def __init__(self, connection, producer_groups={}, prefetch_count=1):
+    def __init__(self, connection, producer_groups={}, auto_ack = True, prefetch_count=1):
         self.connection = connection
         self.consumer_queues = ConsumerQueues()     
         self.producer_groups = {group:ProducerGroup(members) for group, members in producer_groups.items() }
         self.channel = self.connection.channel()
+        self.auto_ack = auto_ack
+        self.last_delivery_tag = None
         self.channel.basic_qos(prefetch_count=prefetch_count)
         self.set_producer_queues()
         self.channel.confirm_delivery()
 
     @classmethod
-    def new(cls, signal_queue: Queue, producer_groups={}, prefetch_count=1):
+    def new(cls, signal_queue: Queue, producer_groups={}, auto_ack = True, prefetch_count=1):
         i = STARTING_RABBIT_WAIT
         while True:
             try:
@@ -93,7 +95,7 @@ class Communicator():
                     return None
                 except Empty:   
                     i *= 2
-        return Communicator(connection, producer_groups, prefetch_count)        
+        return Communicator(connection, producer_groups, auto_ack, prefetch_count)        
 
     def set_producer_queues(self):
         for members in self.producer_groups.values():
@@ -157,11 +159,23 @@ class Communicator():
             if message == None:
                 return bytearray([])
             
-            self.channel.basic_ack(delivery_tag=method.delivery_tag)
+            self.last_delivery_tag = method.delivery_tag
+            if self.auto_ack:
+                if not self.acknowledge_last_message():
+                    return bytearray([])
+
             return bytearray(message)
         except MIDDLEWARE_EXCEPTIONS:
             return bytearray([])
 
+    def acknowledge_last_message(self):
+        if self.last_delivery_tag == None:
+            return True
+        try:
+            self.channel.basic_ack(delivery_tag=self.last_delivery_tag)
+        except MIDDLEWARE_EXCEPTIONS:
+            return False
+        return True
 
     def amount_of_producer_group(self, group):
         return len(self.producer_groups[group])
@@ -181,4 +195,4 @@ def get_sharded_batchs(batch, shard_by, amount_of_shards):
         msg_destination = int(hash_object.hexdigest(), 16) % amount_of_shards
         hashed_messages[msg_destination] = hashed_messages.get(msg_destination, []) + [msg]
     
-    return {w:Batch(batch.client_id, messages) for w, messages in hashed_messages.items()}
+    return {w:Batch(batch.client_id, batch.sender_id, batch.seq_num, messages) for w, messages in hashed_messages.items()}

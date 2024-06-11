@@ -6,7 +6,8 @@ from utils.auxiliar_functions import integer_to_big_endian_byte_array, byte_arra
 import io
 
 STRING_LENGTH_BYTES = 1
-NUM_BYTES = 4
+U32_BYTES = 4
+CLIENT_ID_BYTES = 4
 LOG_TYPE_BYTES = 1
 LEN_LIST_BYTES = 1
 FLOAT_BYTES = 4
@@ -24,7 +25,8 @@ class LogReadWriter():
         try:
             file = open(path, 'ab+')
             return cls(file)
-        except:
+        except OSError as e:
+            print(f"Error Opening Log: {e}")
             return None
 
     def log(self, log):
@@ -177,23 +179,27 @@ class ChangeContextFloat(Log):
         return True
     
 class ChangeMetadata(Log):
-    def __init__(self, client_id, eof_to_receive):
+    def __init__(self, keys, numbers):
         self.log_type = LogType.ChangedMetadata
-        self.client_id = client_id
-        self.eof_to_receive = eof_to_receive
+        self.keys = keys
+        self.numbers = numbers
 
     def get_log_arg_bytes(self):
-        byte_array = get_number_byte_array(self.client_id)
-        byte_array.extend(get_number_byte_array(self.eof_to_receive))
+        byte_array = bytearray()
+        for num in self.numbers:
+            byte_array.extend(get_number_byte_array(num, U32_BYTES))
+
+        byte_array.extend(get_keys_bytes(self.keys))
         return byte_array
 
     @classmethod
     def from_file_pos(cls, file, pos):
-        numbers = numbers_from_file_pos(file, pos, 2)
-        return cls(numbers[0], numbers[1])
+        keys = keys_from_file_pos(file, pos)
+        numbers = numbers_from_file_pos(file, CURRENT_FILE_POS, len(keys), U32_BYTES)
+        return cls(keys, numbers)
     
     def params_eq(self, other):
-        return self.client_id == other.client_id and self.eof_to_receive == other.eof_to_receive
+        return self.keys == other.keys and self.numbers == other.numbers
 
 class ChangeContextFloatU32(Log):
     def __init__(self, keys, float_numbers, numbers):
@@ -205,7 +211,7 @@ class ChangeContextFloatU32(Log):
     def get_log_arg_bytes(self):
         byte_array = bytearray()
         for num in self.numbers:
-            byte_array.extend(get_number_byte_array(num))
+            byte_array.extend(get_number_byte_array(num, U32_BYTES))
         for num in self.float_numbers:
             byte_array.extend(get_float_byte_array(num))
 
@@ -216,7 +222,7 @@ class ChangeContextFloatU32(Log):
     def from_file_pos(cls, file, pos):
         keys = keys_from_file_pos(file, pos)
         float_numbers = floats_from_file_pos(file, CURRENT_FILE_POS, len(keys))
-        numbers = numbers_from_file_pos(file, CURRENT_FILE_POS, len(keys))
+        numbers = numbers_from_file_pos(file, CURRENT_FILE_POS, len(keys), U32_BYTES)
         return cls(keys, float_numbers, numbers)
     
     def params_eq(self, other):
@@ -248,7 +254,7 @@ class ChangeContextListU16(Log):
             file.seek(-LEN_LIST_BYTES, pos)
             amount_of_numbers = byte_array_to_big_endian_integer(file.read(LEN_LIST_BYTES))
             file.seek(-LEN_LIST_BYTES, CURRENT_FILE_POS)
-            numbers_lists.insert(0, numbers_from_file_pos(file, CURRENT_FILE_POS, amount_of_numbers))
+            numbers_lists.insert(0, numbers_from_file_pos(file, CURRENT_FILE_POS, amount_of_numbers, U32_BYTES))
 
         return cls(keys, numbers_lists)
     
@@ -275,12 +281,12 @@ class SentFinalResult(Log):
 
     def get_log_arg_bytes(self):
         byte_array = get_string_byte_array(self.key)
-        byte_array.extend(get_number_byte_array(self.client_id))
+        byte_array.extend(get_number_byte_array(self.client_id, CLIENT_ID_BYTES))
         return byte_array
     
     @classmethod
     def from_file_pos(cls, file, pos):
-        client_id = numbers_from_file_pos(file, pos, 1)[0]
+        client_id = numbers_from_file_pos(file, pos, 1, CLIENT_ID_BYTES)[0]
         key = string_from_file_pos(file, CURRENT_FILE_POS)
         return cls(key, client_id)
     
@@ -293,11 +299,11 @@ class FinishedSendingResultsOfClient(Log):
         self.client_id = client_id
     
     def get_log_arg_bytes(self):
-        return get_number_byte_array(self.client_id)
+        return get_number_byte_array(self.client_id, CLIENT_ID_BYTES)
     
     @classmethod
     def from_file_pos(cls, file, pos):
-        return cls(numbers_from_file_pos(file, pos, 1)[0])
+        return cls(numbers_from_file_pos(file, pos, 1, CLIENT_ID_BYTES)[0])
     
     def params_eq(self, other):
         return self.client_id == other.client_id
@@ -314,13 +320,13 @@ def string_from_file_pos(file, pos):
     file.seek(-len_str, CURRENT_FILE_POS)
     return string
 
-def numbers_from_file_pos(file, pos, amount):
-    file.seek(-NUM_BYTES*amount, pos)
-    byte_array = bytearray(file.read(NUM_BYTES*amount))
+def numbers_from_file_pos(file, pos, amount, bytes_per_number):
+    file.seek(-bytes_per_number*amount, pos)
+    byte_array = bytearray(file.read(bytes_per_number*amount))
     numbers = []
     for _i in range(amount):
-        numbers.append(byte_array_to_big_endian_integer(remove_bytes(byte_array, NUM_BYTES)))
-    file.seek(-NUM_BYTES*amount, pos)
+        numbers.append(byte_array_to_big_endian_integer(remove_bytes(byte_array, bytes_per_number)))
+    file.seek(-bytes_per_number*amount, pos)
     return numbers
 
 def floats_from_file_pos(file, pos, amount):
@@ -345,13 +351,13 @@ def keys_from_file_pos(file, pos):
         keys.insert(0, string_from_file_pos(file, CURRENT_FILE_POS))
     return keys
 
-def get_number_byte_array(num):
-    return integer_to_big_endian_byte_array(num, NUM_BYTES)
+def get_number_byte_array(num, bytes_per_number):
+    return integer_to_big_endian_byte_array(num, bytes_per_number)
 
 def get_u32list_byte_array(numbers):
     byte_array = bytearray(b"")
     for num in numbers:
-        byte_array.extend(get_number_byte_array(num))
+        byte_array.extend(get_number_byte_array(num, U32_BYTES))
     byte_array.extend(integer_to_big_endian_byte_array(len(numbers), LEN_LIST_BYTES))
     return byte_array
 
@@ -392,7 +398,7 @@ if __name__ == '__main__':
             logs_bytes.extend(SentFinalResult("a", 1).get_log_bytes())
             logs_bytes.extend(FinishedSendingResultsOfClient(65536).get_log_bytes())
             logs_bytes.extend(FinishedClient().get_log_bytes())
-            logs_bytes.extend(ChangeMetadata(1,2).get_log_bytes())
+            logs_bytes.extend(ChangeMetadata(["a"],[2]).get_log_bytes())
             return BytesIO(logs_bytes)
 
         def test_log_to_bytes(self):
@@ -412,7 +418,7 @@ if __name__ == '__main__':
             self.assertEqual(SentFinalResult("a", 1).get_log_bytes(), bytearray(str_bytes + [0,0,0,1] + [LogType.SentFinalResult.value]))
             self.assertEqual(FinishedSendingResultsOfClient(65536).get_log_bytes(), bytearray([0,1,0,0] + [LogType.FinishedSendingResultsOfClient.value]))
             self.assertEqual(FinishedClient().get_log_bytes(), bytearray([LogType.FinishedClient.value]))
-            self.assertEqual(ChangeMetadata(1,2).get_log_bytes(), bytearray([0,0,0,1,0,0,0,2] + [LogType.ChangedMetadata.value]))
+            self.assertEqual(ChangeMetadata(["a"],[2]).get_log_bytes(), bytearray([0,0,0,2] + str_bytes + [0,1] + [LogType.ChangedMetadata.value]))
 
         def test_write_logs(self):
             mock_file = BytesIO(b"")
@@ -427,7 +433,7 @@ if __name__ == '__main__':
             logger.log(SentFinalResult("a", 1))
             logger.log(FinishedSendingResultsOfClient(65536))
             logger.log(FinishedClient())
-            logger.log(ChangeMetadata(1,2))
+            logger.log(ChangeMetadata(["a"],[2]))
             mock_file.seek(0)
             self.assertEqual(mock_file.read(1000), self.get_mock_file().read(1000))
 
@@ -439,7 +445,7 @@ if __name__ == '__main__':
         def test_read_log_file(self):
             mock_file = self.get_mock_file()
             logger = LogReadWriter(mock_file)
-            self.assertEqual(ChangeMetadata(1,2), logger.read_last_log())
+            self.assertEqual(ChangeMetadata(["a"],[2]), logger.read_last_log())
             self.assertEqual(FinishedClient(), logger.read_curr_log())
             self.assertEqual(FinishedSendingResultsOfClient(65536),logger.read_curr_log())
             self.assertEqual(SentFinalResult("a", 1), logger.read_curr_log())
@@ -457,7 +463,7 @@ if __name__ == '__main__':
             logger = LogReadWriter(mock_file)
 
             logs = logger.read_until_log_type(LogType.FinishedSendingResultsOfClient)
-            self.assertEqual(logs, [ChangeMetadata(1,2), FinishedClient(), FinishedSendingResultsOfClient(65536)])
+            self.assertEqual(logs, [ChangeMetadata(["a"],[2]), FinishedClient(), FinishedSendingResultsOfClient(65536)])
         
         def test_read_until_but_log_not_in_file(self):
             file = BytesIO(b"")

@@ -52,16 +52,21 @@ class QueryMessage():
         
     @classmethod
     def from_bytes(self, byte_array):
+        if len(byte_array) < 2:
+            return None
         msg_type = remove_bytes(byte_array, 1)[0]
-        generator = ParametersGenerator(byte_array)
-        year = generator.next()
-        rating = generator.next()
-        msp = generator.next()
-        title = generator.next()
-        authors = generator.next()
-        publisher = generator.next()
-        categories = generator.next()
-        review_text = generator.next()
+        try:
+            generator = ParametersGenerator(byte_array)
+            year = generator.next()
+            rating = generator.next()
+            msp = generator.next()
+            title = generator.next()
+            authors = generator.next()
+            publisher = generator.next()
+            categories = generator.next()
+            review_text = generator.next()
+        except:
+            return None
         
         return QueryMessage(msg_type, year, rating, msp, title, authors, publisher, categories, review_text) 
     
@@ -194,11 +199,11 @@ class QueryMessage():
     
 def query_to_query_result(query):
     switch = {
-        '1': QUERY1_RESULT,
-        '2': QUERY2_RESULT,
-        '3': QUERY3_RESULT,
-        '4': QUERY4_RESULT,
-        '5': QUERY5_RESULT,
+        1: QUERY1_RESULT,
+        2: QUERY2_RESULT,
+        3: QUERY3_RESULT,
+        4: QUERY4_RESULT,
+        5: QUERY5_RESULT,
     }
     return switch[query]
 

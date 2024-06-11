@@ -16,13 +16,11 @@ class Filter(Worker):
         if id == None or eof_to_receive == None or not next_pools:
             return None
         filter = Filter(id, next_pools, eof_to_receive, field, valid_values, droping_fields)
-        
         if not filter.connect():
             return None
         return filter
 
     def dump_context_to_disc(self):
-        self.logger.log(ChangeContextNoArgs())
         #dump context
         pass
     

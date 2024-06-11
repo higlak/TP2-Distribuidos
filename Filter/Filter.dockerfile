@@ -7,6 +7,7 @@ RUN apt-get update && apt-get install -y python3-pika
 COPY ./CommunicationMiddleware /root/CommunicationMiddleware
 COPY ./Workers /root/Workers
 COPY ./utils /root/utils
+COPY ./Persistance /root/Persistance
 COPY ./Filter/Filter.py /root/main.py
 RUN chmod +x /root/main.py
 
