@@ -20,6 +20,12 @@ class Filter(Worker):
             return None
         return filter
 
+    def load_context(self, path):
+        pass
+
+    def get_context_storage_types(self):
+        return None
+
     def dump_context_to_disc(self):
         #dump context
         pass

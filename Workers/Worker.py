@@ -14,17 +14,18 @@ from utils.NextPools import NextPools, GATEWAY_QUEUE_NAME
 from queue import Queue
 
 LOG_PATH = './log.bin'
-METADATA_PATH = '/metadata/'
-CLIENT_CONTEXT_FOLDER = '/context/'
-CLIENT_CONTEXT_PATH = CLIENT_CONTEXT_FOLDER + 'client'
+PERSISTANCE_PATH = '/persistance_files/'
+METADATA_FILE_NAME = 'metadata.bin'
+CLIENT_CONTEXT_FILE_NAME = 'client_context'
 
 METADATA_KEY_BYTES = 25 + 18
 METADATA_NUM_BYTES = 4
+CLIENT_CONTEXT_KEY_BYTES = 255
 LAST_SENT_SEQ_NUM = "last sent seq_num"
 CLIENT_PENDING_EOF = "pending eof client"
 LAST_RECEIVED_FROM_WORKER = "last received from worker"
 
-BATCH_SIZE = 500
+BATCH_SIZE = 1024
 
 class Worker(ABC):
     def __init__(self, id, next_pools, eof_to_receive):
@@ -34,10 +35,11 @@ class Worker(ABC):
         self.pending_eof = {}
         self.signal_queue = Queue()
         self.last_received_batch = {}
+        self.context_entries_to_dump = {}
 
         self.communicator = None
         self.metadata_storage = None
-        self.context_storage = None
+        self.client_contexts_storage = {}
         self.logger = None
         signal.signal(signal.SIGTERM, self.handle_SIGTERM)
         
@@ -61,18 +63,25 @@ class Worker(ABC):
     
     def load_all_context(self):
         try:
-            for filename in os.listdir(CLIENT_CONTEXT_FOLDER):
-                path = os.path.join(CLIENT_CONTEXT_FOLDER, filename)
+            for filename in os.listdir(self.worker_folder()):
+                if filename == METADATA_FILE_NAME:
+                    continue
+                path = os.path.join(self.worker_folder(), filename)
                 if os.path.isfile(path):
-                    if not self.load_context(path):
+                    client_id = int(filename.strip('.bin').strip(CLIENT_CONTEXT_FILE_NAME))
+                    if not self.load_context(path, client_id):
                         print(f"[Worker [{self.id}]]: Could not load context: {path}")
                         return False
         except OSError as e:
             print(f"[Worker [{self.id}]]: Could not load context: {e}")
+        return True
+
+    def worker_folder(self):
+        return PERSISTANCE_PATH + self.id.__repr__() + '/' 
 
     def load_metadata(self):
         self.metadata_storage, previouse_metadata = KeyValueStorage.new(
-            METADATA_PATH + self.id.__repr__() + '.bin', str, METADATA_KEY_BYTES, [int], [METADATA_NUM_BYTES])
+            self.worker_folder() + METADATA_FILE_NAME, str, METADATA_KEY_BYTES, [int], [METADATA_NUM_BYTES])
         if not self.metadata_storage or previouse_metadata == None:
             print(f"[Worker [{self.id}]] Error Opening Metadata: storage {self.metadata_storage} previouse {previouse_metadata}")
             return False
@@ -92,6 +101,13 @@ class Worker(ABC):
         return True
 
     def load_from_disk(self):
+        path = PERSISTANCE_PATH + self.id.__repr__() + '/'
+        try:
+            if not os.path.exists(path):
+                os.makedirs(path)
+        except OSError as e:
+            print(f"[Worker [{self.id}]] Error creating worker dir")
+            
         if not self.load_metadata():
             return False
         if not self.load_all_context():
@@ -127,6 +143,7 @@ class Worker(ABC):
     
     def send_final_results(self, client_id):
         fr = self.get_final_results(client_id)
+        #print(f"{fr}")
         if not fr:
             return True
         final_results = []
@@ -138,8 +155,8 @@ class Worker(ABC):
                 break
             if not self.send_batch(batch):
                 return False
-            i += BATCH_SIZE
-        #print(f"[Worker {self.id}] Sent {i} final results")
+            i += batch.size()
+        print(f"[Worker {self.id}] Sent {i} final results")
         return True
 
     def transform_to_result(self, message):
@@ -196,8 +213,32 @@ class Worker(ABC):
         #proccess_final_results
 
     @abstractmethod
-    def dump_context_to_disc():
-        pass
+    def get_context_storage_types(self):
+        pass 
+
+    def dump_client_updates(self, client_id, updates):
+        storage = self.client_contexts_storage[client_id]
+        keys = []
+        values = []
+        for update in updates:
+            keys.append(update[0]) 
+            values.append(update[1])
+
+        #self.logger.log(self.jjnge_context_log(client_id, keys, values))
+        storage.store_all(keys, values)
+
+    def dump_all_client_contexts_to_disk(self):
+        while len(self.context_entries_to_dump) > 0:
+            client_id, updates  = self.context_entries_to_dump.popitem()
+            if client_id not in self.client_contexts_storage:
+                path = self.worker_folder() + CLIENT_CONTEXT_FILE_NAME + str(client_id) + '.bin'
+                value_types, value_types_size = self.get_context_storage_types()
+                if value_types == None or value_types_size == None:
+                    continue
+                self.client_contexts_storage[client_id], _ = KeyValueStorage.new(
+                    path, str, CLIENT_CONTEXT_KEY_BYTES, value_types, value_types_size)
+            
+            self.dump_client_updates(client_id, updates)
 
     def dump_metadata_to_disk(self, batch):
         if batch.is_empty():
@@ -208,13 +249,13 @@ class Worker(ABC):
             value = batch.seq_num
             
         self.logger.log(ChangeMetadata([key, LAST_SENT_SEQ_NUM], [value, SeqNumGenerator.seq_num]))
-        self.metadata_storage.store(LAST_SENT_SEQ_NUM, SeqNumGenerator.seq_num)
-        self.metadata_storage.store(key, value)
+        self.metadata_storage.store(LAST_SENT_SEQ_NUM, [SeqNumGenerator.seq_num])
+        self.metadata_storage.store(key, [value])
 
     def dump_to_disk(self, batch):
         try:
-            self.dump_context_to_disk()
             self.dump_metadata_to_disk(batch)
+            self.dump_all_client_contexts_to_disk()
             self.logger.log(FinishedWriting())
         except OSError as e:
             print(f"[Worker {self.id}] Error dumping to disk: {e}")
@@ -267,8 +308,10 @@ class Worker(ABC):
                     break
 
             ############ bajar a disco
-            self.dump_to_disk(batch)
-
+            if not self.dump_to_disk(batch):
+                break
+            self.logger.log(FinishedWriting())
+            
             ############ ack batch
             if not self.communicator.acknowledge_last_message():
                 print(f"[Worker {self.id}] Disconnected from MOM, while acking_message")
@@ -276,7 +319,7 @@ class Worker(ABC):
             self.logger.log(AckedBatch())
 
             ############ Send final results
-            if self.pending_eof.get(batch.client_id, None) == 0:
+            if self.pending_eof.get(batch.client_id, None) == 0:   #guarda con perder el client_id
                 if not self.proccess_final_results(batch.client_id):
                     break
                 
@@ -295,8 +338,8 @@ if __name__ == '__main__':
             file = BytesIO(b"")
             storage = KeyValueStorage(file, str, 50, [int], [METADATA_NUM_BYTES])
             
-            storage.store(LAST_SENT_SEQ_NUM, 2)
-            storage.store(LAST_RECEIVED_FROM_WORKER + SenderID(1,1,1).__repr__(), 1)
+            storage.store(LAST_SENT_SEQ_NUM, [2])
+            storage.store(LAST_RECEIVED_FROM_WORKER + SenderID(1,1,1).__repr__(), [1])
             entires = storage.get_all_entries()
             self.assertEqual(entires.pop(LAST_SENT_SEQ_NUM), 2)
             self.assertEqual(entires.pop(LAST_RECEIVED_FROM_WORKER + SenderID(1,1,1).__repr__()), 1)

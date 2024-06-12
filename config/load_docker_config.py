@@ -31,11 +31,11 @@ VOLUMES = """volumes:
       type: none
       device: ./data
       o: bind
-  metadataVolume:
+  persistanceVolume:
     driver: local
     driver_opts:
       type: none
-      device: ./metadata
+      device: ./persistance_files
       o: bind"""
 
 class Pool():
@@ -106,7 +106,7 @@ class QueryConfig():
                 if pool.worker_type == ACCUMULATOR_TYPE:
                   result += f"\n      - ACCUMULATE_BY={pool.accumulate_by}\n"
                 result += "\n    volumes:\n"
-                result += "      - metadataVolume:/metadata\n\n"
+                result += "      - persistanceVolume:/persistance_files\n\n"
                 
         return result
 

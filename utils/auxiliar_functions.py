@@ -13,7 +13,8 @@ def recv_exactly(socket, n):
             buffer += received
             n -= len(received)
         return buffer 
-    except OSError:
+    except OSError as e:
+        print(f"Error receiving: {e}")
         return None
 
 # Sends bytes until all of them are sent, or a failure occurs

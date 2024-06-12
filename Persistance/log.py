@@ -136,43 +136,87 @@ class NoArgsLog(Log, ABC):
     def params_eq(self, other):
         return True
 
-class ChangeContextNoArgs(Log):
-    def __init__(self, keys):
-        self.log_type = LogType.ChangeContextNoArgs
+class ChangeContextLog(Log, ABC):
+    def __init__(self, client_id, keys):
+        self.client_id = client_id
         self.keys = keys
-
-    def get_log_arg_bytes(self):
-        return get_keys_bytes(self.keys)
     
-    @classmethod
-    def from_file_pos(cls, file, pos):
-        return cls(keys_from_file_pos(file, pos))
-    
-    def params_eq(self, other):
-        return self.keys == other.keys
-        
-class ChangeContextFloat(Log):
-    def __init__(self, keys, float_numbers):
-        self.log_type = LogType.ChangeContextFloat
-        self.keys = keys
-        self.float_numbers = float_numbers
-
     def get_log_arg_bytes(self):
-        byte_array = bytearray()
-        for num in self.float_numbers:
-            byte_array.extend(get_float_byte_array(num))
+        byte_array = self.get_log_values_bytes()
         byte_array.extend(get_keys_bytes(self.keys))
+        byte_array.extend(get_number_byte_array(self.client_id, CLIENT_ID_BYTES))
         return byte_array
     
     @classmethod
     def from_file_pos(cls, file, pos):
-        keys = keys_from_file_pos(file, pos)
-        float_numbers = floats_from_file_pos(file, pos, len(keys))
-        return cls(keys, float_numbers)
+        client_id = numbers_from_file_pos(file, pos, 1, CLIENT_ID_BYTES)[0]
+        keys = keys_from_file_pos(file, CURRENT_FILE_POS)
+        return cls.new_values_from_file_pos(file, CURRENT_FILE_POS, client_id, keys)
     
     def params_eq(self, other):
-        if self.keys != other.keys:
+        if self.client_id != other.client_id or self.keys != other.keys:
             return False
+        return self.values_eq(other)
+    
+    @classmethod
+    @abstractmethod
+    def from_keys_values(cls, client_id, keys, list_of_values):
+        pass
+
+    @abstractmethod
+    def get_log_values_bytes(self):
+        pass
+    
+    @classmethod
+    @abstractmethod
+    def new_values_from_file_pos(file, pos, client_id, keys):
+        pass
+    
+    @abstractmethod
+    def values_eq(self, other):
+        pass
+
+class ChangeContextNoArgs(ChangeContextLog):
+    def __init__(self, client_id, keys):
+        super().__init__(client_id, keys)
+        self.log_type = LogType.ChangeContextNoArgs
+
+    @classmethod
+    def from_keys_values(cls, client_id, keys, list_of_values):
+        return cls(client_id, keys)
+
+    def get_log_values_bytes(self):
+        return bytearray()
+    
+    @classmethod
+    def new_values_from_file_pos(cls, file, pos, client_id, keys):
+        return cls(client_id, keys)
+    
+    def values_eq(self, other):
+        return True
+        
+class ChangeContextFloat(ChangeContextLog):
+    def __init__(self, client_id, keys, float_numbers):
+        super().__init__(client_id, keys)
+        self.log_type = LogType.ChangeContextFloat
+        self.float_numbers = float_numbers
+
+    @classmethod
+    def from_keys_values(cls, client_id, keys, list_of_values):
+        return cls(client_id, keys, list_of_values)
+
+    def get_log_values_bytes(self):
+        byte_array = bytearray()
+        for num in self.float_numbers:
+            byte_array.extend(get_float_byte_array(num))
+        return byte_array
+    
+    @classmethod
+    def new_values_from_file_pos(cls, file, pos, client_id, keys):
+        float_numbers = floats_from_file_pos(file, pos, len(keys))
+        return cls(client_id, keys, float_numbers)
+    
+    def values_eq(self, other):
         for self_num, other_num in zip(self.float_numbers, other.float_numbers):
             if get_float_byte_array(self_num) != get_float_byte_array(other_num):
                 return False
@@ -201,65 +245,72 @@ class ChangeMetadata(Log):
     def params_eq(self, other):
         return self.keys == other.keys and self.numbers == other.numbers
 
-class ChangeContextFloatU32(Log):
-    def __init__(self, keys, float_numbers, numbers):
+class ChangeContextFloatU32(ChangeContextLog):
+    def __init__(self,client_id, keys, float_numbers, numbers):
+        super().__init__(client_id, keys)
         self.log_type = LogType.ChangeContextFloatU32
-        self.keys = keys
         self.float_numbers = float_numbers
         self.numbers = numbers
 
-    def get_log_arg_bytes(self):
+    @classmethod
+    def from_keys_values(cls, client_id, keys, list_of_values):
+        numbers = []
+        float_numbers = []
+        for values in list_of_values:
+            numbers.append(values[0])
+            float_numbers.append(values[1])
+        return cls(client_id, keys, float_numbers, numbers)
+
+    def get_log_values_bytes(self):
         byte_array = bytearray()
         for num in self.numbers:
             byte_array.extend(get_number_byte_array(num, U32_BYTES))
         for num in self.float_numbers:
             byte_array.extend(get_float_byte_array(num))
-
-        byte_array.extend(get_keys_bytes(self.keys))
         return byte_array
-
-    @classmethod
-    def from_file_pos(cls, file, pos):
-        keys = keys_from_file_pos(file, pos)
-        float_numbers = floats_from_file_pos(file, CURRENT_FILE_POS, len(keys))
-        numbers = numbers_from_file_pos(file, CURRENT_FILE_POS, len(keys), U32_BYTES)
-        return cls(keys, float_numbers, numbers)
     
-    def params_eq(self, other):
-        if self.keys != other.keys or self.numbers != other.numbers:
+    @classmethod
+    def new_values_from_file_pos(cls, file, pos, client_id, keys):
+        float_numbers = floats_from_file_pos(file, pos, len(keys))
+        numbers = numbers_from_file_pos(file, CURRENT_FILE_POS, len(keys), U32_BYTES)
+        return cls(client_id, keys, float_numbers, numbers)
+    
+    def values_eq(self, other):
+        if self.numbers != other.numbers:
             return False
         for self_num, other_num in zip(self.float_numbers, other.float_numbers):
             if get_float_byte_array(self_num) != get_float_byte_array(other_num):
                 return False
         return True
 
-class ChangeContextListU16(Log):
-    def __init__(self, keys, numbers_lists):
+class ChangeContextListU16(ChangeContextLog):
+    def __init__(self, client_id, keys, numbers_lists):
+        super().__init__(client_id, keys)
         self.log_type = LogType.ChangeContextListU16
-        self.keys = keys
         self.numbers_lists = numbers_lists
 
-    def get_log_arg_bytes(self):
+    @classmethod
+    def from_keys_values(cls, client_id, keys, list_of_values):
+        return cls(client_id, keys, list_of_values)
+
+    def get_log_values_bytes(self):
         byte_array = bytearray()
         for l in self.numbers_lists:
             byte_array.extend(get_u32list_byte_array(l))
-        byte_array.extend(get_keys_bytes(self.keys))
         return byte_array
     
     @classmethod
-    def from_file_pos(cls, file, pos):
-        keys = keys_from_file_pos(file, pos)
+    def new_values_from_file_pos(cls, file, pos, client_id, keys):
         numbers_lists = []
         for l in range(len(keys)):
             file.seek(-LEN_LIST_BYTES, pos)
             amount_of_numbers = byte_array_to_big_endian_integer(file.read(LEN_LIST_BYTES))
             file.seek(-LEN_LIST_BYTES, CURRENT_FILE_POS)
             numbers_lists.insert(0, numbers_from_file_pos(file, CURRENT_FILE_POS, amount_of_numbers, U32_BYTES))
-
-        return cls(keys, numbers_lists)
+        return cls(client_id, keys, numbers_lists)
     
-    def params_eq(self, other):
-        return self.keys == other.keys and self.numbers_lists == other.numbers_lists
+    def values_eq(self, other):
+        return self.numbers_lists == other.numbers_lists
         
 class FinishedWriting(NoArgsLog):
     def __init__(self):
@@ -388,10 +439,10 @@ if __name__ == '__main__':
     
     class TestLog(TestCase):
         def get_mock_file(self):
-            logs_bytes = ChangeContextFloat(["a"],[1.1]).get_log_bytes()
-            logs_bytes.extend(ChangeContextFloatU32(["a", "b"], [1.1, 2.2], [1,2]).get_log_bytes())
-            logs_bytes.extend(ChangeContextListU16(["a", "b"], [[5,5],[256, 1]]).get_log_bytes())
-            logs_bytes.extend(ChangeContextNoArgs(["a"]).get_log_bytes())
+            logs_bytes = ChangeContextFloat(1,["a"],[1.1]).get_log_bytes()
+            logs_bytes.extend(ChangeContextFloatU32(1,["a", "b"], [1.1, 2.2], [1,2]).get_log_bytes())
+            logs_bytes.extend(ChangeContextListU16(1,["a", "b"], [[5,5],[256, 1]]).get_log_bytes())
+            logs_bytes.extend(ChangeContextNoArgs(1,["a"]).get_log_bytes())
             logs_bytes.extend(FinishedWriting().get_log_bytes())
             logs_bytes.extend(SentBatch().get_log_bytes())
             logs_bytes.extend(AckedBatch().get_log_bytes())
@@ -408,10 +459,10 @@ if __name__ == '__main__':
             float2 = list(get_float_byte_array(2.2))
 
             float_bytes = list(get_float_byte_array(1.1))
-            self.assertEqual(ChangeContextFloat(["a"],[1.1]).get_log_bytes(), bytearray(float_bytes + str_bytes + [0,1] + [LogType.ChangeContextFloat.value]))
-            self.assertEqual(ChangeContextFloatU32(["a", "b"], [1.1, 2.2], [1,2]).get_log_bytes(), bytearray([0,0,0,1]+ [0,0,0,2] + float1 + float2 + str_bytes + strb_bytes + [0,2] + [LogType.ChangeContextFloatU32.value]))
-            self.assertEqual(ChangeContextListU16(["a", "b"], [[5,5],[256, 1]]).get_log_bytes(), bytearray([0,0,0,5,0,0,0,5,2] + [0,0,1,0,0,0,0,1,2] + str_bytes + strb_bytes + [0,2] + [LogType.ChangeContextListU16.value]))
-            self.assertEqual(ChangeContextNoArgs(["a"]).get_log_bytes(), bytearray(str_bytes + [0,1] + [LogType.ChangeContextNoArgs.value]))
+            self.assertEqual(ChangeContextFloat(1, ["a"],[1.1]).get_log_bytes(), bytearray(float_bytes + str_bytes + [0,1] + [0,0,0,1] + [LogType.ChangeContextFloat.value]))
+            self.assertEqual(ChangeContextFloatU32(1, ["a", "b"], [1.1, 2.2], [1,2]).get_log_bytes(), bytearray([0,0,0,1]+ [0,0,0,2] + float1 + float2 + str_bytes + strb_bytes + [0,2] + [0,0,0,1] + [LogType.ChangeContextFloatU32.value]))
+            self.assertEqual(ChangeContextListU16(1, ["a", "b"], [[5,5],[256, 1]]).get_log_bytes(), bytearray([0,0,0,5,0,0,0,5,2] + [0,0,1,0,0,0,0,1,2] + str_bytes + strb_bytes + [0,2] + [0,0,0,1] + [LogType.ChangeContextListU16.value]))
+            self.assertEqual(ChangeContextNoArgs(1, ["a"]).get_log_bytes(), bytearray(str_bytes + [0,1] + [0,0,0,1] + [LogType.ChangeContextNoArgs.value]))
             self.assertEqual(FinishedWriting().get_log_bytes(), bytearray([LogType.FinishedWriting.value]))
             self.assertEqual(SentBatch().get_log_bytes(), bytearray([LogType.SentBatch.value]))
             self.assertEqual(AckedBatch().get_log_bytes(), bytearray([LogType.AckedBatch.value]))
@@ -423,10 +474,10 @@ if __name__ == '__main__':
         def test_write_logs(self):
             mock_file = BytesIO(b"")
             logger = LogReadWriter(mock_file)
-            logger.log(ChangeContextFloat(["a"],[1.1]))
-            logger.log(ChangeContextFloatU32(["a","b"], [1.1, 2.2], [1,2]))
-            logger.log(ChangeContextListU16(["a", "b"], [[5,5],[256, 1]]))
-            logger.log(ChangeContextNoArgs(["a"]))
+            logger.log(ChangeContextFloat(1, ["a"],[1.1]))
+            logger.log(ChangeContextFloatU32(1, ["a","b"], [1.1, 2.2], [1,2]))
+            logger.log(ChangeContextListU16(1, ["a", "b"], [[5,5],[256, 1]]))
+            logger.log(ChangeContextNoArgs(1, ["a"]))
             logger.log(FinishedWriting())
             logger.log(SentBatch())
             logger.log(AckedBatch())
@@ -452,10 +503,10 @@ if __name__ == '__main__':
             self.assertEqual(AckedBatch(), logger.read_curr_log())
             self.assertEqual(SentBatch(), logger.read_curr_log())
             self.assertEqual(FinishedWriting(), logger.read_curr_log())
-            self.assertEqual(ChangeContextNoArgs(["a"]), logger.read_curr_log())
-            self.assertEqual(ChangeContextListU16(["a", "b"], [[5,5],[256, 1]]), logger.read_curr_log())
-            self.assertEqual(ChangeContextFloatU32(["a", "b"], [1.1, 2.2], [1,2]), logger.read_curr_log())
-            self.assertEqual(ChangeContextFloat(["a"], [1.1]), logger.read_curr_log())
+            self.assertEqual(ChangeContextNoArgs(1, ["a"]), logger.read_curr_log())
+            self.assertEqual(ChangeContextListU16(1, ["a", "b"], [[5,5],[256, 1]]), logger.read_curr_log())
+            self.assertEqual(ChangeContextFloatU32(1, ["a", "b"], [1.1, 2.2], [1,2]), logger.read_curr_log())
+            self.assertEqual(ChangeContextFloat(1, ["a"], [1.1]), logger.read_curr_log())
             self.assertAlmostEqual(None, logger.read_curr_log())
 
         def test_read_until(self):

@@ -1,3 +1,4 @@
+import socket
 from utils.SenderID import SenderID, SENDER_ID_BYTES
 from utils.auxiliar_functions import integer_to_big_endian_byte_array, byte_array_to_big_endian_integer, recv_exactly, remove_bytes
 from utils.QueryMessage import QueryMessage, query_result_headers
@@ -5,10 +6,10 @@ import unittest
 from unittest import TestCase
 
 AMOUNT_OF_CLIENT_ID_BYTES = 4
-AMOUNT_OF_MESSAGES_BYTES = 1
+AMOUNT_OF_MESSAGES_BYTES = 2
 SEQ_NUM_BYTES = 4
 AMOUNT_OF_SEQ_NUMS = 2**(8*SEQ_NUM_BYTES)
-HEADER_LEN = AMOUNT_OF_CLIENT_ID_BYTES + AMOUNT_OF_MESSAGES_BYTES + SEQ_NUM_BYTES + SENDER_ID_BYTES
+HEADER_LEN = AMOUNT_OF_CLIENT_ID_BYTES + SEQ_NUM_BYTES + SENDER_ID_BYTES + AMOUNT_OF_MESSAGES_BYTES  
 
 class Batch():
     def __init__(self, client_id, sender_id, seq_num, messages):
@@ -147,7 +148,7 @@ if __name__ == '__main__':
             byte_array = integer_to_big_endian_byte_array(0, AMOUNT_OF_CLIENT_ID_BYTES)
             byte_array.extend(SenderID(1,1,1).to_bytes())
             byte_array.extend(integer_to_big_endian_byte_array(2, SEQ_NUM_BYTES))
-            byte_array.append(2)
+            byte_array.extend(integer_to_big_endian_byte_array(2, AMOUNT_OF_MESSAGES_BYTES))
             byte_array.extend(self.test_book_message1().to_bytes())
             byte_array.extend(self.test_book_message2().to_bytes())
             return byte_array
@@ -156,7 +157,7 @@ if __name__ == '__main__':
             byte_array = integer_to_big_endian_byte_array(0, AMOUNT_OF_CLIENT_ID_BYTES)
             byte_array.extend(SenderID(1,1,1).to_bytes())
             byte_array.extend(integer_to_big_endian_byte_array(2, SEQ_NUM_BYTES))
-            byte_array.append(0)
+            byte_array.extend(integer_to_big_endian_byte_array(0, AMOUNT_OF_MESSAGES_BYTES))
             return byte_array
 
         def test_empty_batch_to_bytes(self):
@@ -181,4 +182,5 @@ if __name__ == '__main__':
             batch2 = Batch.eof(1, SenderID(1,1,1))
             self.assertEqual(batch1.seq_num, 0)
             self.assertEqual(batch2.seq_num, 1)
+
     unittest.main()

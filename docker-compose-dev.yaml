@@ -25,7 +25,7 @@ services:
       - WORKER_FIELD=categories
       - WORKER_VALUE=Computers
     volumes:
-      - metadataVolume:/metadata
+      - persistanceVolume:/persistance_files
 
   filter1.0.1:
     build:
@@ -45,7 +45,7 @@ services:
       - WORKER_FIELD=categories
       - WORKER_VALUE=Computers
     volumes:
-      - metadataVolume:/metadata
+      - persistanceVolume:/persistance_files
 
   filter1.1.0:
     build:
@@ -65,7 +65,7 @@ services:
       - WORKER_FIELD=year
       - WORKER_VALUE=2000,2023
     volumes:
-      - metadataVolume:/metadata
+      - persistanceVolume:/persistance_files
 
   filter1.1.1:
     build:
@@ -85,7 +85,7 @@ services:
       - WORKER_FIELD=year
       - WORKER_VALUE=2000,2023
     volumes:
-      - metadataVolume:/metadata
+      - persistanceVolume:/persistance_files
 
   filter1.2.0:
     build:
@@ -105,7 +105,7 @@ services:
       - WORKER_FIELD=title
       - WORKER_VALUE=distributed
     volumes:
-      - metadataVolume:/metadata
+      - persistanceVolume:/persistance_files
 
   filter1.2.1:
     build:
@@ -125,7 +125,7 @@ services:
       - WORKER_FIELD=title
       - WORKER_VALUE=distributed
     volumes:
-      - metadataVolume:/metadata
+      - persistanceVolume:/persistance_files
 
   accumulator2.0.0:
     build:
@@ -147,7 +147,7 @@ services:
       - ACCUMULATE_BY=authors
 
     volumes:
-      - metadataVolume:/metadata
+      - persistanceVolume:/persistance_files
 
   accumulator2.0.1:
     build:
@@ -169,7 +169,7 @@ services:
       - ACCUMULATE_BY=authors
 
     volumes:
-      - metadataVolume:/metadata
+      - persistanceVolume:/persistance_files
 
   filter3.0.0:
     build:
@@ -189,7 +189,7 @@ services:
       - WORKER_FIELD=year
       - WORKER_VALUE=1990,1999
     volumes:
-      - metadataVolume:/metadata
+      - persistanceVolume:/persistance_files
 
   filter3.0.1:
     build:
@@ -209,7 +209,7 @@ services:
       - WORKER_FIELD=year
       - WORKER_VALUE=1990,1999
     volumes:
-      - metadataVolume:/metadata
+      - persistanceVolume:/persistance_files
 
   filter3.0.2:
     build:
@@ -229,7 +229,7 @@ services:
       - WORKER_FIELD=year
       - WORKER_VALUE=1990,1999
     volumes:
-      - metadataVolume:/metadata
+      - persistanceVolume:/persistance_files
 
   filter3.0.3:
     build:
@@ -249,7 +249,7 @@ services:
       - WORKER_FIELD=year
       - WORKER_VALUE=1990,1999
     volumes:
-      - metadataVolume:/metadata
+      - persistanceVolume:/persistance_files
 
   accumulator3.1.0:
     build:
@@ -271,7 +271,7 @@ services:
       - ACCUMULATE_BY=title
 
     volumes:
-      - metadataVolume:/metadata
+      - persistanceVolume:/persistance_files
 
   accumulator3.1.1:
     build:
@@ -293,7 +293,7 @@ services:
       - ACCUMULATE_BY=title
 
     volumes:
-      - metadataVolume:/metadata
+      - persistanceVolume:/persistance_files
 
   accumulator3.1.2:
     build:
@@ -315,7 +315,7 @@ services:
       - ACCUMULATE_BY=title
 
     volumes:
-      - metadataVolume:/metadata
+      - persistanceVolume:/persistance_files
 
   accumulator3.1.3:
     build:
@@ -337,7 +337,7 @@ services:
       - ACCUMULATE_BY=title
 
     volumes:
-      - metadataVolume:/metadata
+      - persistanceVolume:/persistance_files
 
   accumulator4.0.0:
     build:
@@ -359,7 +359,7 @@ services:
       - ACCUMULATE_BY=title
 
     volumes:
-      - metadataVolume:/metadata
+      - persistanceVolume:/persistance_files
 
   accumulator4.0.1:
     build:
@@ -381,7 +381,7 @@ services:
       - ACCUMULATE_BY=title
 
     volumes:
-      - metadataVolume:/metadata
+      - persistanceVolume:/persistance_files
 
   accumulator4.0.2:
     build:
@@ -403,7 +403,7 @@ services:
       - ACCUMULATE_BY=title
 
     volumes:
-      - metadataVolume:/metadata
+      - persistanceVolume:/persistance_files
 
   accumulator4.0.3:
     build:
@@ -425,7 +425,7 @@ services:
       - ACCUMULATE_BY=title
 
     volumes:
-      - metadataVolume:/metadata
+      - persistanceVolume:/persistance_files
 
   accumulator4.1.0:
     build:
@@ -447,7 +447,7 @@ services:
       - ACCUMULATE_BY=title
 
     volumes:
-      - metadataVolume:/metadata
+      - persistanceVolume:/persistance_files
 
   filter5.0.0:
     build:
@@ -467,7 +467,7 @@ services:
       - WORKER_FIELD=categories
       - WORKER_VALUE=Fiction
     volumes:
-      - metadataVolume:/metadata
+      - persistanceVolume:/persistance_files
 
   filter5.0.1:
     build:
@@ -487,7 +487,7 @@ services:
       - WORKER_FIELD=categories
       - WORKER_VALUE=Fiction
     volumes:
-      - metadataVolume:/metadata
+      - persistanceVolume:/persistance_files
 
   accumulator5.1.0:
     build:
@@ -511,7 +511,7 @@ services:
       - ACCUMULATE_BY=title
 
     volumes:
-      - metadataVolume:/metadata
+      - persistanceVolume:/persistance_files
 
   accumulator5.1.1:
     build:
@@ -535,7 +535,7 @@ services:
       - ACCUMULATE_BY=title
 
     volumes:
-      - metadataVolume:/metadata
+      - persistanceVolume:/persistance_files
 
   accumulator5.1.2:
     build:
@@ -559,7 +559,7 @@ services:
       - ACCUMULATE_BY=title
 
     volumes:
-      - metadataVolume:/metadata
+      - persistanceVolume:/persistance_files
 
   accumulator5.1.3:
     build:
@@ -583,7 +583,7 @@ services:
       - ACCUMULATE_BY=title
 
     volumes:
-      - metadataVolume:/metadata
+      - persistanceVolume:/persistance_files
 
   accumulator5.1.4:
     build:
@@ -607,7 +607,7 @@ services:
       - ACCUMULATE_BY=title
 
     volumes:
-      - metadataVolume:/metadata
+      - persistanceVolume:/persistance_files
 
   accumulator5.2.0:
     build:
@@ -629,7 +629,7 @@ services:
       - ACCUMULATE_BY=title
 
     volumes:
-      - metadataVolume:/metadata
+      - persistanceVolume:/persistance_files
 
   gateway:
     build:
@@ -645,9 +645,9 @@ services:
       - PORT=12345
       - BOOK_QUERIES=1,2,3,5
       - REVIEW_QUERIES=3,5
-      - FORWARD_TO=1.0,3.0,2.0,5.0
-      - SHARD_BY=,title,authors,title
-      - NEXT_POOL_WORKERS=2,4,2,2
+      - FORWARD_TO=2.0,5.0,3.0,1.0
+      - SHARD_BY=authors,title,title,
+      - NEXT_POOL_WORKERS=2,2,4,2
       - EOF_TO_RECEIVE=10
 
   client0:
@@ -657,7 +657,7 @@ services:
     restart: on-failure
     environment:
       - PYTHONUNBUFFERED=1
-      - BATCH_SIZE=25
+      - BATCH_SIZE=1024
       - QUERY_RESULTS_PATH=/data/
       - QUERIES=1,2,3,4,5
       - SERVER_PORT=12345
@@ -671,7 +671,7 @@ services:
     restart: on-failure
     environment:
       - PYTHONUNBUFFERED=1
-      - BATCH_SIZE=25
+      - BATCH_SIZE=1024
       - QUERY_RESULTS_PATH=/data/
       - QUERIES=1,2,3,4,5
       - SERVER_PORT=12345
@@ -685,9 +685,9 @@ volumes:
       type: none
       device: ./data
       o: bind
-  metadataVolume:
+  persistanceVolume:
     driver: local
     driver_opts:
       type: none
-      device: ./metadata
+      device: ./persistance_files
       o: bind

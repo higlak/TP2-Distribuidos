@@ -98,7 +98,13 @@ class DatasetWriter():
         values = object.get_csv_values()
         line = {}
         for i in range(len(columns)):
+            try:
+                line[columns[i]] = values[i]
+            except:
+                print(columns)
+                print(values)
             line[columns[i]] = values[i]
+
         self.writer.writerow(line)
 
     def close(self):

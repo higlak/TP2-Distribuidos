@@ -28,8 +28,8 @@ class GatewayOut():
     def start(self):
         try:
             self.loop()
-        except OSError:
-            print("[GatewayOut] Socket disconnected")
+        except OSError as e :
+            print("[GatewayOut] Socket disconnected: {e}")
         self.close()
 
     def loop(self):
