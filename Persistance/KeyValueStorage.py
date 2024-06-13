@@ -7,6 +7,7 @@ import io
 U32_BYTES = 4
 LEN_LIST_BYTES = 1
 STARTING_FILE_POS = io.SEEK_SET
+LAST_FILE_POS = io.SEEK_END
 STR_PADDING = bytes([0xff])
 
 class StorableTypes(ABC):
@@ -238,24 +239,60 @@ class KeyValueStorage():
 
     def store_all(self, keys, list_of_values):
         for key, values in zip(keys, list_of_values):
-            if type(values) != list:
-                values = [values]    
             self.store(key, values)
 
-    def store(self, key, values):
-        if (len(values) != len(self.value_types)) and len(values) != 0:
-            raise KeysMustBeEqualToValuesOr0
+    def _convert_values(self, values):
         converted_values = []
         for value, value_type, value_size in zip(values, self.value_types, self.value_sizes):
             converted_values.append(value_type(value, value_size))
+        return converted_values
+
+
+    def store(self, key, values): 
+        if (len(values) != len(self.value_types)) and len(values) != 0 and values != [list]:
+            print(f"values: {values} , values_types: {self.value_types}")
+            raise KeysMustBeEqualToValuesOr0
+        
+        converted_values = self._convert_values(values)
 
         key = self.key_type(key, self.fixed_key_size)
         pos = self.key_pos.get(key, self.next_pos)
+        self._store_in_pos(pos, key, converted_values)
+        
+    def _store_in_pos(self, pos, key, values):
         if pos == self.next_pos:
             self.key_pos[key] = pos
-            self.write_key(key)
             self.next_pos+=1
-        self.write_values(key, converted_values)
+        self.write_key(key)
+        self.write_values(key, values)
+        self.file.flush()
+
+    def remove(self, key):
+        key = self.key_type(key, self.fixed_key_size)
+        if key not in self.key_pos:
+            return
+        
+        self.next_pos -=1
+        pos_to_remove = self.key_pos.pop(key)
+        if self.next_pos != pos_to_remove:
+            self.file.seek(self.next_pos * self.entry_byte_size, STARTING_FILE_POS)
+            entry = self.get_entry()
+            last_key = entry[0].value
+            last_values = entry[1]
+
+            if len(self.value_types) == 1:
+                last_values = [last_values]
+            last_values = self._convert_values(last_values)
+            last_key = self.key_type(last_key, self.fixed_key_size)
+            self.key_pos[last_key] = pos_to_remove
+            self._store_in_pos(pos_to_remove, last_key, last_values)
+        self.del_last_line()
+
+    def del_last_line(self):
+        size = self.file.seek(0, LAST_FILE_POS)
+        self.file.truncate(max(0,size - self.entry_byte_size))
+        
+        
         
 if __name__ == '__main__':
     import unittest
@@ -266,7 +303,8 @@ if __name__ == '__main__':
 
     MAX_LEN_LIST = 10
     FIXED_FLOAT_BYTES = 4
-    FIXED_STR_LEN = 128
+    FIXED_STR_LEN = 512
+    ALL = 100000
 
     class TestKeyValueStorage(TestCase):
         def str_to_bytes(self, string):
@@ -280,7 +318,7 @@ if __name__ == '__main__':
             expected_bytes.extend(self.str_to_bytes("valor"))
             expected_bytes.extend([0,0,0,1])
             file.seek(STARTING_FILE_POS)
-            self.assertEqual(expected_bytes, file.read(1000))
+            self.assertEqual(expected_bytes, file.read(ALL))
             self.assertEqual(storage.key_pos, {FixedStr("clave", FIXED_STR_LEN):0})
             self.assertEqual(storage.next_pos, 1)
 
@@ -301,7 +339,7 @@ if __name__ == '__main__':
 
             file.seek(STARTING_FILE_POS)
 
-            self.assertEqual(expected_bytes, file.read(1000))
+            self.assertEqual(expected_bytes, file.read(ALL))
             self.assertEqual(storage.key_pos, {FixedStr("clave1", FIXED_STR_LEN):0, FixedStr("clave2", FIXED_STR_LEN): 1})
             self.assertEqual(storage.next_pos, 2)
 
@@ -322,7 +360,7 @@ if __name__ == '__main__':
 
             file.seek(STARTING_FILE_POS)
 
-            self.assertEqual(expected_bytes, file.read(1000))
+            self.assertEqual(expected_bytes, file.read(ALL))
             self.assertEqual(storage.key_pos, {FixedStr("clave1", FIXED_STR_LEN):0, FixedStr("clave2", FIXED_STR_LEN): 1})
             self.assertEqual(storage.next_pos, 2)
 
@@ -339,7 +377,7 @@ if __name__ == '__main__':
             
             file.seek(STARTING_FILE_POS)
             
-            self.assertEqual(expected_bytes, file.read(1000))
+            self.assertEqual(expected_bytes, file.read(ALL))
             self.assertEqual(storage.key_pos, {FixedStr("clave", FIXED_STR_LEN):0})
             self.assertEqual(storage.next_pos, 1)
 
@@ -384,4 +422,78 @@ if __name__ == '__main__':
             
             self.assertEqual(storage.next_pos, 2)
 
+        def test_remove_not_found_key(self):
+            file = BytesIO(b"")
+            storage = KeyValueStorage(file, str, FIXED_STR_LEN, [str, int], [FIXED_STR_LEN, U32_BYTES])
+        
+            expected_bytes = self.str_to_bytes("clave1")
+            expected_bytes.extend(self.str_to_bytes("valor1"))
+            expected_bytes.extend([0,0,0,1])
+            expected_bytes.extend(self.str_to_bytes("clave2"))
+            expected_bytes.extend(self.str_to_bytes("valor2"))
+            expected_bytes.extend([0,0,0,2])
+
+            storage.store("clave1", ["valor1", 1])
+            storage.store("clave2", ["valor2", 2])
+            storage.remove("no key")
+
+            file.seek(0,STARTING_FILE_POS)
+            self.assertEqual(storage.key_pos, {FixedStr("clave1", FIXED_STR_LEN) :0, FixedStr("clave2", FIXED_STR_LEN):1})
+            self.assertEqual(storage.next_pos, 2)
+            self.assertEqual(expected_bytes, file.read(ALL))
+
+        def test_remove_last_key(self):
+            file = BytesIO(b"")
+            storage = KeyValueStorage(file, str, FIXED_STR_LEN, [str, int], [FIXED_STR_LEN, U32_BYTES])
+        
+            expected_bytes = self.str_to_bytes("clave1")
+            expected_bytes.extend(self.str_to_bytes("valor1"))
+            expected_bytes.extend([0,0,0,1])
+
+            storage.store("clave1", ["valor1", 1])
+            storage.store("clave2", ["valor2", 2])
+            storage.remove("clave2")
+
+            file.seek(0,STARTING_FILE_POS)
+            self.assertEqual(storage.key_pos, {FixedStr("clave1", FIXED_STR_LEN) :0})
+            self.assertEqual(storage.next_pos, 1)
+            self.assertEqual(expected_bytes, file.read(ALL))
+
+        def test_remove_first_key(self):
+            file = BytesIO(b"")
+            storage = KeyValueStorage(file, str, FIXED_STR_LEN, [str, int], [FIXED_STR_LEN, U32_BYTES])
+        
+            expected_bytes = self.str_to_bytes("clave2")
+            expected_bytes.extend(self.str_to_bytes("valor2"))
+            expected_bytes.extend([0,0,0,2])
+
+            storage.store("clave1", ["valor1", 1])
+            storage.store("clave2", ["valor2", 2])
+            storage.remove("clave1")
+
+            file.seek(0,STARTING_FILE_POS)
+            self.assertEqual(storage.key_pos, {FixedStr("clave2", FIXED_STR_LEN) :0})
+            self.assertEqual(storage.next_pos, 1)
+            self.assertEqual(expected_bytes, file.read(ALL))
+
+        def test_remove_key_in_the_middle(self):
+            file = BytesIO(b"")
+            storage = KeyValueStorage(file, str, FIXED_STR_LEN, [str, int], [FIXED_STR_LEN, U32_BYTES])
+        
+            expected_bytes = self.str_to_bytes("clave1")
+            expected_bytes.extend(self.str_to_bytes("valor1"))
+            expected_bytes.extend([0,0,0,1])
+            expected_bytes.extend(self.str_to_bytes("clave3"))
+            expected_bytes.extend(self.str_to_bytes("valor3"))
+            expected_bytes.extend([0,0,0,3])
+
+            storage.store("clave1", ["valor1", 1])
+            storage.store("clave2", ["valor2", 2])
+            storage.store("clave3", ["valor3", 3])
+            storage.remove("clave2")
+
+            file.seek(0,STARTING_FILE_POS)
+            self.assertEqual(storage.key_pos, {FixedStr("clave1", FIXED_STR_LEN) :0, FixedStr("clave3", FIXED_STR_LEN):1})
+            self.assertEqual(storage.next_pos, 2)
+            self.assertEqual(expected_bytes, file.read(ALL))
     unittest.main()

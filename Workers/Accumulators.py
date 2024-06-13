@@ -3,7 +3,7 @@ import time
 
 from Persistance.KeyValueStorage import KeyValueStorage
 from Persistance.log import ChangeContextFloat, ChangeContextFloatU32, ChangeContextListU16
-from .Worker import Worker
+from .Worker import Worker, CLIENT_CONTEXT_KEY_BYTES
 from utils.QueryMessage import QueryMessage, YEAR_FIELD, TITLE_FIELD, AUTHOR_FIELD, BOOK_MSG_TYPE, REVIEW_MSG_TYPE, RATING_FIELD, MSP_FIELD, REVIEW_TEXT_FIELD
 import unittest
 from unittest import TestCase
@@ -15,8 +15,7 @@ except:
     pass
 
 REVIEW_COUNT = "review_count"
-CONTEXT_KEY_LEN = 255
-CONTEXT_STR_LEN = 255
+CONTEXT_AUTHOR_LEN = 2048
 CONTEXT_FLOAT_BYTES = 4
 CONTEXT_INT_BYTES = 4
 
@@ -34,8 +33,7 @@ class Accumulator(Worker, ABC):
         self.field = field
         self.values = values
         self.accumulate_by = accumulate_by
-        self.client_contexts = {}
-        self.context_storage = None
+        self.client_contexts = {} # {client {depende del accum}}
 
     @classmethod
     def new(cls, field, values, accumulate_by):
@@ -73,7 +71,7 @@ class Accumulator(Worker, ABC):
 
     def load_context(self, path, client_id):
         storage_types, storage_types_size = self.get_context_storage_types()
-        self.context_storage, previous_context = KeyValueStorage.new(path, str, CONTEXT_KEY_LEN, storage_types, storage_types_size)
+        self.context_storage, previous_context = KeyValueStorage.new(path, str, CLIENT_CONTEXT_KEY_BYTES, storage_types, storage_types_size)
         if not self.context_storage or previous_context == None:
             return False
         context = self.process_previous_context(previous_context)
@@ -94,6 +92,7 @@ class Accumulator(Worker, ABC):
 
     def process_message(self, client_id, msg: QueryMessage):
         self.client_contexts[client_id] = self.client_contexts.get(client_id, self.get_new_context())
+        self.client_context_storage_updates[client_id] = self.client_context_storage_updates.get(client_id, {})
         results = self.accumulate(client_id, msg)
         if not results:
             return None
@@ -105,10 +104,7 @@ class Accumulator(Worker, ABC):
 
     def get_final_results(self, client_id):
         if client_id in self.client_contexts:
-            return [self.transform_to_result(msg) for msg in self.final_results(client_id)]
-        
-    def add_entry_update(self, client_id, key, values):
-        self.context_entries_to_dump[client_id] = self.context_entries_to_dump.get(client_id, []) + [(key, values)]
+            return [self.transform_to_result(msg) for msg in self.final_results(client_id)]    
 
     @abstractmethod
     def change_context_log(self, client_id, keys, values):
@@ -136,10 +132,15 @@ class DecadeByAuthorAccumulator(Accumulator):
         if msg_decade == None:
             return False
         if not (msg_decade in self.client_contexts[client_id].get(author, [])):
-            self.client_contexts[client_id][author] = self.client_contexts[client_id].get(author, []) + [msg_decade]
-            self.add_entry_update(client_id, author, [self.client_contexts[client_id][author]])
+            self.add_to_context(client_id, author, msg_decade)
             if len(self.client_contexts[client_id].get(author, [])) == self.values:
                 return True
+            
+    def add_to_context(self, client_id, author, msg_decade):
+        old_value = self.client_contexts[client_id].get(author, None)
+        new_value = self.client_contexts[client_id].get(author, []) + [msg_decade]
+        self.client_context_storage_updates[client_id][author] = (old_value, [new_value])
+        self.client_contexts[client_id][author] = new_value
 
     def get_context_storage_types(self):
         return [(list, int)], [self.values]
@@ -160,17 +161,24 @@ class AmountOfReviewByTitleAccumulator(Accumulator):
     def accumulate(self, client_id, msg):
         if msg.msg_type == BOOK_MSG_TYPE:
             authors = ';'.join(msg.authors)
-            self.client_contexts[client_id][msg.title] = self.client_contexts[client_id].get(msg.title, [0,0.0, authors])
+            self.add_to_context(client_id, msg.msg_type, msg.title, msg.rating, authors)
         elif msg.msg_type == REVIEW_MSG_TYPE:
             if msg.title not in self.client_contexts[client_id]:
                 return None
-            self.client_contexts[client_id][msg.title][0] += 1
-            self.client_contexts[client_id][msg.title][1] += msg.rating 
+            self.add_to_context(client_id, msg.msg_type, msg.title, msg.rating)
             if self.client_contexts[client_id][msg.title][0] == int(self.values):
                 print(f"[Worker {self.id}] Accumulated {self.values} of {msg.title} for client {client_id}")
-        self.add_entry_update(client_id, msg.title, self.client_contexts[client_id][msg.title])
         return None
     
+    def add_to_context(self, client_id, msg_type, title, rating, authors=None):
+        old_value = self.client_contexts[client_id].get(title, None)
+        new_value = self.client_contexts[client_id].get(title, [0, 0.0, authors])
+        if msg_type == REVIEW_MSG_TYPE:
+            new_value[0] +=1
+            new_value[1] += rating
+        self.client_context_storage_updates[client_id][title] = (old_value, new_value)
+        self.client_contexts[client_id][title] = new_value
+
     def final_results(self, client_id):
         results = []
         for title, accum in self.client_contexts[client_id].items():
@@ -181,7 +189,7 @@ class AmountOfReviewByTitleAccumulator(Accumulator):
         return results
     
     def get_context_storage_types(self):
-        return [int, float, str], [CONTEXT_INT_BYTES, CONTEXT_FLOAT_BYTES, CONTEXT_STR_LEN]
+        return [int, float, str], [CONTEXT_INT_BYTES, CONTEXT_FLOAT_BYTES, CONTEXT_AUTHOR_LEN]
     
     def process_previous_context(self, previous_context):
         return previous_context
@@ -197,13 +205,21 @@ class RatingByTitleAccumulator(Accumulator):
         if msg.rating == None or msg.title == None:
             return
         if len(self.client_contexts[client_id]) < int(self.values):
-            heapq.heappush(self.client_contexts[client_id], BookAtribute(msg.title, msg.rating))
+            self.add_to_context(client_id, msg.title, msg.rating)
         elif self.client_contexts[client_id][0].attribute < msg.rating:
-            heapq.heappop(self.client_contexts[client_id])
-            heapq.heappush(self.client_contexts[client_id], BookAtribute(msg.title, msg.rating))
-        else:
-            return
-        self.add_entry_update(client_id, msg.title, msg.rating)
+            self.remove_smallest_from_context(client_id)
+            self.add_to_context(client_id, msg.title, msg.rating)
+
+    def add_to_context(self, client_id, title, rating):
+        old_value = None
+        new_value = rating
+        self.client_context_storage_updates[client_id][title] = (old_value, [new_value])
+        heapq.heappush(self.client_contexts[client_id], BookAtribute(title, rating))
+    
+    def remove_smallest_from_context(self, client_id):
+        old_book_attribute = heapq.heappop(self.client_contexts[client_id])
+        new_value = None
+        self.client_context_storage_updates[client_id][old_book_attribute.title] = (old_book_attribute.attribute, new_value)
 
     def final_results(self, client_id):
         results = []
@@ -235,11 +251,17 @@ class ReviewTextByTitleAccumulator(Accumulator):
                 self.client_contexts[client_id][msg.title] = [0, 0.0]
             sent_analysis = sentiment_analysis(msg.review_text)
             if sent_analysis != None:
-                self.client_contexts[client_id][msg.title][0] += 1
-                self.client_contexts[client_id][msg.title][1] += sent_analysis
-                self.add_entry_update(client_id, msg.title, self.client_contexts[client_id][msg.title])
+                self.add_to_context(client_id, msg.title, sent_analysis)
         return None
     
+    def add_to_context(self, client_id, title, sentiment_analisys):
+        old_value = self.client_contexts[client_id].get(title, None)
+        new_value = self.client_contexts[client_id].get(title, [0, 0.0])
+        new_value[0] += 1
+        new_value[1] += sentiment_analisys
+        self.client_context_storage_updates[client_id][title] = (old_value, new_value)
+        self.client_contexts[client_id][title] = new_value
+
     def final_results(self, client_id):
         results = []
         for title, result in self.client_contexts[client_id].items():
@@ -262,8 +284,13 @@ class MeanSentimentPolarityByTitleAccumulator(Accumulator):
     
     def accumulate(self, client_id, msg):
         if msg.title and msg.mean_sentiment_polarity != None:
-            bisect.insort(self.client_contexts[client_id], BookAtribute(msg.title, msg.mean_sentiment_polarity))
-            self.add_entry_update(client_id, msg.title, msg.mean_sentiment_polarity)
+            self.add_to_context(client_id, msg.title, msg.mean_sentiment_polarity)
+    
+    def add_to_context(self, client_id, title, msp):
+        old_value = None
+        new_value = msp
+        self.client_context_storage_updates[client_id][title] = (old_value, [new_value])
+        bisect.insort(self.client_contexts[client_id], BookAtribute(title, msp))
 
     def final_results(self, client_id):
         percentil_90_index = int(len(self.client_contexts[client_id]) * (int(self.values) / 100))

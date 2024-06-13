@@ -20,7 +20,7 @@ CLIENT_CONTEXT_FILE_NAME = 'client_context'
 
 METADATA_KEY_BYTES = 25 + 18
 METADATA_NUM_BYTES = 4
-CLIENT_CONTEXT_KEY_BYTES = 255
+CLIENT_CONTEXT_KEY_BYTES = 512
 LAST_SENT_SEQ_NUM = "last sent seq_num"
 CLIENT_PENDING_EOF = "pending eof client"
 LAST_RECEIVED_FROM_WORKER = "last received from worker"
@@ -35,7 +35,7 @@ class Worker(ABC):
         self.pending_eof = {}
         self.signal_queue = Queue()
         self.last_received_batch = {}
-        self.context_entries_to_dump = {}
+        self.client_context_storage_updates = {} # {client{key: (old_value, new value)}}
 
         self.communicator = None
         self.metadata_storage = None
@@ -216,20 +216,24 @@ class Worker(ABC):
     def get_context_storage_types(self):
         pass 
 
-    def dump_client_updates(self, client_id, updates):
+    def dump_client_updates(self, client_id, update_values): #{title: (old_value, new_value)}
         storage = self.client_contexts_storage[client_id]
-        keys = []
-        values = []
-        for update in updates:
-            keys.append(update[0]) 
-            values.append(update[1])
+        
+        old_values = []
+        for values in update_values:
+            old_values.append(values[0])
+        #self.logger.log(self.change_context_log(client_id, keys, values))
 
-        #self.logger.log(self.jjnge_context_log(client_id, keys, values))
-        storage.store_all(keys, values)
+        for key, values in update_values.items():
+            if values[1] == None:
+                storage.remove(key)
+            else:
+                storage.store(key, values[1])
 
     def dump_all_client_contexts_to_disk(self):
-        while len(self.context_entries_to_dump) > 0:
-            client_id, updates  = self.context_entries_to_dump.popitem()
+        while len(self.client_context_storage_updates) > 0:
+            client_id, update_values  = self.client_context_storage_updates.popitem() 
+
             if client_id not in self.client_contexts_storage:
                 path = self.worker_folder() + CLIENT_CONTEXT_FILE_NAME + str(client_id) + '.bin'
                 value_types, value_types_size = self.get_context_storage_types()
@@ -238,7 +242,7 @@ class Worker(ABC):
                 self.client_contexts_storage[client_id], _ = KeyValueStorage.new(
                     path, str, CLIENT_CONTEXT_KEY_BYTES, value_types, value_types_size)
             
-            self.dump_client_updates(client_id, updates)
+            self.dump_client_updates(client_id, update_values)
 
     def dump_metadata_to_disk(self, batch):
         if batch.is_empty():
