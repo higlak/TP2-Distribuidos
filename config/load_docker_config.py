@@ -13,6 +13,7 @@ QUERY_POOL_SEPARATOR = '.'
 GATEWAY = 'Gateway'
 QUERIES = 5
 DISTRIBUTE_BY_DEFAULT = ''
+WAKERS = 3
 
 FILENAME = 'docker-compose-dev.yaml'
 RABBIT = """  rabbitmq:
@@ -73,11 +74,14 @@ class QueryConfig():
 
     def to_docker_string(self, queries, eof_to_receive):
         result = ""
+        workers_containers = []
         for p, pool in enumerate(self.query_pools):
             for i in range(pool.worker_amount):
                 next_pool_workers, shard_by = get_next_pool_foward_info(queries, pool.forward_to) 
                 worker_id = f"{self.query_number}.{pool.pool_number}.{i}"
-                result += f"""  {pool.worker_type}{worker_id}:
+                worker_container = f'{pool.worker_type}{worker_id}'
+                workers_containers.append(worker_container) 
+                result += f"""  {worker_container}:
     build:
       context: ./
       dockerfile: {pool.worker_type_dokerfile_path()}\n"""
@@ -102,7 +106,7 @@ class QueryConfig():
                   result += f"\n      - ACCUMULATE_BY={pool.accumulate_by}"
                 result += "\n\n"
                 
-        return result
+        return result, workers_containers
 
 def process_all_queries(file):
   queries = {}
@@ -187,7 +191,9 @@ def get_next_pool_foward_info(queries, forward_to):
 
 def write_queries(file, queries, eof_to_receive):
    for query in queries.values():
-    file.write(query.to_docker_string(queries, eof_to_receive))
+    docker_string, containers_name = query.to_docker_string(queries, eof_to_receive)
+    file.write(docker_string)
+    return containers_name
     
 def eof_to_receive(queries):
   eof_to_receive = {}
@@ -196,6 +202,27 @@ def eof_to_receive(queries):
       for next_to_send in pool.forward_to.split(','):
         eof_to_receive[next_to_send] = eof_to_receive.get(next_to_send, 0) + pool.worker_amount
   return eof_to_receive 
+
+def process_waker(file, i, worker_containers, waker_containers):
+  other_waker_containers = waker_containers[:i] + waker_containers[i+1:]
+  waker_str = f"""  waker{i}:
+    build:
+      context: ./
+      dockerfile: Waker/Waker.dockerfile
+    restart: on-failure
+    environment:
+      - WORKERS_CONTAINERS={";".join(worker_containers)}
+      - WAKERS_CONTAINERS={";".join(other_waker_containers)}\n\n"""
+  file.write(waker_str)
+  return True
+
+def process_wakers(file, worker_containers):
+  worker_containers.append('gateway')
+  wakers = [f"waker{i}" for i in range(WAKERS)]
+  for i in range(WAKERS):
+    if not process_waker(file, i, worker_containers, wakers):
+      return False
+  return True
 
 def process_client(queries, port, file, config, i):
   client_str = f"""  client{i}:
@@ -247,11 +274,13 @@ def main():
       queries = {individual_query :process_query(file, filename, individual_query)}
 
     eof = eof_to_receive(queries)
-    write_queries(file, queries, eof)
+    worker_containers = write_queries(file, queries, eof)
     port = process_gateway(queries, eof, file)
     if not port:
       return
     if not process_clients(queries, port, file):
+      return
+    if not process_wakers(file, worker_containers):
       return      
     file.write(VOLUMES)
 
