@@ -9,3 +9,6 @@ class TypeDoesNotMatchSetType(Exception):
 
 class InvalidFile(Exception):
     pass
+
+class TooManyValues(Exception):
+    pass

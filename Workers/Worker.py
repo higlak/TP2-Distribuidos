@@ -220,9 +220,11 @@ class Worker(ABC):
         storage = self.client_contexts_storage[client_id]
         
         old_values = []
-        for values in update_values:
+        keys = []
+        for key, values in update_values.items():
             old_values.append(values[0])
-        #self.logger.log(self.change_context_log(client_id, keys, values))
+            keys.append(key)
+        self.logger.log(self.change_context_log(client_id, keys, old_values))
 
         for key, values in update_values.items():
             if values[1] == None:
