@@ -212,7 +212,8 @@ def process_waker(file, i, worker_containers, waker_containers):
     restart: on-failure
     environment:
       - WORKERS_CONTAINERS={";".join(worker_containers)}
-      - WAKERS_CONTAINERS={";".join(other_waker_containers)}\n\n"""
+      - WAKERS_CONTAINERS={";".join(other_waker_containers)}
+      - WAKER_ID={i}\n\n"""
   file.write(waker_str)
   return True
 
