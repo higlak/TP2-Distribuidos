@@ -1,6 +1,5 @@
 from .Worker import Worker
 from utils.QueryMessage import QueryMessage, CATEGORIES_FIELD, YEAR_FIELD, TITLE_FIELD, REVIEW_MSG_TYPE
-from Persistance.log import ChangeContextNoArgs
 
 class Filter(Worker):
     def __init__(self, id, next_pools, eof_to_receive, field, valid_values, droping_fields):

@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 import time
 
 from Persistance.KeyValueStorage import KeyValueStorage
-from Persistance.log import ChangeContextFloat, ChangeContextFloatU32, ChangeContextListU16
+from Persistance.log import ChangingFileLog
 from .Worker import Worker, CLIENT_CONTEXT_KEY_BYTES
 from utils.QueryMessage import QueryMessage, YEAR_FIELD, TITLE_FIELD, AUTHOR_FIELD, BOOK_MSG_TYPE, REVIEW_MSG_TYPE, RATING_FIELD, MSP_FIELD, REVIEW_TEXT_FIELD
 import unittest
@@ -98,6 +98,9 @@ class Accumulator(Worker, ABC):
             return None
         return [self.transform_to_result(m) for m in results]
     
+    def change_context_log(self, client_id, keys, entries):
+        return ChangingFileLog(client_id, keys, entries)
+    
     @abstractmethod
     def final_results(cls, client_id):
         pass
@@ -105,10 +108,6 @@ class Accumulator(Worker, ABC):
     def get_final_results(self, client_id):
         if client_id in self.client_contexts:
             return [self.transform_to_result(msg) for msg in self.final_results(client_id)]    
-
-    @abstractmethod
-    def change_context_log(self, client_id, keys, values):
-        pass
 
 class DecadeByAuthorAccumulator(Accumulator):
     def get_new_context(cls):
@@ -138,6 +137,9 @@ class DecadeByAuthorAccumulator(Accumulator):
             
     def add_to_context(self, client_id, author, msg_decade):
         old_value = self.client_contexts[client_id].get(author, None)
+        if author in self.client_context_storage_updates[client_id]:
+            old_value = self.client_context_storage_updates[client_id][author][0]
+        old_value = self.client_contexts[client_id].get(author, None)
         new_value = self.client_contexts[client_id].get(author, []) + [msg_decade]
         self.client_context_storage_updates[client_id][author] = (old_value, [new_value])
         self.client_contexts[client_id][author] = new_value
@@ -150,9 +152,6 @@ class DecadeByAuthorAccumulator(Accumulator):
 
     def final_results(self, client_id):
         return []
-    
-    def change_context_log(self, client_id, keys, values):
-        return ChangeContextListU16.from_keys_values(client_id, keys, values[0])
     
 class AmountOfReviewByTitleAccumulator(Accumulator):
     def get_new_context(cls):
@@ -172,6 +171,8 @@ class AmountOfReviewByTitleAccumulator(Accumulator):
     
     def add_to_context(self, client_id, msg_type, title, rating, authors=None):
         old_value = self.client_contexts[client_id].get(title, None)
+        if title in self.client_context_storage_updates[client_id]:
+            old_value = self.client_context_storage_updates[client_id][title][0]
         new_value = self.client_contexts[client_id].get(title, [0, 0.0, authors])
         if msg_type == REVIEW_MSG_TYPE:
             new_value[0] +=1
@@ -194,9 +195,6 @@ class AmountOfReviewByTitleAccumulator(Accumulator):
     def process_previous_context(self, previous_context):
         return previous_context
     
-    def change_context_log(self, client_id, keys, values):
-        return ChangeContextFloatU32.from_keys_values(client_id, keys, values)
-    
 class RatingByTitleAccumulator(Accumulator):
     def get_new_context(cls):
         return []
@@ -213,13 +211,13 @@ class RatingByTitleAccumulator(Accumulator):
     def add_to_context(self, client_id, title, rating):
         old_value = None
         new_value = rating
-        self.client_context_storage_updates[client_id][title] = (old_value, [new_value])
+        self.client_context_storage_updates[client_id][title] = ([old_value], [new_value])
         heapq.heappush(self.client_contexts[client_id], BookAtribute(title, rating))
     
     def remove_smallest_from_context(self, client_id):
         old_book_attribute = heapq.heappop(self.client_contexts[client_id])
         new_value = None
-        self.client_context_storage_updates[client_id][old_book_attribute.title] = (old_book_attribute.attribute, new_value)
+        self.client_context_storage_updates[client_id][old_book_attribute.title] = ([old_book_attribute.attribute], new_value)
 
     def final_results(self, client_id):
         results = []
@@ -238,9 +236,6 @@ class RatingByTitleAccumulator(Accumulator):
             heapq.heappush(context, BookAtribute(title, rating))
         return context
     
-    def change_context_log(self, client_id, keys, values):
-        return ChangeContextFloat.from_keys_values(client_id, keys, values)
-    
 class ReviewTextByTitleAccumulator(Accumulator):
     def get_new_context(cls):
         return {}
@@ -256,6 +251,8 @@ class ReviewTextByTitleAccumulator(Accumulator):
     
     def add_to_context(self, client_id, title, sentiment_analisys):
         old_value = self.client_contexts[client_id].get(title, None)
+        if title in self.client_context_storage_updates[client_id]:
+            old_value = self.client_context_storage_updates[client_id][title][0]
         new_value = self.client_contexts[client_id].get(title, [0, 0.0])
         new_value[0] += 1
         new_value[1] += sentiment_analisys
@@ -274,9 +271,6 @@ class ReviewTextByTitleAccumulator(Accumulator):
     
     def process_previous_context(self, previous_context):
         return previous_context
-            
-    def change_context_log(self, client_id, keys, values):
-        return ChangeContextFloatU32.from_keys_values(client_id, keys, values)
     
 class MeanSentimentPolarityByTitleAccumulator(Accumulator):
     def get_new_context(cls):
@@ -289,7 +283,7 @@ class MeanSentimentPolarityByTitleAccumulator(Accumulator):
     def add_to_context(self, client_id, title, msp):
         old_value = None
         new_value = msp
-        self.client_context_storage_updates[client_id][title] = (old_value, [new_value])
+        self.client_context_storage_updates[client_id][title] = ([old_value], [new_value])
         bisect.insort(self.client_contexts[client_id], BookAtribute(title, msp))
 
     def final_results(self, client_id):
@@ -311,7 +305,7 @@ class MeanSentimentPolarityByTitleAccumulator(Accumulator):
         return context
     
     def change_context_log(self, client_id, keys, values):
-        return ChangeContextFloat.from_keys_values(client_id, keys, values)
+        return ChangingFileLog(client_id, keys, values)
 
 class BookAtribute():
     def __init__(self, title, attribute):

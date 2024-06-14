@@ -9,6 +9,7 @@ LEN_LIST_BYTES = 1
 STARTING_FILE_POS = io.SEEK_SET
 LAST_FILE_POS = io.SEEK_END
 STR_PADDING = bytes([0xff])
+CROSS_OUT_BYTE = bytes([0xfe])
 
 class StorableTypes(ABC):
     @abstractmethod
@@ -189,15 +190,22 @@ class KeyValueStorage():
         storage = cls(file, key_type, fixed_key_size, value_types, values_fixed_size)
         return storage, storage.get_all_entries()
 
+    def is_mid_removal_entry_bytes(self, entry_bytes):
+        return CROSS_OUT_BYTE[0] in entry_bytes
+
     def get_entry(self):
         byte_array = bytearray(self.file.read(self.entry_byte_size))
         if len(byte_array) == 0:
             print("chau")
             return None
         if len(byte_array) < self.entry_byte_size:
-            raise InvalidFile 
-        
-        key = self.key_type.from_bytes(remove_bytes(byte_array, self.key_type.get_size_in_bytes(self.fixed_key_size)))
+            self.del_last_bytes(len(byte_array))
+            return None
+
+        key_bytes = remove_bytes(byte_array, self.key_type.get_size_in_bytes(self.fixed_key_size))
+        if self.is_mid_removal_entry_bytes(key_bytes):
+            return self.get_entry()
+        key = self.key_type.from_bytes(key_bytes)
         
         values = []
         for value_type, value_size in zip(self.value_types, self.value_sizes):
@@ -215,8 +223,9 @@ class KeyValueStorage():
             if entry == None:
                 break
             all_entries[entry[0].value] = entry[1]
-            self.key_pos[entry[0]] = i
-            i+=1
+            self.key_pos[entry[0]] = self.key_pos.get(entry[0],i)
+            if self.key_pos[entry[0]] == i:
+                i+=1
         self.next_pos = i
         return all_entries
 
@@ -247,7 +256,6 @@ class KeyValueStorage():
             converted_values.append(value_type(value, value_size))
         return converted_values
 
-
     def store(self, key, values): 
         if (len(values) != len(self.value_types)) and len(values) != 0 and values != [list]:
             print(f"values: {values} , values_types: {self.value_types}")
@@ -259,11 +267,14 @@ class KeyValueStorage():
         pos = self.key_pos.get(key, self.next_pos)
         self._store_in_pos(pos, key, converted_values)
         
-    def _store_in_pos(self, pos, key, values):
+    def _store_in_pos(self, pos, key, values, stepping=False):
         if pos == self.next_pos:
             self.key_pos[key] = pos
             self.next_pos+=1
-        self.write_key(key)
+            self.write_key(key)
+        elif stepping:
+            self.write_key(key)
+
         self.write_values(key, values)
         self.file.flush()
 
@@ -275,6 +286,8 @@ class KeyValueStorage():
         self.next_pos -=1
         pos_to_remove = self.key_pos.pop(key)
         if self.next_pos != pos_to_remove:
+            self.cross_out_key(pos_to_remove)
+
             self.file.seek(self.next_pos * self.entry_byte_size, STARTING_FILE_POS)
             entry = self.get_entry()
             last_key = entry[0].value
@@ -285,14 +298,20 @@ class KeyValueStorage():
             last_values = self._convert_values(last_values)
             last_key = self.key_type(last_key, self.fixed_key_size)
             self.key_pos[last_key] = pos_to_remove
-            self._store_in_pos(pos_to_remove, last_key, last_values)
+            self._store_in_pos(pos_to_remove, last_key, last_values, stepping=True)
         self.del_last_line()
 
-    def del_last_line(self):
+    def cross_out_key(self, key_pos):
+        self.file.seek(key_pos*self.entry_byte_size, STARTING_FILE_POS)
+        self.file.write(CROSS_OUT_BYTE *self.fixed_key_size)
+        self.file.flush()
+
+    def del_last_bytes(self, amount_of_bytes):
         size = self.file.seek(0, LAST_FILE_POS)
-        self.file.truncate(max(0,size - self.entry_byte_size))
-        
-        
+        self.file.truncate(max(0,size - amount_of_bytes))
+
+    def del_last_line(self):
+        self.del_last_bytes(self.entry_byte_size)
         
 if __name__ == '__main__':
     import unittest
@@ -496,4 +515,111 @@ if __name__ == '__main__':
             self.assertEqual(storage.key_pos, {FixedStr("clave1", FIXED_STR_LEN) :0, FixedStr("clave3", FIXED_STR_LEN):1})
             self.assertEqual(storage.next_pos, 2)
             self.assertEqual(expected_bytes, file.read(ALL))
+
+        def test_uncompleted_remove_full_cross_out(self):
+            initial_bytes = self.str_to_bytes("clave1")
+            initial_bytes.extend(self.str_to_bytes("valor1"))
+            initial_bytes.extend([0,0,0,1])
+            initial_bytes.extend(CROSS_OUT_BYTE * FIXED_STR_LEN)
+            initial_bytes.extend(self.str_to_bytes("valor2"))
+            initial_bytes.extend([0,0,0,2])
+            initial_bytes.extend(self.str_to_bytes("clave3"))
+            initial_bytes.extend(self.str_to_bytes("valor3"))
+            initial_bytes.extend([0,0,0,3])
+            file = BytesIO(initial_bytes)
+            storage = KeyValueStorage(file, str, FIXED_STR_LEN, [str, int], [FIXED_STR_LEN, U32_BYTES])
+        
+            expected_entries = {
+                "clave1": ["valor1", 1],
+                "clave3": ["valor3", 3],
+            }
+            expected_pos = {
+                FixedStr("clave1", FIXED_STR_LEN): 0,
+                FixedStr("clave3", FIXED_STR_LEN): 1,
+            }
+            entries = storage.get_all_entries()
+            self.assertEqual(entries, expected_entries)
+            self.assertEqual(storage.key_pos, expected_pos)
+            
+            self.assertEqual(storage.next_pos, 2)
+        
+        def test_uncompleted_remove_partial_cross_out(self):
+            initial_bytes = self.str_to_bytes("clave1")
+            initial_bytes.extend(self.str_to_bytes("valor1"))
+            initial_bytes.extend([0,0,0,1])
+            initial_bytes.extend(CROSS_OUT_BYTE * 2 + self.str_to_bytes("clave2")[2:])
+            initial_bytes.extend(self.str_to_bytes("valor2"))
+            initial_bytes.extend([0,0,0,2])
+            initial_bytes.extend(self.str_to_bytes("clave3"))
+            initial_bytes.extend(self.str_to_bytes("valor3"))
+            initial_bytes.extend([0,0,0,3])
+            file = BytesIO(initial_bytes)
+            storage = KeyValueStorage(file, str, FIXED_STR_LEN, [str, int], [FIXED_STR_LEN, U32_BYTES])
+        
+            expected_entries = {
+                "clave1": ["valor1", 1],
+                "clave3": ["valor3", 3],
+            }
+            expected_pos = {
+                FixedStr("clave1", FIXED_STR_LEN): 0,
+                FixedStr("clave3", FIXED_STR_LEN): 1,
+            }
+            entries = storage.get_all_entries()
+            self.assertEqual(entries, expected_entries)
+            self.assertEqual(storage.key_pos, expected_pos)
+            
+            self.assertEqual(storage.next_pos, 2)
+
+        def test_uncompleted_remove_dup_key(self):
+            initial_bytes = self.str_to_bytes("clave1")
+            initial_bytes.extend(self.str_to_bytes("valor1"))
+            initial_bytes.extend([0,0,0,1])
+            initial_bytes.extend(self.str_to_bytes("clave3"))
+            initial_bytes.extend(self.str_to_bytes("valor2"))
+            initial_bytes.extend([0,0,0,2])
+            initial_bytes.extend(self.str_to_bytes("clave3"))
+            initial_bytes.extend(self.str_to_bytes("valor3"))
+            initial_bytes.extend([0,0,0,3])
+            file = BytesIO(initial_bytes)
+            storage = KeyValueStorage(file, str, FIXED_STR_LEN, [str, int], [FIXED_STR_LEN, U32_BYTES])
+        
+            expected_entries = {
+                "clave1": ["valor1", 1],
+                "clave3": ["valor3", 3],
+            }
+            expected_pos = {
+                FixedStr("clave1", FIXED_STR_LEN): 0,
+                FixedStr("clave3", FIXED_STR_LEN): 1,
+            }
+            entries = storage.get_all_entries()
+            self.assertEqual(entries, expected_entries)
+            self.assertEqual(storage.key_pos, expected_pos)
+            
+            self.assertEqual(storage.next_pos, 2)
+
+        def test_uncompleted_key_entry_insertion(self):
+            initial_bytes = self.str_to_bytes("clave1")
+            initial_bytes.extend(self.str_to_bytes("valor1"))
+            initial_bytes.extend([0,0,0,1])
+            initial_bytes.extend(self.str_to_bytes("clave2"))
+            initial_bytes.extend(self.str_to_bytes("valor2"))
+            initial_bytes.extend([0,0,0,2])
+            initial_bytes.extend("cla".encode())
+            file = BytesIO(initial_bytes)
+            storage = KeyValueStorage(file, str, FIXED_STR_LEN, [str, int], [FIXED_STR_LEN, U32_BYTES])
+        
+            expected_entries = {
+                "clave1": ["valor1", 1],
+                "clave2": ["valor2", 2],
+            }
+            expected_pos = {
+                FixedStr("clave1", FIXED_STR_LEN): 0,
+                FixedStr("clave2", FIXED_STR_LEN): 1,
+            }
+            entries = storage.get_all_entries()
+            self.assertEqual(entries, expected_entries)
+            self.assertEqual(storage.key_pos, expected_pos)
+            self.assertEqual(storage.next_pos, 2)
+            file.seek(-3, LAST_FILE_POS)
+            self.assertEqual(file.read(3), bytearray([0,0,2]))
     unittest.main()

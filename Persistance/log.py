@@ -18,6 +18,9 @@ STR_TYPE_BYTE = 0
 INT_TYPE_BYTE = 1
 FLOAT_TYPE_BYTE = 2
 
+UPDATE = 0
+NEW_ENTRY = 1
+
 END_OF_FILE_POS = io.SEEK_END
 CURRENT_FILE_POS = io.SEEK_CUR
 
@@ -53,11 +56,14 @@ class LogReadWriter():
             logs.pop()
         return logs
 
+    def clean(self):
+        self.file.truncate(0)
+
     def close(self):
         self.file.close()
 
 class LogType(IntEnum):
-    ChangeContextLog = 0
+    ChangingFileLog = 0
     FinishedWriting = 1
     SentBatch = 2
     AckedBatch = 3
@@ -93,14 +99,13 @@ class Log(ABC):
     @classmethod
     def get_log_subclass(self, log_type):
         switch = {
-            LogType.ChangeContextLog: ChangeContextLog,
+            LogType.ChangingFileLog: ChangingFileLog,
             LogType.FinishedWriting: FinishedWriting,
             LogType.SentBatch: SentBatch,
             LogType.AckedBatch: AckedBatch,
             LogType.SentFinalResult: SentFinalResult,
             LogType.FinishedSendingResultsOfClient: FinishedSendingResultsOfClient,
             LogType.FinishedClient: FinishedClient,
-            LogType.ChangedMetadata: ChangeMetadata,
         }
         return switch[log_type]
 
@@ -138,10 +143,10 @@ class NoArgsLog(Log, ABC):
 #keys = ['key1', 'key2']
 #values = [[1,1.1,'hola', 'chau'], [2,2.2,'como', 'estas']]
 
-class ChangeContextLog(Log):
-    def __init__(self, client_id, keys, entries= None):
-        self.log_type = LogType.ChangeContextLog
-        self.client_id = client_id
+class ChangingFileLog(Log):
+    def __init__(self, file_name, keys, entries= None):
+        self.log_type = LogType.ChangingFileLog
+        self.file_name = file_name
         self.keys = keys
         self.entries = entries
         if entries != None and len(entries) > 2**(8* VALUES_TYPES_LEN):
@@ -150,17 +155,30 @@ class ChangeContextLog(Log):
     def get_log_arg_bytes(self):
         byte_array = bytearray()
         if self.entries != None:
-            byte_array.extend(self.get_log_values_bytes())
+            byte_array.extend(self.get_log_update_values_bytes())
         byte_array.extend(self.get_log_type_values_bytes())
-        byte_array.extend(get_keys_bytes(self.keys))
-        byte_array.extend(get_number_byte_array(self.client_id, CLIENT_ID_BYTES))
+        
+        new_keys = []
+        update_keys = []
+        for i in range(len(self.keys)):
+            if self.entries == None or self.entries[i] == None:
+                new_keys.append(self.keys[i])
+            else: 
+                update_keys.append(self.keys[i])
+        byte_array.extend(get_keys_bytes(update_keys))
+        byte_array.extend(get_keys_bytes(new_keys))
+        byte_array.extend(get_string_byte_array(self.file_name))
         return byte_array
     
     def get_log_type_values_bytes(self):
         byte_array = bytearray()
         entry = []
         if self.entries != None:
-            entry = self.entries[0] 
+            for ent in self.entries:
+                if ent != None:
+                    entry = ent
+                    break
+
         for value in entry:
             if type(value) == str:
                 byte_array.extend(get_number_byte_array(STR_TYPE_BYTE, VALUES_TYPES_LEN))
@@ -173,10 +191,19 @@ class ChangeContextLog(Log):
         byte_array.extend(get_number_byte_array(len(entry), VALUES_TYPES_LEN))
         return byte_array
 
-    def get_log_values_bytes(self):
+    def get_log_update_values_bytes(self):
         byte_array = bytearray()
-        for i in range(len(self.entries[0])):
+        entry_len = 0
+        if self.entries != None:
+            for entry in self.entries:
+                if entry != None:
+                    entry_len = len(entry)
+                    break
+
+        for i in range(entry_len):
             for values in self.entries:
+                if values == None:
+                    continue
                 if type(values[i]) == str:
                     byte_array.extend(get_string_byte_array(values[i]))
                 elif type(values[i]) == int:
@@ -189,34 +216,43 @@ class ChangeContextLog(Log):
 
     @classmethod
     def from_file_pos(cls, file, pos):
-        client_id = numbers_from_file_pos(file, pos, 1, CLIENT_ID_BYTES)[0]
-        keys = keys_from_file_pos(file, CURRENT_FILE_POS)
+        file_name = string_from_file_pos(file, pos)
+        new_keys = keys_from_file_pos(file, CURRENT_FILE_POS)
+        update_keys = keys_from_file_pos(file, CURRENT_FILE_POS)
         amount_of_value_types = numbers_from_file_pos(file, CURRENT_FILE_POS, 1, VALUES_TYPES_LEN)[0]
         if amount_of_value_types == 0:
-            return cls(client_id, keys)
+            return cls(file_name, new_keys)
         value_types = numbers_from_file_pos(file, CURRENT_FILE_POS, amount_of_value_types, VALUES_TYPES_LEN)
         values = []
         for value_type in reversed(value_types):
             if value_type == STR_TYPE_BYTE:
-                values.insert(0,strings_from_file_pos(file, CURRENT_FILE_POS, len(keys)))
+                values.insert(0,strings_from_file_pos(file, CURRENT_FILE_POS, len(update_keys)))
             elif value_type == INT_TYPE_BYTE:
-                values.insert(0,numbers_from_file_pos(file, CURRENT_FILE_POS, len(keys), U32_BYTES))
+                values.insert(0,numbers_from_file_pos(file, CURRENT_FILE_POS, len(update_keys), U32_BYTES))
             elif value_type == FLOAT_TYPE_BYTE:
-                values.insert(0,floats_from_file_pos(file, CURRENT_FILE_POS, len(keys)))
+                values.insert(0,floats_from_file_pos(file, CURRENT_FILE_POS, len(update_keys)))
             else:
                 raise UnsupportedType
             
         entries = list(zip(*values))
-        return cls(client_id, keys, entries)
+        keys = update_keys
+        for key in new_keys:
+            keys.append(key)
+            entries.append(None)
+        return cls(file_name, update_keys, entries)
     
     def params_eq(self, other):
-        if self.client_id != other.client_id or self.keys != other.keys:
+        if self.file_name != other.file_name or set(self.keys) != set(other.keys):
             return False
         if self.entries == None or other.entries == None:
-            if other.entries == None and self.entries == None:
+            if (other.entries == None or all(e is None for e in self.entries)) and (self.entries == None or  all(e is None for e in self.entries)):
                 return True
             return False
         for self_values, other_values in zip(self.entries, other.entries):
+            if self_values == None or other_values == None:
+                if self_values == None and other_values == None:
+                    continue
+                return False
             for self_value, other_value in zip(self_values, other_values):
                 if type(self_value) == float:
                     self_value = get_float_byte_array(self_value)
@@ -224,29 +260,6 @@ class ChangeContextLog(Log):
                 if self_value != other_value:
                     return False
         return True
-    
-class ChangeMetadata(Log):
-    def __init__(self, keys, numbers):
-        self.log_type = LogType.ChangedMetadata
-        self.keys = keys
-        self.numbers = numbers
-
-    def get_log_arg_bytes(self):
-        byte_array = bytearray()
-        for num in self.numbers:
-            byte_array.extend(get_number_byte_array(num, U32_BYTES))
-
-        byte_array.extend(get_keys_bytes(self.keys))
-        return byte_array
-
-    @classmethod
-    def from_file_pos(cls, file, pos):
-        keys = keys_from_file_pos(file, pos)
-        numbers = numbers_from_file_pos(file, CURRENT_FILE_POS, len(keys), U32_BYTES)
-        return cls(keys, numbers)
-    
-    def params_eq(self, other):
-        return self.keys == other.keys and self.numbers == other.numbers
         
 class FinishedWriting(NoArgsLog):
     def __init__(self):
@@ -378,45 +391,49 @@ if __name__ == '__main__':
     
     class TestLog(TestCase):
         def get_mock_file(self):
-            logs_bytes = ChangeContextLog(1, ["a", "b"], [["a", 1 , 1, 1.1], ["b", 2, 2, 2.2]]).get_log_bytes()
-            logs_bytes.extend(ChangeContextLog(1, ["a"]).get_log_bytes())
+            logs_bytes = ChangingFileLog("file1", ["a", "b"], [["a", 1 , 1, 1.1], ["b", 2, 2, 2.2]]).get_log_bytes()
+            logs_bytes.extend(ChangingFileLog("file1", ["a"], [[1]]).get_log_bytes())
+            logs_bytes.extend(ChangingFileLog("file1", ["a", "b"], [[1], None]).get_log_bytes())
+            logs_bytes.extend(ChangingFileLog("file1", ["a", "b"], [None, None]).get_log_bytes())
             logs_bytes.extend(FinishedWriting().get_log_bytes())
             logs_bytes.extend(SentBatch().get_log_bytes())
             logs_bytes.extend(AckedBatch().get_log_bytes())
             logs_bytes.extend(SentFinalResult("a", 1).get_log_bytes())
             logs_bytes.extend(FinishedSendingResultsOfClient(65536).get_log_bytes())
             logs_bytes.extend(FinishedClient().get_log_bytes())
-            logs_bytes.extend(ChangeMetadata(["a"],[2]).get_log_bytes())
             return BytesIO(logs_bytes)
 
         def test_log_to_bytes(self):
             str_bytes = list("a".encode()) + [0,1]
             strb_bytes = list("b".encode()) + [0,1]
+            file_bytes = list("file1".encode()) + [0,5]
             float1 = list(get_float_byte_array(1.1))
             float2 = list(get_float_byte_array(2.2))
 
-            self.assertEqual(ChangeContextLog(1, ["a", "b"], [["a", 1 , 1, 1.1], ["b", 2, 2, 2.2]]).get_log_bytes(),bytearray(str_bytes + strb_bytes + [0,0,0,1] + [0,0,0,2] + [0,0,0,1] + [0,0,0,2] + float1 + float2 + [STR_TYPE_BYTE,INT_TYPE_BYTE,INT_TYPE_BYTE,FLOAT_TYPE_BYTE] + [4] + str_bytes + strb_bytes + [0,2] + [0,0,0,1] + [LogType.ChangeContextLog]))
-            self.assertEqual(ChangeContextLog(1, ["a"]).get_log_bytes(),bytearray([0] + str_bytes + [0,1] + [0,0,0,1] + [LogType.ChangeContextLog]))
+            self.assertEqual(ChangingFileLog("file1", ["a", "b"], [["a", 1 , 1, 1.1], ["b", 2, 2, 2.2]]).get_log_bytes(),bytearray(str_bytes + strb_bytes + [0,0,0,1] + [0,0,0,2] + [0,0,0,1] + [0,0,0,2] + float1 + float2 + [STR_TYPE_BYTE,INT_TYPE_BYTE,INT_TYPE_BYTE,FLOAT_TYPE_BYTE] + [4] + str_bytes + strb_bytes + [0,2] + [0,0] + file_bytes + [LogType.ChangingFileLog]))
+            self.assertEqual(ChangingFileLog("file1", ["a"], [[1]]).get_log_bytes(),bytearray([0,0,0,1] + [INT_TYPE_BYTE] + [1] + str_bytes + [0,1] + [0,0] + file_bytes + [LogType.ChangingFileLog]))
+            self.assertEqual(ChangingFileLog("file1", ["a", "b"], [[1], None]).get_log_bytes(),bytearray([0,0,0,1] + [INT_TYPE_BYTE] + [1] + str_bytes + [0,1] + strb_bytes + [0,1] + file_bytes + [LogType.ChangingFileLog]))
+            self.assertEqual(ChangingFileLog("file1", ["a", "b"], [None, None]).get_log_bytes(),bytearray([0] + [0,0] + str_bytes + strb_bytes + [0,2] + file_bytes + [LogType.ChangingFileLog]))
             self.assertEqual(FinishedWriting().get_log_bytes(), bytearray([LogType.FinishedWriting.value]))
             self.assertEqual(SentBatch().get_log_bytes(), bytearray([LogType.SentBatch.value]))
             self.assertEqual(AckedBatch().get_log_bytes(), bytearray([LogType.AckedBatch.value]))
             self.assertEqual(SentFinalResult("a", 1).get_log_bytes(), bytearray(str_bytes + [0,0,0,1] + [LogType.SentFinalResult.value]))
             self.assertEqual(FinishedSendingResultsOfClient(65536).get_log_bytes(), bytearray([0,1,0,0] + [LogType.FinishedSendingResultsOfClient.value]))
             self.assertEqual(FinishedClient().get_log_bytes(), bytearray([LogType.FinishedClient.value]))
-            self.assertEqual(ChangeMetadata(["a"],[2]).get_log_bytes(), bytearray([0,0,0,2] + str_bytes + [0,1] + [LogType.ChangedMetadata.value]))
 
         def test_write_logs(self):
             mock_file = BytesIO(b"")
             logger = LogReadWriter(mock_file)
-            logger.log(ChangeContextLog(1, ["a", "b"], [["a", 1 , 1, 1.1], ["b", 2, 2, 2.2]]))
-            logger.log(ChangeContextLog(1, ["a"]))
+            logger.log(ChangingFileLog("file1", ["a", "b"], [["a", 1 , 1, 1.1], ["b", 2, 2, 2.2]]))
+            logger.log(ChangingFileLog("file1", ["a"], [[1]]))
+            logger.log(ChangingFileLog("file1", ["a", "b"], [[1], None]))
+            logger.log(ChangingFileLog("file1", ["a", "b"], [None, None]))
             logger.log(FinishedWriting())
             logger.log(SentBatch())
             logger.log(AckedBatch())
             logger.log(SentFinalResult("a", 1))
             logger.log(FinishedSendingResultsOfClient(65536))
             logger.log(FinishedClient())
-            logger.log(ChangeMetadata(["a"],[2]))
             mock_file.seek(0)
             self.assertEqual(mock_file.read(1000), self.get_mock_file().read(1000))
 
@@ -428,15 +445,16 @@ if __name__ == '__main__':
         def test_read_log_file(self):
             mock_file = self.get_mock_file()
             logger = LogReadWriter(mock_file)
-            self.assertEqual(ChangeMetadata(["a"],[2]), logger.read_last_log())
-            self.assertEqual(FinishedClient(), logger.read_curr_log())
+            self.assertEqual(FinishedClient(), logger.read_last_log())
             self.assertEqual(FinishedSendingResultsOfClient(65536),logger.read_curr_log())
             self.assertEqual(SentFinalResult("a", 1), logger.read_curr_log())
             self.assertEqual(AckedBatch(), logger.read_curr_log())
             self.assertEqual(SentBatch(), logger.read_curr_log())
             self.assertEqual(FinishedWriting(), logger.read_curr_log())
-            self.assertEqual(ChangeContextLog(1, ["a"]), logger.read_curr_log())
-            self.assertEqual(ChangeContextLog(1, ["a", "b"], [["a", 1 , 1, 1.1], ["b", 2, 2, 2.2]]), logger.read_curr_log())
+            self.assertEqual(ChangingFileLog("file1", ["a", "b"], [None, None]), logger.read_curr_log())
+            self.assertEqual(ChangingFileLog("file1", ["a", "b"], [[1], None]), logger.read_curr_log())
+            self.assertEqual(ChangingFileLog("file1", ["a"], [[1]]), logger.read_curr_log())
+            self.assertEqual(ChangingFileLog("file1", ["a", "b"], [["a", 1 , 1, 1.1], ["b", 2, 2, 2.2]]), logger.read_curr_log())
             self.assertAlmostEqual(None, logger.read_curr_log())
 
         def test_read_until(self):
@@ -444,7 +462,7 @@ if __name__ == '__main__':
             logger = LogReadWriter(mock_file)
 
             logs = logger.read_until_log_type(LogType.FinishedSendingResultsOfClient)
-            self.assertEqual(logs, [ChangeMetadata(["a"],[2]), FinishedClient(), FinishedSendingResultsOfClient(65536)])
+            self.assertEqual(logs, [FinishedClient(), FinishedSendingResultsOfClient(65536)])
         
         def test_read_until_but_log_not_in_file(self):
             file = BytesIO(b"")

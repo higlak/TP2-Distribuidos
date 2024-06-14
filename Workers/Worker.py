@@ -247,16 +247,14 @@ class Worker(ABC):
             self.dump_client_updates(client_id, update_values)
 
     def dump_metadata_to_disk(self, batch):
+        keys = [LAST_RECEIVED_FROM_WORKER + str(batch.sender_id), LAST_SENT_SEQ_NUM]
+        entries = [[batch.seq_num], [SeqNumGenerator.seq_num]]
         if batch.is_empty():
-            key = CLIENT_PENDING_EOF + str(batch.client_id)
-            value = self.pending_eof[batch.client_id]
-        else:
-            key = LAST_RECEIVED_FROM_WORKER + str(batch.sender_id)
-            value = batch.seq_num
+            keys.append(CLIENT_PENDING_EOF + str(batch.client_id))
+            entries.append([self.pending_eof[batch.client_id]])
             
-        self.logger.log(ChangeMetadata([key, LAST_SENT_SEQ_NUM], [value, SeqNumGenerator.seq_num]))
-        self.metadata_storage.store(LAST_SENT_SEQ_NUM, [SeqNumGenerator.seq_num])
-        self.metadata_storage.store(key, [value])
+        self.logger.log(ChangingFileLog(METADATA_FILE_NAME, keys, entries))
+        self.metadata_storage.store_all(keys, entries)
 
     def dump_to_disk(self, batch):
         try:
@@ -286,6 +284,7 @@ class Worker(ABC):
         return False
 
     def loop(self):
+        x = 0
         while True:
             ########### receive batch
             batch_bytes = self.receive_batch()
@@ -331,6 +330,12 @@ class Worker(ABC):
                 
                 ######## Remove client
                 self.remove_client(batch.client_id)
+            
+            ############ Clean Log
+            if x > 10:
+                self.logger.clean()
+                x = 0
+            x+=1
 
 
 if __name__ == '__main__':
