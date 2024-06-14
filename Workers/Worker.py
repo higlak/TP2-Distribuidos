@@ -70,7 +70,7 @@ class Worker(ABC):
         return True
 
     def handle_SIGTERM(self, _signum, _frame):
-        print(f"\n\n [Worker [{self.id}]] SIGTERM detected \n\n")
+        print(f"\n\n [Worker {self.id}] SIGTERM detected \n\n")
         self.signal_queue.put(True)
         if self.communicator:
             self.communicator.close_connection()

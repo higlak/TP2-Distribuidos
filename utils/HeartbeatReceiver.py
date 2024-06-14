@@ -22,8 +22,8 @@ class HeartbeatReceiver():
         self.signal_queue = Queue()
         self.docker_client = docker.from_env()
 
-    def handle_SIGTERM(self, _signum, _frame):
-        print(f"[Waker {self.waker_id}] HearbeatReceiver for {self.container_name} SIGTERM detected")
+    def handle_hearbeat_SIGTERM(self, _signum, _frame):
+        print(f"[Waker {self.waker_id}] HearbeatReceiver for {self.container_name} SIGTERM detected\n\n")
         self.finished = True
         self.signal_queue.put(True)
         self.socket.close()
@@ -51,7 +51,7 @@ class HeartbeatReceiver():
                     i *= 2
 
     def start(self):
-        signal.signal(signal.SIGTERM, self.handle_SIGTERM)
+        signal.signal(signal.SIGTERM, self.handle_hearbeat_SIGTERM)
 
         self.socket = self.connect_to_container()
         if not socket:
