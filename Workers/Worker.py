@@ -74,6 +74,7 @@ class Worker(ABC):
         self.signal_queue.put(True)
         if self.communicator:
             self.communicator.close_connection()
+        self.heartbeat_sender_thread.terminate()
 
     @abstractmethod
     def process_message(self, client_id, message):

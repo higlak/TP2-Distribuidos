@@ -15,7 +15,7 @@ class HeartbeatSender():
         self.finished = False
 
     def handle_SIGTERM(self, _signum, _frame):
-        print(f"\n\n [Worker {self.worker_id}] HeartbeatSender SIGTERM detected\n\n")
+        print(f"[Worker {self.worker_id}] HeartbeatSender SIGTERM detected")
         self.finished = True
         self.socket.close()
 
@@ -41,6 +41,9 @@ class HeartbeatSender():
 
         self.create_worker_socket()
         self.waker_socket = self.accept_waker_leader()
+
+        if not self.waker_socket:
+            return
         
         while not self.finished:
             self.send_heartbeat()

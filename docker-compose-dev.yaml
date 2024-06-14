@@ -106,6 +106,8 @@ services:
       - WORKERS_CONTAINERS=filter1.0.0;filter1.1.0;filter1.2.0
       - WAKERS_CONTAINERS=
       - WAKER_ID=0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
 
 volumes:
   dataVolume:
