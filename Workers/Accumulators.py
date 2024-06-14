@@ -39,6 +39,7 @@ class Accumulator(Worker, ABC):
         if id == None or eof_to_receive == None or not next_pools:
             return None
         accumulator = accumulator_class(id, next_pools, eof_to_receive, field, values, accumulate_by)
+        accumulator.handle_waker_leader()
         if not accumulator.connect():
             return None
         return accumulator

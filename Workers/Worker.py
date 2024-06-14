@@ -1,9 +1,12 @@
+from multiprocessing import Process
 import os
 
 from abc import ABC, abstractmethod
 import signal
+import socket
 
 from CommunicationMiddleware.middleware import Communicator
+from utils.HeartbeatSender import HeartbeatSender
 from utils.Batch import Batch
 from utils.auxiliar_functions import append_extend
 from utils.QueryMessage import query_to_query_result
@@ -12,6 +15,8 @@ from queue import Queue
 
 ID_SEPARATOR = '.'
 BATCH_SIZE = 25
+HEARTBEAT_PORT = 1000
+WAKER_SOCKET_TIMEOUT = 5
 
 class Worker_ID():
     def __init__(self, query, pool_id, worker_num):
@@ -36,13 +41,13 @@ class Worker_ID():
     
 class Worker(ABC):
     def __init__(self, id, next_pools, eof_to_receive):
-        
         self.id = id
         self.next_pools = next_pools
         self.eof_to_receive = eof_to_receive
         self.pending_eof = {}
         self.signal_queue = Queue()
         self.communicator = None
+        self.heartbeat_sender_thread = None
         signal.signal(signal.SIGTERM, self.handle_SIGTERM)
         
     @classmethod
@@ -114,9 +119,39 @@ class Worker(ABC):
         worker_name = self.id.get_worker_name()
         return self.communicator.consume_message(worker_name)
         
-    def start(self):
+    def start(self):    
         self.loop()
         self.communicator.close_connection()
+        self.heartbeat_sender_thread.join()
+
+    def handle_waker_leader(self):
+        try:
+            self.create_worker_socket()
+            waker_socket = self.accept_waker_leader()
+            if waker_socket:
+                heartbeat_sender = HeartbeatSender(waker_socket, self.id)
+                self.heartbeat_sender_thread = Process(target=heartbeat_sender.start)
+                self.heartbeat_sender_thread.start()
+  
+        except Exception as e:
+            print(f"[{self.id}] Socket disconnected: {e} \n")
+            return
+
+    def create_worker_socket(self):
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket.bind(('', HEARTBEAT_PORT))
+        self.socket.settimeout(WAKER_SOCKET_TIMEOUT)
+        self.socket.listen()
+        print(f"[Worker {self.id}] Listening for leader waker connection on port {HEARTBEAT_PORT}")    
+
+    def accept_waker_leader(self):
+        try:
+            waker_socket, addr = self.socket.accept()
+            print(f"[Worker {self.id}] Accepted connection from waker leader")
+            return waker_socket
+        except socket.timeout:
+            print(f"[Worker {self.id}] Timeout waiting for leader waker connection")
+            return None
 
     @abstractmethod
     def remove_client_context(self, client_id):

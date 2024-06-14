@@ -81,7 +81,7 @@ services:
       - FORWARD_TO=1.0
       - SHARD_BY=
       - NEXT_POOL_WORKERS=1
-      - EOF_TO_RECEIVE=9
+      - EOF_TO_RECEIVE=1
 
   client0:
     build:
@@ -92,7 +92,7 @@ services:
       - PYTHONUNBUFFERED=1
       - BATCH_SIZE=25
       - QUERY_RESULTS_PATH=/data/
-      - QUERIES=1,2,3,4,5
+      - QUERIES=1
       - SERVER_PORT=12345
     volumes:
       - dataVolume:/data
@@ -103,29 +103,9 @@ services:
       dockerfile: Waker/Waker.dockerfile
     restart: on-failure
     environment:
-      - WORKERS_CONTAINERS=filter1.0.0;filter1.1.0;filter1.2.0;gateway
-      - WAKERS_CONTAINERS=waker1;waker2
+      - WORKERS_CONTAINERS=filter1.0.0;filter1.1.0;filter1.2.0
+      - WAKERS_CONTAINERS=
       - WAKER_ID=0
-
-  waker1:
-    build:
-      context: ./
-      dockerfile: Waker/Waker.dockerfile
-    restart: on-failure
-    environment:
-      - WORKERS_CONTAINERS=filter1.0.0;filter1.1.0;filter1.2.0;gateway
-      - WAKERS_CONTAINERS=waker0;waker2
-      - WAKER_ID=1
-
-  waker2:
-    build:
-      context: ./
-      dockerfile: Waker/Waker.dockerfile
-    restart: on-failure
-    environment:
-      - WORKERS_CONTAINERS=filter1.0.0;filter1.1.0;filter1.2.0;gateway
-      - WAKERS_CONTAINERS=waker0;waker1
-      - WAKER_ID=2
 
 volumes:
   dataVolume:
