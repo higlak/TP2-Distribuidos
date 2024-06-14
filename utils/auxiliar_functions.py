@@ -13,27 +13,8 @@ def recv_exactly(socket, n):
             buffer += received
             n -= len(received)
         return buffer 
-    except OSError:
-        return None
-
-def recv_exactly_timeout(socket, n):
-    try: 
-        buffer = bytes()
-        while n > 0:
-            received = socket.recv(n)
-            if len(received) == 0:
-                return None  
-            buffer += received
-            n -= len(received)
-        return buffer
-    except socket.timeout:
-        print("Timeout: No data received within the specified timeout period")
-        return None
     except OSError as e:
-        print(f"Error receiving data: {e}")
         return None
-    finally:
-        socket.settimeout(None)
 
 # Sends bytes until all of them are sent, or a failure occurs
 def send_all(socket, byte_array):

@@ -15,8 +15,6 @@ from queue import Queue
 
 ID_SEPARATOR = '.'
 BATCH_SIZE = 25
-HEARTBEAT_PORT = 1000
-WAKER_SOCKET_TIMEOUT = 5
 
 class Worker_ID():
     def __init__(self, query, pool_id, worker_num):
@@ -125,33 +123,14 @@ class Worker(ABC):
         self.heartbeat_sender_thread.join()
 
     def handle_waker_leader(self):
-        try:
-            self.create_worker_socket()
-            waker_socket = self.accept_waker_leader()
-            if waker_socket:
-                heartbeat_sender = HeartbeatSender(waker_socket, self.id)
-                self.heartbeat_sender_thread = Process(target=heartbeat_sender.start)
-                self.heartbeat_sender_thread.start()
+        try:            
+            heartbeat_sender = HeartbeatSender(self.id)
+            self.heartbeat_sender_thread = Process(target=heartbeat_sender.start)
+            self.heartbeat_sender_thread.start()
   
         except Exception as e:
             print(f"[{self.id}] Socket disconnected: {e} \n")
             return
-
-    def create_worker_socket(self):
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.socket.bind(('', HEARTBEAT_PORT))
-        self.socket.settimeout(WAKER_SOCKET_TIMEOUT)
-        self.socket.listen()
-        print(f"[Worker {self.id}] Listening for leader waker connection on port {HEARTBEAT_PORT}")    
-
-    def accept_waker_leader(self):
-        try:
-            waker_socket, addr = self.socket.accept()
-            print(f"[Worker {self.id}] Accepted connection from waker leader")
-            return waker_socket
-        except socket.timeout:
-            print(f"[Worker {self.id}] Timeout waiting for leader waker connection")
-            return None
 
     @abstractmethod
     def remove_client_context(self, client_id):
