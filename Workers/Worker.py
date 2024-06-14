@@ -23,7 +23,7 @@ METADATA_NUM_BYTES = 4
 CLIENT_CONTEXT_KEY_BYTES = 512
 LAST_SENT_SEQ_NUM = "last sent seq_num"
 CLIENT_PENDING_EOF = "pending eof client"
-LAST_RECEIVED_FROM_WORKER = "last received from worker"
+LAST_RECEIVED_FROM_WORKER = "last received from worker" 
 
 BATCH_SIZE = 1024
 
@@ -224,7 +224,7 @@ class Worker(ABC):
         for key, values in update_values.items():
             old_values.append(values[0])
             keys.append(key)
-        self.logger.log(self.change_context_log(client_id, keys, old_values))
+        self.logger.log(self.change_context_log(CLIENT_CONTEXT_FILE_NAME + str(client_id) + '.bin', keys, old_values))
 
         for key, values in update_values.items():
             if values[1] == None:

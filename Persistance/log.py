@@ -12,11 +12,12 @@ CLIENT_ID_BYTES = 4
 LOG_TYPE_BYTES = 1
 LEN_LIST_BYTES = 1
 FLOAT_BYTES = 4
-AMOUNT_OF_CONTEXT_ENTRY_BYTES = 2
+AMOUNT_OF_ENTRY_BYTES = 2
 
 STR_TYPE_BYTE = 0
 INT_TYPE_BYTE = 1
 FLOAT_TYPE_BYTE = 2
+INT_LIST_TYPE_BYTE = 3
 
 UPDATE = 0
 NEW_ENTRY = 1
@@ -149,7 +150,7 @@ class ChangingFileLog(Log):
         self.file_name = file_name
         self.keys = keys
         self.entries = entries
-        if entries != None and len(entries) > 2**(8* VALUES_TYPES_LEN):
+        if len(self._first_entry_value()) > 2**(8* VALUES_TYPES_LEN):
             raise TooManyValues
     
     def get_log_arg_bytes(self):
@@ -170,15 +171,19 @@ class ChangingFileLog(Log):
         byte_array.extend(get_string_byte_array(self.file_name))
         return byte_array
     
-    def get_log_type_values_bytes(self):
-        byte_array = bytearray()
+    def _first_entry_value(self):
         entry = []
         if self.entries != None:
             for ent in self.entries:
                 if ent != None:
                     entry = ent
                     break
+        return entry
 
+    def get_log_type_values_bytes(self):
+        byte_array = bytearray()
+        entry = self._first_entry_value()
+        
         for value in entry:
             if type(value) == str:
                 byte_array.extend(get_number_byte_array(STR_TYPE_BYTE, VALUES_TYPES_LEN))
@@ -186,6 +191,8 @@ class ChangingFileLog(Log):
                 byte_array.extend(get_number_byte_array(INT_TYPE_BYTE, VALUES_TYPES_LEN))
             elif type(value) == float:
                 byte_array.extend(get_number_byte_array(FLOAT_TYPE_BYTE, VALUES_TYPES_LEN))
+            elif type(value) == list and type(value[0]) == int:
+                byte_array.extend(get_number_byte_array(INT_LIST_TYPE_BYTE, VALUES_TYPES_LEN))
             else:
                 raise UnsupportedType
         byte_array.extend(get_number_byte_array(len(entry), VALUES_TYPES_LEN))
@@ -193,12 +200,7 @@ class ChangingFileLog(Log):
 
     def get_log_update_values_bytes(self):
         byte_array = bytearray()
-        entry_len = 0
-        if self.entries != None:
-            for entry in self.entries:
-                if entry != None:
-                    entry_len = len(entry)
-                    break
+        entry_len = len(self._first_entry_value())
 
         for i in range(entry_len):
             for values in self.entries:
@@ -210,7 +212,10 @@ class ChangingFileLog(Log):
                     byte_array.extend(get_number_byte_array(values[i], U32_BYTES))
                 elif type(values[i]) == float:
                     byte_array.extend(get_float_byte_array(values[i]))
+                elif type(values[i]) == list and type(values[i][0]) == int:
+                    byte_array.extend(get_u32list_byte_array(values[i]))
                 else:
+                    print(f"Value : {values[i]} not supported")
                     raise UnsupportedType
         return byte_array
 
@@ -231,6 +236,11 @@ class ChangingFileLog(Log):
                 values.insert(0,numbers_from_file_pos(file, CURRENT_FILE_POS, len(update_keys), U32_BYTES))
             elif value_type == FLOAT_TYPE_BYTE:
                 values.insert(0,floats_from_file_pos(file, CURRENT_FILE_POS, len(update_keys)))
+            elif value_type == INT_LIST_TYPE_BYTE:
+                lists = []
+                for i in range(len(update_keys)):
+                    lists.insert(0, u32_list_from_file_pos(file, CURRENT_FILE_POS))
+                values.insert(0, lists)
             else:
                 raise UnsupportedType
             
@@ -339,9 +349,9 @@ def floats_from_file_pos(file, pos, amount):
     return numbers
 
 def amount_of_entries_from_file_pos(file, pos):
-    file.seek(-AMOUNT_OF_CONTEXT_ENTRY_BYTES, pos)
-    amount_of_entries = byte_array_to_big_endian_integer(bytearray(file.read(AMOUNT_OF_CONTEXT_ENTRY_BYTES)))
-    file.seek(-AMOUNT_OF_CONTEXT_ENTRY_BYTES, pos)
+    file.seek(-AMOUNT_OF_ENTRY_BYTES, pos)
+    amount_of_entries = byte_array_to_big_endian_integer(bytearray(file.read(AMOUNT_OF_ENTRY_BYTES)))
+    file.seek(-AMOUNT_OF_ENTRY_BYTES, pos)
     return amount_of_entries
 
 def strings_from_file_pos(file, pos, amount):
@@ -353,6 +363,13 @@ def strings_from_file_pos(file, pos, amount):
 def keys_from_file_pos(file, pos):
     amount_of_keys = amount_of_entries_from_file_pos(file, pos)
     return strings_from_file_pos(file, CURRENT_FILE_POS, amount_of_keys)
+
+def u32_list_from_file_pos(file, pos):
+    file.seek(-LEN_LIST_BYTES, pos)
+    list_len = byte_array_to_big_endian_integer(bytearray(file.read(LEN_LIST_BYTES)))
+    file.seek(-LEN_LIST_BYTES, pos)
+    return numbers_from_file_pos(file, CURRENT_FILE_POS, list_len, U32_BYTES)
+
 
 def get_number_byte_array(num, bytes_per_number):
     return integer_to_big_endian_byte_array(num, bytes_per_number)
@@ -374,7 +391,7 @@ def get_string_byte_array(string):
     return byte_array
 
 def get_amount_of_entries_byte_array(l):
-    return integer_to_big_endian_byte_array(len(l), AMOUNT_OF_CONTEXT_ENTRY_BYTES)
+    return integer_to_big_endian_byte_array(len(l), AMOUNT_OF_ENTRY_BYTES)
 
 def get_keys_bytes(keys):
     byte_array = bytearray()
@@ -393,6 +410,7 @@ if __name__ == '__main__':
         def get_mock_file(self):
             logs_bytes = ChangingFileLog("file1", ["a", "b"], [["a", 1 , 1, 1.1], ["b", 2, 2, 2.2]]).get_log_bytes()
             logs_bytes.extend(ChangingFileLog("file1", ["a"], [[1]]).get_log_bytes())
+            logs_bytes.extend(ChangingFileLog("file1", ["a"], [[[1,2,3]]]).get_log_bytes())
             logs_bytes.extend(ChangingFileLog("file1", ["a", "b"], [[1], None]).get_log_bytes())
             logs_bytes.extend(ChangingFileLog("file1", ["a", "b"], [None, None]).get_log_bytes())
             logs_bytes.extend(FinishedWriting().get_log_bytes())
@@ -412,6 +430,7 @@ if __name__ == '__main__':
 
             self.assertEqual(ChangingFileLog("file1", ["a", "b"], [["a", 1 , 1, 1.1], ["b", 2, 2, 2.2]]).get_log_bytes(),bytearray(str_bytes + strb_bytes + [0,0,0,1] + [0,0,0,2] + [0,0,0,1] + [0,0,0,2] + float1 + float2 + [STR_TYPE_BYTE,INT_TYPE_BYTE,INT_TYPE_BYTE,FLOAT_TYPE_BYTE] + [4] + str_bytes + strb_bytes + [0,2] + [0,0] + file_bytes + [LogType.ChangingFileLog]))
             self.assertEqual(ChangingFileLog("file1", ["a"], [[1]]).get_log_bytes(),bytearray([0,0,0,1] + [INT_TYPE_BYTE] + [1] + str_bytes + [0,1] + [0,0] + file_bytes + [LogType.ChangingFileLog]))
+            self.assertEqual(ChangingFileLog("file1", ["a"], [[[1,2,3]]]).get_log_bytes(),bytearray([0,0,0,1] + [0,0,0,2] + [0,0,0,3] + [3]+ [INT_LIST_TYPE_BYTE] + [1] + str_bytes + [0,1] + [0,0] + file_bytes + [LogType.ChangingFileLog]))
             self.assertEqual(ChangingFileLog("file1", ["a", "b"], [[1], None]).get_log_bytes(),bytearray([0,0,0,1] + [INT_TYPE_BYTE] + [1] + str_bytes + [0,1] + strb_bytes + [0,1] + file_bytes + [LogType.ChangingFileLog]))
             self.assertEqual(ChangingFileLog("file1", ["a", "b"], [None, None]).get_log_bytes(),bytearray([0] + [0,0] + str_bytes + strb_bytes + [0,2] + file_bytes + [LogType.ChangingFileLog]))
             self.assertEqual(FinishedWriting().get_log_bytes(), bytearray([LogType.FinishedWriting.value]))
@@ -426,6 +445,7 @@ if __name__ == '__main__':
             logger = LogReadWriter(mock_file)
             logger.log(ChangingFileLog("file1", ["a", "b"], [["a", 1 , 1, 1.1], ["b", 2, 2, 2.2]]))
             logger.log(ChangingFileLog("file1", ["a"], [[1]]))
+            logger.log(ChangingFileLog("file1", ["a"], [[[1,2,3]]]))
             logger.log(ChangingFileLog("file1", ["a", "b"], [[1], None]))
             logger.log(ChangingFileLog("file1", ["a", "b"], [None, None]))
             logger.log(FinishedWriting())
@@ -453,6 +473,7 @@ if __name__ == '__main__':
             self.assertEqual(FinishedWriting(), logger.read_curr_log())
             self.assertEqual(ChangingFileLog("file1", ["a", "b"], [None, None]), logger.read_curr_log())
             self.assertEqual(ChangingFileLog("file1", ["a", "b"], [[1], None]), logger.read_curr_log())
+            self.assertEqual(ChangingFileLog("file1", ["a"], [[[1,2,3]]]), logger.read_curr_log())
             self.assertEqual(ChangingFileLog("file1", ["a"], [[1]]), logger.read_curr_log())
             self.assertEqual(ChangingFileLog("file1", ["a", "b"], [["a", 1 , 1, 1.1], ["b", 2, 2, 2.2]]), logger.read_curr_log())
             self.assertAlmostEqual(None, logger.read_curr_log())

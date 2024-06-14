@@ -137,9 +137,10 @@ class DecadeByAuthorAccumulator(Accumulator):
             
     def add_to_context(self, client_id, author, msg_decade):
         old_value = self.client_contexts[client_id].get(author, None)
+        if old_value != None:
+            old_value = [old_value]
         if author in self.client_context_storage_updates[client_id]:
             old_value = self.client_context_storage_updates[client_id][author][0]
-        old_value = self.client_contexts[client_id].get(author, None)
         new_value = self.client_contexts[client_id].get(author, []) + [msg_decade]
         self.client_context_storage_updates[client_id][author] = (old_value, [new_value])
         self.client_contexts[client_id][author] = new_value
@@ -211,7 +212,7 @@ class RatingByTitleAccumulator(Accumulator):
     def add_to_context(self, client_id, title, rating):
         old_value = None
         new_value = rating
-        self.client_context_storage_updates[client_id][title] = ([old_value], [new_value])
+        self.client_context_storage_updates[client_id][title] = (old_value, [new_value])
         heapq.heappush(self.client_contexts[client_id], BookAtribute(title, rating))
     
     def remove_smallest_from_context(self, client_id):
@@ -283,7 +284,7 @@ class MeanSentimentPolarityByTitleAccumulator(Accumulator):
     def add_to_context(self, client_id, title, msp):
         old_value = None
         new_value = msp
-        self.client_context_storage_updates[client_id][title] = ([old_value], [new_value])
+        self.client_context_storage_updates[client_id][title] = (old_value, [new_value])
         bisect.insort(self.client_contexts[client_id], BookAtribute(title, msp))
 
     def final_results(self, client_id):
