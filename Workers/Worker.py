@@ -17,10 +17,10 @@ LOG_PATH = './log.bin'
 PERSISTANCE_PATH = '/persistance_files/'
 METADATA_FILE_NAME = 'metadata.bin'
 CLIENT_CONTEXT_FILE_NAME = 'client_context'
+SCALE_SEPARATOR = '_S'
 
 METADATA_KEY_BYTES = 25 + 18
 METADATA_NUM_BYTES = 4
-CLIENT_CONTEXT_KEY_BYTES = 512
 LAST_SENT_SEQ_NUM = "last sent seq_num"
 CLIENT_PENDING_EOF = "pending eof client"
 LAST_RECEIVED_FROM_WORKER = "last received from worker" 
@@ -58,7 +58,7 @@ class Worker(ABC):
         return id, next_pools, eof_to_receive
     
     @abstractmethod
-    def load_context(self, path):
+    def load_context(self, path, scale_of_file):
         pass
     
     def load_all_context(self):
@@ -67,9 +67,10 @@ class Worker(ABC):
                 if filename == METADATA_FILE_NAME:
                     continue
                 path = os.path.join(self.worker_folder(), filename)
-                if os.path.isfile(path):
-                    client_id = int(filename.strip('.bin').strip(CLIENT_CONTEXT_FILE_NAME))
-                    if not self.load_context(path, client_id):
+                if os.path.isfile(path):            
+                    client_id, scale_of_file = filename.strip('.bin').strip(CLIENT_CONTEXT_FILE_NAME).split(SCALE_SEPARATOR)
+                    client_id, scale_of_file = int(client_id), int(scale_of_file)
+                    if not self.load_context(path, client_id, scale_of_file):
                         print(f"[Worker [{self.id}]]: Could not load context: {path}")
                         return False
         except OSError as e:
@@ -143,9 +144,9 @@ class Worker(ABC):
     
     def send_final_results(self, client_id):
         fr = self.get_final_results(client_id)
-        #print(f"{fr}")
         if not fr:
             return True
+        
         final_results = []
         append_extend(final_results,fr)
         i = 0
@@ -156,6 +157,7 @@ class Worker(ABC):
             if not self.send_batch(batch):
                 return False
             i += batch.size()
+            self.logger.log(SentFirstFinalResults(batch.client_id, i))
         print(f"[Worker {self.id}] Sent {i} final results")
         return True
 
@@ -204,7 +206,7 @@ class Worker(ABC):
         if not self.send_batch(Batch.eof(client_id, self.id)):
             print(f"[Worker {self.id}] Disconnected from MOM, while sending eof")
             return False
-        #self.remove_client(client_id)
+        self.logger.log(FinishedSendingResultsOfClient(client_id))
         return True
 
     def handle_eof(self, client_id):
@@ -213,18 +215,18 @@ class Worker(ABC):
         #proccess_final_results
 
     @abstractmethod
-    def get_context_storage_types(self):
+    def get_context_storage_types(self, scale_of_update_file):
         pass 
 
-    def dump_client_updates(self, client_id, update_values): #{title: (old_value, new_value)}
-        storage = self.client_contexts_storage[client_id]
+    def dump_client_updates(self, client_id, filename, update_values): #{title: (old_value, new_value)}
+        storage = self.client_contexts_storage[client_id][filename]
         
         old_values = []
         keys = []
         for key, values in update_values.items():
             old_values.append(values[0])
             keys.append(key)
-        self.logger.log(self.change_context_log(CLIENT_CONTEXT_FILE_NAME + str(client_id) + '.bin', keys, old_values))
+        self.logger.log(self.change_context_log(filename, keys, old_values))
 
         for key, values in update_values.items():
             if values[1] == None:
@@ -232,19 +234,23 @@ class Worker(ABC):
             else:
                 storage.store(key, values[1])
 
-    def dump_all_client_contexts_to_disk(self):
-        while len(self.client_context_storage_updates) > 0:
-            client_id, update_values  = self.client_context_storage_updates.popitem() 
+    def dump_all_client_updates_to_disk(self, client_id):
+        if client_id not in self.client_contexts_storage:
+            self.client_contexts_storage[client_id] = {}
 
-            if client_id not in self.client_contexts_storage:
-                path = self.worker_folder() + CLIENT_CONTEXT_FILE_NAME + str(client_id) + '.bin'
-                value_types, value_types_size = self.get_context_storage_types()
+        while len(self.client_context_storage_updates) > 0:
+            scale_of_update_file, update_values  = self.client_context_storage_updates.popitem()
+            file_name = CLIENT_CONTEXT_FILE_NAME + str(client_id) + SCALE_SEPARATOR + str(scale_of_update_file) + '.bin'
+
+            if file_name not in self.client_contexts_storage[client_id]:
+                path = self.worker_folder() + file_name
+                value_types, value_types_size = self.get_context_storage_types(scale_of_update_file)
                 if value_types == None or value_types_size == None:
                     continue
-                self.client_contexts_storage[client_id], _ = KeyValueStorage.new(
-                    path, str, CLIENT_CONTEXT_KEY_BYTES, value_types, value_types_size)
+                self.client_contexts_storage[client_id][file_name], _ = KeyValueStorage.new(
+                    path, str, 2**scale_of_update_file, value_types, value_types_size)
             
-            self.dump_client_updates(client_id, update_values)
+            self.dump_client_updates(client_id, file_name, update_values)
 
     def dump_metadata_to_disk(self, batch):
         keys = [LAST_RECEIVED_FROM_WORKER + str(batch.sender_id), LAST_SENT_SEQ_NUM]
@@ -259,7 +265,7 @@ class Worker(ABC):
     def dump_to_disk(self, batch):
         try:
             self.dump_metadata_to_disk(batch)
-            self.dump_all_client_contexts_to_disk()
+            self.dump_all_client_updates_to_disk(batch.client_id)
             self.logger.log(FinishedWriting())
         except OSError as e:
             print(f"[Worker {self.id}] Error dumping to disk: {e}")
@@ -315,7 +321,6 @@ class Worker(ABC):
             ############ bajar a disco
             if not self.dump_to_disk(batch):
                 break
-            self.logger.log(FinishedWriting())
             
             ############ ack batch
             if not self.communicator.acknowledge_last_message():

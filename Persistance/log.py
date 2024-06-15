@@ -104,7 +104,7 @@ class Log(ABC):
             LogType.FinishedWriting: FinishedWriting,
             LogType.SentBatch: SentBatch,
             LogType.AckedBatch: AckedBatch,
-            LogType.SentFinalResult: SentFinalResult,
+            LogType.SentFinalResult: SentFirstFinalResults,
             LogType.FinishedSendingResultsOfClient: FinishedSendingResultsOfClient,
             LogType.FinishedClient: FinishedClient,
         }
@@ -283,25 +283,24 @@ class AckedBatch(NoArgsLog):
     def __init__(self):
         self.log_type = LogType.AckedBatch
     
-class SentFinalResult(Log):
-    def __init__(self, key, client_id):
+class SentFirstFinalResults(Log):
+    def __init__(self, client_id, n):
         self.log_type = LogType.SentFinalResult
-        self.key = key
         self.client_id = client_id
+        self.n = n
 
     def get_log_arg_bytes(self):
-        byte_array = get_string_byte_array(self.key)
+        byte_array = get_number_byte_array(self.n, U32_BYTES)
         byte_array.extend(get_number_byte_array(self.client_id, CLIENT_ID_BYTES))
         return byte_array
     
     @classmethod
     def from_file_pos(cls, file, pos):
-        client_id = numbers_from_file_pos(file, pos, 1, CLIENT_ID_BYTES)[0]
-        key = string_from_file_pos(file, CURRENT_FILE_POS)
-        return cls(key, client_id)
+        n, client_id = numbers_from_file_pos(file, pos, 2, CLIENT_ID_BYTES)
+        return cls(client_id, n)
     
     def params_eq(self, other):
-        return self.key == other.key and self.client_id == other.client_id
+        return self.n == other.n and self.client_id == other.client_id
 
 class FinishedSendingResultsOfClient(Log):
     def __init__(self, client_id):
@@ -416,7 +415,7 @@ if __name__ == '__main__':
             logs_bytes.extend(FinishedWriting().get_log_bytes())
             logs_bytes.extend(SentBatch().get_log_bytes())
             logs_bytes.extend(AckedBatch().get_log_bytes())
-            logs_bytes.extend(SentFinalResult("a", 1).get_log_bytes())
+            logs_bytes.extend(SentFirstFinalResults(1, 2).get_log_bytes())
             logs_bytes.extend(FinishedSendingResultsOfClient(65536).get_log_bytes())
             logs_bytes.extend(FinishedClient().get_log_bytes())
             return BytesIO(logs_bytes)
@@ -436,7 +435,7 @@ if __name__ == '__main__':
             self.assertEqual(FinishedWriting().get_log_bytes(), bytearray([LogType.FinishedWriting.value]))
             self.assertEqual(SentBatch().get_log_bytes(), bytearray([LogType.SentBatch.value]))
             self.assertEqual(AckedBatch().get_log_bytes(), bytearray([LogType.AckedBatch.value]))
-            self.assertEqual(SentFinalResult("a", 1).get_log_bytes(), bytearray(str_bytes + [0,0,0,1] + [LogType.SentFinalResult.value]))
+            self.assertEqual(SentFirstFinalResults(1, 2).get_log_bytes(), bytearray([0,0,0,2] + [0,0,0,1] + [LogType.SentFinalResult.value]))
             self.assertEqual(FinishedSendingResultsOfClient(65536).get_log_bytes(), bytearray([0,1,0,0] + [LogType.FinishedSendingResultsOfClient.value]))
             self.assertEqual(FinishedClient().get_log_bytes(), bytearray([LogType.FinishedClient.value]))
 
@@ -451,7 +450,7 @@ if __name__ == '__main__':
             logger.log(FinishedWriting())
             logger.log(SentBatch())
             logger.log(AckedBatch())
-            logger.log(SentFinalResult("a", 1))
+            logger.log(SentFirstFinalResults(1, 2))
             logger.log(FinishedSendingResultsOfClient(65536))
             logger.log(FinishedClient())
             mock_file.seek(0)
@@ -467,7 +466,7 @@ if __name__ == '__main__':
             logger = LogReadWriter(mock_file)
             self.assertEqual(FinishedClient(), logger.read_last_log())
             self.assertEqual(FinishedSendingResultsOfClient(65536),logger.read_curr_log())
-            self.assertEqual(SentFinalResult("a", 1), logger.read_curr_log())
+            self.assertEqual(SentFirstFinalResults(1, 2), logger.read_curr_log())
             self.assertEqual(AckedBatch(), logger.read_curr_log())
             self.assertEqual(SentBatch(), logger.read_curr_log())
             self.assertEqual(FinishedWriting(), logger.read_curr_log())

@@ -69,3 +69,10 @@ def encode(string :str):
     if string == None:
         return None
     return string.encode()
+
+def next_power_of_2_exponent(n):
+    exponent = 0
+    while n > 0:
+        n = n>>1
+        exponent +=1
+    return exponent

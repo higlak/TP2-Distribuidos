@@ -3,7 +3,8 @@ import time
 
 from Persistance.KeyValueStorage import KeyValueStorage
 from Persistance.log import ChangingFileLog
-from .Worker import Worker, CLIENT_CONTEXT_KEY_BYTES
+from utils.auxiliar_functions import next_power_of_2_exponent
+from .Worker import Worker
 from utils.QueryMessage import QueryMessage, YEAR_FIELD, TITLE_FIELD, AUTHOR_FIELD, BOOK_MSG_TYPE, REVIEW_MSG_TYPE, RATING_FIELD, MSP_FIELD, REVIEW_TEXT_FIELD
 import unittest
 from unittest import TestCase
@@ -15,7 +16,6 @@ except:
     pass
 
 REVIEW_COUNT = "review_count"
-CONTEXT_AUTHOR_LEN = 2048
 CONTEXT_FLOAT_BYTES = 4
 CONTEXT_INT_BYTES = 4
 
@@ -62,16 +62,16 @@ class Accumulator(Worker, ABC):
         return switch.get((field, accumulate_by), None)
     
     @abstractmethod
-    def get_context_storage_types(self):
+    def get_context_storage_types(self, scale_of_update_file):
         pass 
     
     @abstractmethod
     def process_previous_context(self, previous_context):
         pass
 
-    def load_context(self, path, client_id):
-        storage_types, storage_types_size = self.get_context_storage_types()
-        self.context_storage, previous_context = KeyValueStorage.new(path, str, CLIENT_CONTEXT_KEY_BYTES, storage_types, storage_types_size)
+    def load_context(self, path, client_id, scale_of_update_file):
+        storage_types, storage_types_size = self.get_context_storage_types(scale_of_update_file)
+        self.context_storage, previous_context = KeyValueStorage.new(path, str, 2**scale_of_update_file, storage_types, storage_types_size)
         if not self.context_storage or previous_context == None:
             return False
         context = self.process_previous_context(previous_context)
@@ -92,7 +92,6 @@ class Accumulator(Worker, ABC):
 
     def process_message(self, client_id, msg: QueryMessage):
         self.client_contexts[client_id] = self.client_contexts.get(client_id, self.get_new_context())
-        self.client_context_storage_updates[client_id] = self.client_context_storage_updates.get(client_id, {})
         results = self.accumulate(client_id, msg)
         if not results:
             return None
@@ -139,13 +138,16 @@ class DecadeByAuthorAccumulator(Accumulator):
         old_value = self.client_contexts[client_id].get(author, None)
         if old_value != None:
             old_value = [old_value]
-        if author in self.client_context_storage_updates[client_id]:
-            old_value = self.client_context_storage_updates[client_id][author][0]
+        scale = smalles_scale_for_str(author)
+        if scale not in self.client_context_storage_updates:
+            self.client_context_storage_updates[scale] = {}
+        if author in self.client_context_storage_updates[scale]:
+            old_value = self.client_context_storage_updates[scale][author][0]
         new_value = self.client_contexts[client_id].get(author, []) + [msg_decade]
-        self.client_context_storage_updates[client_id][author] = (old_value, [new_value])
+        self.client_context_storage_updates[scale][author] = (old_value, [new_value])
         self.client_contexts[client_id][author] = new_value
 
-    def get_context_storage_types(self):
+    def get_context_storage_types(self, scale_of_update_file):
         return [(list, int)], [self.values]
     
     def process_previous_context(self, previous_context):
@@ -162,6 +164,8 @@ class AmountOfReviewByTitleAccumulator(Accumulator):
         if msg.msg_type == BOOK_MSG_TYPE:
             authors = ';'.join(msg.authors)
             self.add_to_context(client_id, msg.msg_type, msg.title, msg.rating, authors)
+            if "Best Gay Erotica 2000".lower() in msg.title.lower():
+                print(f"\n\n {list(authors.encode())} \n\n")
         elif msg.msg_type == REVIEW_MSG_TYPE:
             if msg.title not in self.client_contexts[client_id]:
                 return None
@@ -172,13 +176,19 @@ class AmountOfReviewByTitleAccumulator(Accumulator):
     
     def add_to_context(self, client_id, msg_type, title, rating, authors=None):
         old_value = self.client_contexts[client_id].get(title, None)
-        if title in self.client_context_storage_updates[client_id]:
-            old_value = self.client_context_storage_updates[client_id][title][0]
+        if authors == None:
+            authors = old_value[2]
+        
+        scale = max(smalles_scale_for_str(title),smalles_scale_for_str(authors))
+        if scale not in self.client_context_storage_updates:
+            self.client_context_storage_updates[scale] = {}
+        if title in self.client_context_storage_updates[scale]:
+            old_value = self.client_context_storage_updates[scale][title][0]
         new_value = self.client_contexts[client_id].get(title, [0, 0.0, authors])
         if msg_type == REVIEW_MSG_TYPE:
             new_value[0] +=1
             new_value[1] += rating
-        self.client_context_storage_updates[client_id][title] = (old_value, new_value)
+        self.client_context_storage_updates[scale][title] = (old_value, new_value)
         self.client_contexts[client_id][title] = new_value
 
     def final_results(self, client_id):
@@ -190,8 +200,8 @@ class AmountOfReviewByTitleAccumulator(Accumulator):
                 results.append(result)
         return results
     
-    def get_context_storage_types(self):
-        return [int, float, str], [CONTEXT_INT_BYTES, CONTEXT_FLOAT_BYTES, CONTEXT_AUTHOR_LEN]
+    def get_context_storage_types(self, scale_of_update_file):
+        return [int, float, str], [CONTEXT_INT_BYTES, CONTEXT_FLOAT_BYTES, 2**scale_of_update_file]
     
     def process_previous_context(self, previous_context):
         return previous_context
@@ -212,13 +222,19 @@ class RatingByTitleAccumulator(Accumulator):
     def add_to_context(self, client_id, title, rating):
         old_value = None
         new_value = rating
-        self.client_context_storage_updates[client_id][title] = (old_value, [new_value])
+        scale = smalles_scale_for_str(title)
+        if scale not in self.client_context_storage_updates:
+            self.client_context_storage_updates[scale] = {}
+        self.client_context_storage_updates[scale][title] = (old_value, [new_value])
         heapq.heappush(self.client_contexts[client_id], BookAtribute(title, rating))
     
     def remove_smallest_from_context(self, client_id):
         old_book_attribute = heapq.heappop(self.client_contexts[client_id])
         new_value = None
-        self.client_context_storage_updates[client_id][old_book_attribute.title] = ([old_book_attribute.attribute], new_value)
+        scale = smalles_scale_for_str(old_book_attribute.title)
+        if scale not in self.client_context_storage_updates:
+            self.client_context_storage_updates[scale] = {}
+        self.client_context_storage_updates[scale][old_book_attribute.title] = ([old_book_attribute.attribute], new_value)
 
     def final_results(self, client_id):
         results = []
@@ -228,7 +244,7 @@ class RatingByTitleAccumulator(Accumulator):
         results.reverse()
         return results
     
-    def get_context_storage_types(self):
+    def get_context_storage_types(self, scale_of_update_file):
         return [float], [CONTEXT_FLOAT_BYTES]
     
     def process_previous_context(self, previous_context):
@@ -252,12 +268,15 @@ class ReviewTextByTitleAccumulator(Accumulator):
     
     def add_to_context(self, client_id, title, sentiment_analisys):
         old_value = self.client_contexts[client_id].get(title, None)
-        if title in self.client_context_storage_updates[client_id]:
-            old_value = self.client_context_storage_updates[client_id][title][0]
+        scale = smalles_scale_for_str(title)
+        if scale not in self.client_context_storage_updates:
+            self.client_context_storage_updates[scale] = {}
+        if title in self.client_context_storage_updates[scale]:
+            old_value = self.client_context_storage_updates[scale][title][0]
         new_value = self.client_contexts[client_id].get(title, [0, 0.0])
         new_value[0] += 1
         new_value[1] += sentiment_analisys
-        self.client_context_storage_updates[client_id][title] = (old_value, new_value)
+        self.client_context_storage_updates[scale][title] = (old_value, new_value)
         self.client_contexts[client_id][title] = new_value
 
     def final_results(self, client_id):
@@ -267,7 +286,7 @@ class ReviewTextByTitleAccumulator(Accumulator):
             results.append(QueryMessage(msg_type=BOOK_MSG_TYPE, title=title, mean_sentiment_polarity=msp))
         return results
     
-    def get_context_storage_types(self):
+    def get_context_storage_types(self, scale_of_update_file):
         return [int, float], [CONTEXT_INT_BYTES, CONTEXT_FLOAT_BYTES]
     
     def process_previous_context(self, previous_context):
@@ -284,7 +303,10 @@ class MeanSentimentPolarityByTitleAccumulator(Accumulator):
     def add_to_context(self, client_id, title, msp):
         old_value = None
         new_value = msp
-        self.client_context_storage_updates[client_id][title] = (old_value, [new_value])
+        scale = smalles_scale_for_str(title)
+        if scale not in self.client_context_storage_updates:
+            self.client_context_storage_updates[scale] = {}
+        self.client_context_storage_updates[scale][title] = (old_value, [new_value])
         bisect.insort(self.client_contexts[client_id], BookAtribute(title, msp))
 
     def final_results(self, client_id):
@@ -296,7 +318,7 @@ class MeanSentimentPolarityByTitleAccumulator(Accumulator):
 
         return [QueryMessage(BOOK_MSG_TYPE, title=result.title) for result in results]
     
-    def get_context_storage_types(self):
+    def get_context_storage_types(self, scale_of_update_file):
         return [float], [CONTEXT_FLOAT_BYTES]
     
     def process_previous_context(self, previous_context):
@@ -318,3 +340,6 @@ class BookAtribute():
     
     def __le__(self, other):
         return self.attribute <= other.attribute
+    
+def smalles_scale_for_str(string):
+    return next_power_of_2_exponent(len(string.encode()))

@@ -219,6 +219,9 @@ class KeyValueStorage():
         all_entries = {}
         i = 0
         while True:
+            #print(i)
+            if i == 1068:
+                pass
             entry = self.get_entry()
             if entry == None:
                 break
@@ -622,4 +625,17 @@ if __name__ == '__main__':
             self.assertEqual(storage.next_pos, 2)
             file.seek(-3, LAST_FILE_POS)
             self.assertEqual(file.read(3), bytearray([0,0,2]))
+
+        def test_a(self):
+            import os
+            file = BytesIO(b"")
+            scale = 5
+            a, read = KeyValueStorage.new("./Persistance/test/client_context0_S" + str(scale) + ".bin", str, 2**scale, [int, float, str], [4, 4, 2**scale])
+            """
+            storage = KeyValueStorage(file, str, 2**5, [int, float, str], [4, 4, 2**5])
+            storage.store("HOLA COMO ESTAS TODO BIEN", [1,1.1,"YO MUY BIEN COS QUE CONTAS"])
+            self.assertEqual(storage.get_all_entries(), {"HOLA COMO ESTAS TODO BIEN": [1,1.1,"YO MUY BIEN COS QUE CONTAS"]})
+            """
+            a.file.close()
+    
     unittest.main()
