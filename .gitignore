@@ -1,6 +1,6 @@
 data/
 metadata/
-__pycache__/
+**/__pycache__/
 persistance_files/
 <docker-compose-dev.yaml>
 notas.txt
