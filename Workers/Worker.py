@@ -196,6 +196,11 @@ class Worker(ABC):
     def remove_client(self, client_id):
         self.pending_eof.pop(client_id)
         self.remove_client_context(client_id)
+        client_storage = self.client_contexts_storage[client_id]
+        while len(client_storage) > 0:
+            filename, storage = client_storage.popitem()
+            storage.delete()
+        self.metadata_storage.remove(CLIENT_PENDING_EOF+str(client_id))
         print(f"[Worker {self.id}] Client disconnected. Worker reset")
 
     def proccess_final_results(self, client_id):

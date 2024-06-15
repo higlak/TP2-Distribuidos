@@ -59,6 +59,7 @@ class LogReadWriter():
 
     def clean(self):
         self.file.truncate(0)
+        self.file.flush()
 
     def close(self):
         self.file.close()

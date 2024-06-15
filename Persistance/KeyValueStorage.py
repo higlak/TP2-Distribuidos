@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import os
 import struct
 from Persistance.storage_errors import *
 from utils.auxiliar_functions import integer_to_big_endian_byte_array, byte_array_to_big_endian_integer, remove_bytes
@@ -303,11 +304,11 @@ class KeyValueStorage():
             self.key_pos[last_key] = pos_to_remove
             self._store_in_pos(pos_to_remove, last_key, last_values, stepping=True)
         self.del_last_line()
+        self.file.flush()
 
     def cross_out_key(self, key_pos):
         self.file.seek(key_pos*self.entry_byte_size, STARTING_FILE_POS)
         self.file.write(CROSS_OUT_BYTE *self.fixed_key_size)
-        self.file.flush()
 
     def del_last_bytes(self, amount_of_bytes):
         size = self.file.seek(0, LAST_FILE_POS)
@@ -315,6 +316,17 @@ class KeyValueStorage():
 
     def del_last_line(self):
         self.del_last_bytes(self.entry_byte_size)
+
+    def close(self):
+        self.file.close()
+
+    def delete(self):
+        self.file.close()
+        file_name = self.file.name
+        try:
+            os.remove(file_name)
+        except:
+            print("Could not remove ", file_name)
         
 if __name__ == '__main__':
     import unittest
@@ -625,17 +637,5 @@ if __name__ == '__main__':
             self.assertEqual(storage.next_pos, 2)
             file.seek(-3, LAST_FILE_POS)
             self.assertEqual(file.read(3), bytearray([0,0,2]))
-
-        def test_a(self):
-            import os
-            file = BytesIO(b"")
-            scale = 5
-            a, read = KeyValueStorage.new("./Persistance/test/client_context0_S" + str(scale) + ".bin", str, 2**scale, [int, float, str], [4, 4, 2**scale])
-            """
-            storage = KeyValueStorage(file, str, 2**5, [int, float, str], [4, 4, 2**5])
-            storage.store("HOLA COMO ESTAS TODO BIEN", [1,1.1,"YO MUY BIEN COS QUE CONTAS"])
-            self.assertEqual(storage.get_all_entries(), {"HOLA COMO ESTAS TODO BIEN": [1,1.1,"YO MUY BIEN COS QUE CONTAS"]})
-            """
-            a.file.close()
     
     unittest.main()

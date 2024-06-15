@@ -24,12 +24,18 @@ RABBIT = """  rabbitmq:
 
 """
 
-DATA_VOLUME = """volumes:
+VOLUMES = """volumes:
   dataVolume:
     driver: local
     driver_opts:
       type: none
       device: ./data
+      o: bind
+  persistanceVolume:
+    driver: local
+    driver_opts:
+      type: none
+      device: ./persistance_files
       o: bind"""
 
 class Pool():
@@ -100,7 +106,7 @@ class QueryConfig():
                 if pool.worker_type == ACCUMULATOR_TYPE:
                   result += f"\n      - ACCUMULATE_BY={pool.accumulate_by}\n"
                 result += "\n    volumes:\n"
-                result += f"      - persistanceVolume{worker_id}:/persistance_files\n\n"
+                result += "      - persistanceVolume:/persistance_files\n\n"
                 
         return result
 
@@ -228,23 +234,6 @@ def process_clients(queries, port, file):
       return False
   return True      
   
-def write_volumes(queries, file):
-  file.write(DATA_VOLUME)
-  for query in queries.values():
-    for pool in query.query_pools:
-      for i in range(pool.worker_amount):
-        worker_id = f"{query.query_number}.{pool.pool_number}.{i}"
-        path = f"./persistance_files/{worker_id}/"
-        if not os.path.exists(path):
-          os.makedirs(path)
-        file.write(f"""
-  persistanceVolume{worker_id}:
-    driver: local
-    driver_opts:
-      type: none
-      device: {path}
-      o: bind""")
-
 def main():
 
   with open(FILENAME, "w") as file:
@@ -270,6 +259,6 @@ def main():
       return
     if not process_clients(queries, port, file):
       return      
-    write_volumes(queries, file)
+    file.write(VOLUMES)
 
 main()
