@@ -45,7 +45,7 @@ class HeartbeatReceiver():
                 print(f"[Waker {self.waker_id}] {self.container_name} not ready. Sleeping {i}s")
                 try:
                     self.signal_queue.get(timeout=i)
-                    print("[Communicator] SIGTERM received, exiting attempting connection")
+                    print(f"[Waker {self.waker_id}] SIGTERM received, exiting attempting connection")
                     return None
                 except Empty:   
                     i *= 2

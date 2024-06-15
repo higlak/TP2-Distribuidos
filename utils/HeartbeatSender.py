@@ -31,6 +31,8 @@ class HeartbeatSender():
             waker_socket, addr = self.socket.accept()
             print(f"[Worker {self.worker_id}] Accepted connection from waker leader {addr}")
             return waker_socket
+        except OSError as e:
+            print(f"[Worker {self.worker_id}] Error accepting waker leader connection. {e}")
         except socket.timeout:
             print(f"[Worker {self.worker_id}] Timeout waiting for leader waker connection")
             return None
@@ -40,9 +42,7 @@ class HeartbeatSender():
         signal.signal(signal.SIGTERM, self.handle_heartbeat_SIGTERM)
 
         self.create_worker_socket()
-        
-        while True:
-           
+        while True:           
             self.waker_socket = self.accept_waker_leader()
 
             if not self.waker_socket:

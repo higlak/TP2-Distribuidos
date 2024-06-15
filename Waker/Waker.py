@@ -15,6 +15,7 @@ class Waker():
 
     def start(self):
         print(f'[Waker {self.waker_id}] Starting')
+
         if not self.handle_containers(self.workers_containers):
             return
         for thread in self.heartbeat_receiver_threads:
