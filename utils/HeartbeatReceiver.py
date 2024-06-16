@@ -21,9 +21,10 @@ class HeartbeatReceiver():
         self.finished = False
         self.signal_queue = Queue()
         self.docker_client = docker.from_env()
+        self.received_amount = 0
 
     def handle_hearbeat_SIGTERM(self, _signum, _frame):
-        print(f"[Waker {self.waker_id}] HearbeatReceiver for {self.container_name} SIGTERM detected\n\n")
+        print(f"\n\n[Waker {self.waker_id}] HearbeatReceiver for {self.container_name} SIGTERM detected\n\n")
         self.finished = True
         self.signal_queue.put(True)
         self.socket.close()
@@ -62,20 +63,22 @@ class HeartbeatReceiver():
 
         while not self.finished:
             try:
-                print(f"[Waker {self.waker_id}] Waiting for heartbeat from {self.container_name}")
+                #print(f"[Waker {self.waker_id}] Waiting for heartbeat from {self.container_name}")
                 recv_bytes = recv_exactly(self.socket, HEARTBEAT_BYTES)
+                if recv_bytes:
+                    self.received_amount += 1
             except socket.timeout:
                 print(f"[Waker {self.waker_id}] Timeout for {self.container_name}")
                 self.socket.close()
                 break
-            if not recv_bytes:
+            if not self.finished and not recv_bytes:
                 print(f"[Waker {self.waker_id}] Connection to {self.container_name} lost")
                 if not self.handle_container_reconnection():
                     break
                 print(f"[Waker {self.waker_id}] Reconnected to {self.container_name}. Continuing...")
                 continue
                 
-            print(f"[Waker {self.waker_id}] Received {recv_bytes.decode()} from {self.container_name}") # No se muestra
+        print(f"[Waker {self.waker_id}] Received {self.received_amount} heartbeats from {self.container_name}")
 
     def handle_container_reconnection(self):
         self.socket.close()
