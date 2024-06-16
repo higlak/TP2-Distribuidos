@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 import time
 
 from Persistance.KeyValueStorage import KeyValueStorage
-from Persistance.log import ChangingFileLog
+from Persistance.log import ChangingFile
 from utils.auxiliar_functions import next_power_of_2_exponent
 from .Worker import Worker
 from utils.QueryMessage import QueryMessage, YEAR_FIELD, TITLE_FIELD, AUTHOR_FIELD, BOOK_MSG_TYPE, REVIEW_MSG_TYPE, RATING_FIELD, MSP_FIELD, REVIEW_TEXT_FIELD
@@ -33,7 +33,6 @@ class Accumulator(Worker, ABC):
         self.field = field
         self.values = values
         self.accumulate_by = accumulate_by
-        self.client_contexts = {} # {client {depende del accum}}
 
     @classmethod
     def new(cls, field, values, accumulate_by):
@@ -44,10 +43,7 @@ class Accumulator(Worker, ABC):
         id, next_pools, eof_to_receive = accumulator_class.get_env()
         if id == None or eof_to_receive == None or not next_pools:
             return None
-        accumulator = accumulator_class(id, next_pools, eof_to_receive, field, values, accumulate_by)
-        if not accumulator.connect():
-            return None
-        return accumulator
+        return accumulator_class(id, next_pools, eof_to_receive, field, values, accumulate_by)
         
 
     @classmethod
@@ -68,11 +64,11 @@ class Accumulator(Worker, ABC):
     @abstractmethod
     def process_previous_context(self, previous_context):
         pass
-
-    def load_context(self, path, client_id, scale_of_update_file):
+    
+    def load_context(self, path, filename,  client_id, scale_of_update_file):
         storage_types, storage_types_size = self.get_context_storage_types(scale_of_update_file)
-        self.context_storage, previous_context = KeyValueStorage.new(path, str, 2**scale_of_update_file, storage_types, storage_types_size)
-        if not self.context_storage or previous_context == None:
+        self.client_contexts_storage[client_id][filename], previous_context = KeyValueStorage.new(path, str, 2**scale_of_update_file, storage_types, storage_types_size)
+        if not self.client_contexts_storage[client_id][filename] or previous_context == None:
             return False
         context = self.process_previous_context(previous_context)
         self.client_contexts[client_id] = context
@@ -98,7 +94,7 @@ class Accumulator(Worker, ABC):
         return [self.transform_to_result(m) for m in results]
     
     def change_context_log(self, client_id, keys, entries):
-        return ChangingFileLog(client_id, keys, entries)
+        return ChangingFile(client_id, keys, entries)
     
     @abstractmethod
     def final_results(cls, client_id):
@@ -328,7 +324,7 @@ class MeanSentimentPolarityByTitleAccumulator(Accumulator):
         return context
     
     def change_context_log(self, client_id, keys, values):
-        return ChangingFileLog(client_id, keys, values)
+        return ChangingFile(client_id, keys, values)
 
 class BookAtribute():
     def __init__(self, title, attribute):

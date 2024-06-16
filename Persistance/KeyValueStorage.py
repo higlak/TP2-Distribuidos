@@ -55,7 +55,7 @@ class FixedStr(StorableTypes):
         self.size = size
     
     def to_bytes(self):
-        return bytearray(self.value.encode()).ljust(self.size, STR_PADDING)
+        return bytearray(self.value.encode()).ljust(self.size, STR_PADDING)[:self.size]
     
     @classmethod
     def from_bytes(self, byte_array):
@@ -322,11 +322,11 @@ class KeyValueStorage():
 
     def delete(self):
         self.file.close()
-        file_name = self.file.name
+        filename = self.file.name
         try:
-            os.remove(file_name)
+            os.remove(filename)
         except:
-            print("Could not remove ", file_name)
+            print("Could not remove ", filename)
         
 if __name__ == '__main__':
     import unittest
@@ -342,7 +342,7 @@ if __name__ == '__main__':
 
     class TestKeyValueStorage(TestCase):
         def str_to_bytes(self, string):
-            return bytearray(string.encode()).ljust(FIXED_STR_LEN, STR_PADDING)
+            return bytearray(string.encode()).ljust(FIXED_STR_LEN, STR_PADDING)[:self.size]
 
         def test_store_on_empty_storage(self):
             file = BytesIO(b"")
@@ -403,8 +403,8 @@ if __name__ == '__main__':
             storage = KeyValueStorage(file, str, FIXED_STR_LEN, [str, int, float, (list, int)], [FIXED_STR_LEN, 8, FIXED_FLOAT_BYTES, MAX_LEN_LIST])
             storage.store("clave", ["valor", 1, 0.8, [5,5,5,5,5]])
 
-            expected_bytes = bytearray("clave".encode()).ljust(FIXED_STR_LEN, STR_PADDING)
-            expected_bytes.extend(bytearray("valor".encode()).ljust(FIXED_STR_LEN, STR_PADDING))
+            expected_bytes = self.str_to_bytes("clave")
+            expected_bytes.extend(self.str_to_bytes("valor"))
             expected_bytes.extend([0,0,0,0,0,0,0,1])
             expected_bytes.extend(struct.pack('f', 0.8))
             expected_bytes.extend([5] + [0,0,0,5] * 5 + [0,0,0,0] * (MAX_LEN_LIST - 5))

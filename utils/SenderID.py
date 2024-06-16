@@ -59,3 +59,11 @@ class SenderID():
 
     def __repr__(self):
         return f'{self.query}.{self.pool_id}.{self.sender_num}'
+    
+    def __eq__(self, other):
+        if type(other) != SenderID:
+            return False
+        return self.query == other.query and self.pool_id == other.pool_id and self.sender_num == other.sender_num
+    
+    def __hash__(self):
+        return hash((self.query, self.pool_id, self.sender_num))

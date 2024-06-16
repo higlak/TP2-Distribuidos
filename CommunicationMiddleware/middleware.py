@@ -176,6 +176,15 @@ class Communicator():
         except MIDDLEWARE_EXCEPTIONS:
             return False
         return True
+    
+    def nack_last_message(self):
+        if self.last_delivery_tag == None:
+            return True
+        try:
+            self.channel.basic_nack(delivery_tag=self.last_delivery_tag)
+        except MIDDLEWARE_EXCEPTIONS:
+            return False
+        return True
 
     def amount_of_producer_group(self, group):
         return len(self.producer_groups[group])

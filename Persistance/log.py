@@ -49,6 +49,13 @@ class LogReadWriter():
     def read_curr_log(self):
         return Log.from_file_pos(self.file, CURRENT_FILE_POS)
     
+    def read_while_log_type(self, log_type):
+        logs = [self.read_last_log()]
+        while not (logs[-1] is None) and (logs[-1].log_type == log_type):
+            logs.append(self.read_curr_log())
+        logs.pop()
+        return logs
+
     def read_until_log_type(self, log_type):
         logs = [self.read_last_log()]
         while not (logs[-1] is None) and (logs[-1].log_type != log_type):
@@ -56,6 +63,9 @@ class LogReadWriter():
         if logs[-1] == None:
             logs.pop()
         return logs
+
+    def is_type(self, log_type):
+        self.log_type == log_type
 
     def clean(self):
         self.file.truncate(0)
@@ -65,15 +75,13 @@ class LogReadWriter():
         self.file.close()
 
 class LogType(IntEnum):
-    ChangingFileLog = 0
+    ChangingFile = 0
     FinishedWriting = 1
     SentBatch = 2
     AckedBatch = 3
     SentFinalResult = 4
     FinishedSendingResultsOfClient = 5
     FinishedClient = 6
-    ChangedMetadata = 7
-    
 
     @classmethod
     def from_file_pos(cls, file, pos):
@@ -101,7 +109,7 @@ class Log(ABC):
     @classmethod
     def get_log_subclass(self, log_type):
         switch = {
-            LogType.ChangingFileLog: ChangingFileLog,
+            LogType.ChangingFile: ChangingFile,
             LogType.FinishedWriting: FinishedWriting,
             LogType.SentBatch: SentBatch,
             LogType.AckedBatch: AckedBatch,
@@ -145,10 +153,10 @@ class NoArgsLog(Log, ABC):
 #keys = ['key1', 'key2']
 #values = [[1,1.1,'hola', 'chau'], [2,2.2,'como', 'estas']]
 
-class ChangingFileLog(Log):
-    def __init__(self, file_name, keys, entries= None):
-        self.log_type = LogType.ChangingFileLog
-        self.file_name = file_name
+class ChangingFile(Log):
+    def __init__(self, filename, keys, entries= None):
+        self.log_type = LogType.ChangingFile
+        self.filename = filename
         self.keys = keys
         self.entries = entries
         if len(self._first_entry_value()) > 2**(8* VALUES_TYPES_LEN):
@@ -169,7 +177,7 @@ class ChangingFileLog(Log):
                 update_keys.append(self.keys[i])
         byte_array.extend(get_keys_bytes(update_keys))
         byte_array.extend(get_keys_bytes(new_keys))
-        byte_array.extend(get_string_byte_array(self.file_name))
+        byte_array.extend(get_string_byte_array(self.filename))
         return byte_array
     
     def _first_entry_value(self):
@@ -222,12 +230,12 @@ class ChangingFileLog(Log):
 
     @classmethod
     def from_file_pos(cls, file, pos):
-        file_name = string_from_file_pos(file, pos)
+        filename = string_from_file_pos(file, pos)
         new_keys = keys_from_file_pos(file, CURRENT_FILE_POS)
         update_keys = keys_from_file_pos(file, CURRENT_FILE_POS)
         amount_of_value_types = numbers_from_file_pos(file, CURRENT_FILE_POS, 1, VALUES_TYPES_LEN)[0]
         if amount_of_value_types == 0:
-            return cls(file_name, new_keys)
+            return cls(filename, new_keys)
         value_types = numbers_from_file_pos(file, CURRENT_FILE_POS, amount_of_value_types, VALUES_TYPES_LEN)
         values = []
         for value_type in reversed(value_types):
@@ -250,10 +258,10 @@ class ChangingFileLog(Log):
         for key in new_keys:
             keys.append(key)
             entries.append(None)
-        return cls(file_name, update_keys, entries)
+        return cls(filename, update_keys, entries)
     
     def params_eq(self, other):
-        if self.file_name != other.file_name or set(self.keys) != set(other.keys):
+        if self.filename != other.filename or set(self.keys) != set(other.keys):
             return False
         if self.entries == None or other.entries == None:
             if (other.entries == None or all(e is None for e in self.entries)) and (self.entries == None or  all(e is None for e in self.entries)):
@@ -408,11 +416,11 @@ if __name__ == '__main__':
     
     class TestLog(TestCase):
         def get_mock_file(self):
-            logs_bytes = ChangingFileLog("file1", ["a", "b"], [["a", 1 , 1, 1.1], ["b", 2, 2, 2.2]]).get_log_bytes()
-            logs_bytes.extend(ChangingFileLog("file1", ["a"], [[1]]).get_log_bytes())
-            logs_bytes.extend(ChangingFileLog("file1", ["a"], [[[1,2,3]]]).get_log_bytes())
-            logs_bytes.extend(ChangingFileLog("file1", ["a", "b"], [[1], None]).get_log_bytes())
-            logs_bytes.extend(ChangingFileLog("file1", ["a", "b"], [None, None]).get_log_bytes())
+            logs_bytes = ChangingFile("file1", ["a", "b"], [["a", 1 , 1, 1.1], ["b", 2, 2, 2.2]]).get_log_bytes()
+            logs_bytes.extend(ChangingFile("file1", ["a"], [[1]]).get_log_bytes())
+            logs_bytes.extend(ChangingFile("file1", ["a"], [[[1,2,3]]]).get_log_bytes())
+            logs_bytes.extend(ChangingFile("file1", ["a", "b"], [[1], None]).get_log_bytes())
+            logs_bytes.extend(ChangingFile("file1", ["a", "b"], [None, None]).get_log_bytes())
             logs_bytes.extend(FinishedWriting().get_log_bytes())
             logs_bytes.extend(SentBatch().get_log_bytes())
             logs_bytes.extend(AckedBatch().get_log_bytes())
@@ -428,11 +436,11 @@ if __name__ == '__main__':
             float1 = list(get_float_byte_array(1.1))
             float2 = list(get_float_byte_array(2.2))
 
-            self.assertEqual(ChangingFileLog("file1", ["a", "b"], [["a", 1 , 1, 1.1], ["b", 2, 2, 2.2]]).get_log_bytes(),bytearray(str_bytes + strb_bytes + [0,0,0,1] + [0,0,0,2] + [0,0,0,1] + [0,0,0,2] + float1 + float2 + [STR_TYPE_BYTE,INT_TYPE_BYTE,INT_TYPE_BYTE,FLOAT_TYPE_BYTE] + [4] + str_bytes + strb_bytes + [0,2] + [0,0] + file_bytes + [LogType.ChangingFileLog]))
-            self.assertEqual(ChangingFileLog("file1", ["a"], [[1]]).get_log_bytes(),bytearray([0,0,0,1] + [INT_TYPE_BYTE] + [1] + str_bytes + [0,1] + [0,0] + file_bytes + [LogType.ChangingFileLog]))
-            self.assertEqual(ChangingFileLog("file1", ["a"], [[[1,2,3]]]).get_log_bytes(),bytearray([0,0,0,1] + [0,0,0,2] + [0,0,0,3] + [3]+ [INT_LIST_TYPE_BYTE] + [1] + str_bytes + [0,1] + [0,0] + file_bytes + [LogType.ChangingFileLog]))
-            self.assertEqual(ChangingFileLog("file1", ["a", "b"], [[1], None]).get_log_bytes(),bytearray([0,0,0,1] + [INT_TYPE_BYTE] + [1] + str_bytes + [0,1] + strb_bytes + [0,1] + file_bytes + [LogType.ChangingFileLog]))
-            self.assertEqual(ChangingFileLog("file1", ["a", "b"], [None, None]).get_log_bytes(),bytearray([0] + [0,0] + str_bytes + strb_bytes + [0,2] + file_bytes + [LogType.ChangingFileLog]))
+            self.assertEqual(ChangingFile("file1", ["a", "b"], [["a", 1 , 1, 1.1], ["b", 2, 2, 2.2]]).get_log_bytes(),bytearray(str_bytes + strb_bytes + [0,0,0,1] + [0,0,0,2] + [0,0,0,1] + [0,0,0,2] + float1 + float2 + [STR_TYPE_BYTE,INT_TYPE_BYTE,INT_TYPE_BYTE,FLOAT_TYPE_BYTE] + [4] + str_bytes + strb_bytes + [0,2] + [0,0] + file_bytes + [LogType.ChangingFile]))
+            self.assertEqual(ChangingFile("file1", ["a"], [[1]]).get_log_bytes(),bytearray([0,0,0,1] + [INT_TYPE_BYTE] + [1] + str_bytes + [0,1] + [0,0] + file_bytes + [LogType.ChangingFile]))
+            self.assertEqual(ChangingFile("file1", ["a"], [[[1,2,3]]]).get_log_bytes(),bytearray([0,0,0,1] + [0,0,0,2] + [0,0,0,3] + [3]+ [INT_LIST_TYPE_BYTE] + [1] + str_bytes + [0,1] + [0,0] + file_bytes + [LogType.ChangingFile]))
+            self.assertEqual(ChangingFile("file1", ["a", "b"], [[1], None]).get_log_bytes(),bytearray([0,0,0,1] + [INT_TYPE_BYTE] + [1] + str_bytes + [0,1] + strb_bytes + [0,1] + file_bytes + [LogType.ChangingFile]))
+            self.assertEqual(ChangingFile("file1", ["a", "b"], [None, None]).get_log_bytes(),bytearray([0] + [0,0] + str_bytes + strb_bytes + [0,2] + file_bytes + [LogType.ChangingFile]))
             self.assertEqual(FinishedWriting().get_log_bytes(), bytearray([LogType.FinishedWriting.value]))
             self.assertEqual(SentBatch().get_log_bytes(), bytearray([LogType.SentBatch.value]))
             self.assertEqual(AckedBatch().get_log_bytes(), bytearray([LogType.AckedBatch.value]))
@@ -443,11 +451,11 @@ if __name__ == '__main__':
         def test_write_logs(self):
             mock_file = BytesIO(b"")
             logger = LogReadWriter(mock_file)
-            logger.log(ChangingFileLog("file1", ["a", "b"], [["a", 1 , 1, 1.1], ["b", 2, 2, 2.2]]))
-            logger.log(ChangingFileLog("file1", ["a"], [[1]]))
-            logger.log(ChangingFileLog("file1", ["a"], [[[1,2,3]]]))
-            logger.log(ChangingFileLog("file1", ["a", "b"], [[1], None]))
-            logger.log(ChangingFileLog("file1", ["a", "b"], [None, None]))
+            logger.log(ChangingFile("file1", ["a", "b"], [["a", 1 , 1, 1.1], ["b", 2, 2, 2.2]]))
+            logger.log(ChangingFile("file1", ["a"], [[1]]))
+            logger.log(ChangingFile("file1", ["a"], [[[1,2,3]]]))
+            logger.log(ChangingFile("file1", ["a", "b"], [[1], None]))
+            logger.log(ChangingFile("file1", ["a", "b"], [None, None]))
             logger.log(FinishedWriting())
             logger.log(SentBatch())
             logger.log(AckedBatch())
@@ -471,11 +479,11 @@ if __name__ == '__main__':
             self.assertEqual(AckedBatch(), logger.read_curr_log())
             self.assertEqual(SentBatch(), logger.read_curr_log())
             self.assertEqual(FinishedWriting(), logger.read_curr_log())
-            self.assertEqual(ChangingFileLog("file1", ["a", "b"], [None, None]), logger.read_curr_log())
-            self.assertEqual(ChangingFileLog("file1", ["a", "b"], [[1], None]), logger.read_curr_log())
-            self.assertEqual(ChangingFileLog("file1", ["a"], [[[1,2,3]]]), logger.read_curr_log())
-            self.assertEqual(ChangingFileLog("file1", ["a"], [[1]]), logger.read_curr_log())
-            self.assertEqual(ChangingFileLog("file1", ["a", "b"], [["a", 1 , 1, 1.1], ["b", 2, 2, 2.2]]), logger.read_curr_log())
+            self.assertEqual(ChangingFile("file1", ["a", "b"], [None, None]), logger.read_curr_log())
+            self.assertEqual(ChangingFile("file1", ["a", "b"], [[1], None]), logger.read_curr_log())
+            self.assertEqual(ChangingFile("file1", ["a"], [[[1,2,3]]]), logger.read_curr_log())
+            self.assertEqual(ChangingFile("file1", ["a"], [[1]]), logger.read_curr_log())
+            self.assertEqual(ChangingFile("file1", ["a", "b"], [["a", 1 , 1, 1.1], ["b", 2, 2, 2.2]]), logger.read_curr_log())
             self.assertAlmostEqual(None, logger.read_curr_log())
 
         def test_read_until(self):

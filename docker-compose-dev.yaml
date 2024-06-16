@@ -645,9 +645,9 @@ services:
       - PORT=12345
       - BOOK_QUERIES=1,2,3,5
       - REVIEW_QUERIES=3,5
-      - FORWARD_TO=2.0,5.0,3.0,1.0
-      - SHARD_BY=authors,title,title,
-      - NEXT_POOL_WORKERS=2,2,4,2
+      - FORWARD_TO=5.0,2.0,1.0,3.0
+      - SHARD_BY=title,authors,,title
+      - NEXT_POOL_WORKERS=2,2,2,4
       - EOF_TO_RECEIVE=10
 
   client0:
