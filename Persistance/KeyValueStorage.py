@@ -325,6 +325,8 @@ class KeyValueStorage():
         filename = self.file.name
         try:
             os.remove(filename)
+        except FileNotFoundError:
+            pass
         except:
             print("Could not remove ", filename)
         

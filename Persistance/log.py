@@ -80,7 +80,7 @@ class LogType(IntEnum):
     SentBatch = 2
     AckedBatch = 3
     SentFinalResult = 4
-    FinishedSendingResultsOfClient = 5
+    FinishedSendingResults = 5
     FinishedClient = 6
 
     @classmethod
@@ -114,7 +114,7 @@ class Log(ABC):
             LogType.SentBatch: SentBatch,
             LogType.AckedBatch: AckedBatch,
             LogType.SentFinalResult: SentFirstFinalResults,
-            LogType.FinishedSendingResultsOfClient: FinishedSendingResultsOfClient,
+            LogType.FinishedSendingResults: FinishedSendingResults,
             LogType.FinishedClient: FinishedClient,
         }
         return switch[log_type]
@@ -311,9 +311,9 @@ class SentFirstFinalResults(Log):
     def params_eq(self, other):
         return self.n == other.n and self.client_id == other.client_id
 
-class FinishedSendingResultsOfClient(Log):
+class FinishedSendingResults(Log):
     def __init__(self, client_id):
-        self.log_type = LogType.FinishedSendingResultsOfClient
+        self.log_type = LogType.FinishedSendingResults
         self.client_id = client_id
     
     def get_log_arg_bytes(self):
@@ -425,7 +425,7 @@ if __name__ == '__main__':
             logs_bytes.extend(SentBatch().get_log_bytes())
             logs_bytes.extend(AckedBatch().get_log_bytes())
             logs_bytes.extend(SentFirstFinalResults(1, 2).get_log_bytes())
-            logs_bytes.extend(FinishedSendingResultsOfClient(65536).get_log_bytes())
+            logs_bytes.extend(FinishedSendingResults(65536).get_log_bytes())
             logs_bytes.extend(FinishedClient().get_log_bytes())
             return BytesIO(logs_bytes)
 
@@ -445,7 +445,7 @@ if __name__ == '__main__':
             self.assertEqual(SentBatch().get_log_bytes(), bytearray([LogType.SentBatch.value]))
             self.assertEqual(AckedBatch().get_log_bytes(), bytearray([LogType.AckedBatch.value]))
             self.assertEqual(SentFirstFinalResults(1, 2).get_log_bytes(), bytearray([0,0,0,2] + [0,0,0,1] + [LogType.SentFinalResult.value]))
-            self.assertEqual(FinishedSendingResultsOfClient(65536).get_log_bytes(), bytearray([0,1,0,0] + [LogType.FinishedSendingResultsOfClient.value]))
+            self.assertEqual(FinishedSendingResults(65536).get_log_bytes(), bytearray([0,1,0,0] + [LogType.FinishedSendingResults.value]))
             self.assertEqual(FinishedClient().get_log_bytes(), bytearray([LogType.FinishedClient.value]))
 
         def test_write_logs(self):
@@ -460,7 +460,7 @@ if __name__ == '__main__':
             logger.log(SentBatch())
             logger.log(AckedBatch())
             logger.log(SentFirstFinalResults(1, 2))
-            logger.log(FinishedSendingResultsOfClient(65536))
+            logger.log(FinishedSendingResults(65536))
             logger.log(FinishedClient())
             mock_file.seek(0)
             self.assertEqual(mock_file.read(1000), self.get_mock_file().read(1000))
@@ -474,7 +474,7 @@ if __name__ == '__main__':
             mock_file = self.get_mock_file()
             logger = LogReadWriter(mock_file)
             self.assertEqual(FinishedClient(), logger.read_last_log())
-            self.assertEqual(FinishedSendingResultsOfClient(65536),logger.read_curr_log())
+            self.assertEqual(FinishedSendingResults(65536),logger.read_curr_log())
             self.assertEqual(SentFirstFinalResults(1, 2), logger.read_curr_log())
             self.assertEqual(AckedBatch(), logger.read_curr_log())
             self.assertEqual(SentBatch(), logger.read_curr_log())
@@ -490,8 +490,8 @@ if __name__ == '__main__':
             mock_file = self.get_mock_file()
             logger = LogReadWriter(mock_file)
 
-            logs = logger.read_until_log_type(LogType.FinishedSendingResultsOfClient)
-            self.assertEqual(logs, [FinishedClient(), FinishedSendingResultsOfClient(65536)])
+            logs = logger.read_until_log_type(LogType.FinishedSendingResults)
+            self.assertEqual(logs, [FinishedClient(), FinishedSendingResults(65536)])
         
         def test_read_until_but_log_not_in_file(self):
             file = BytesIO(b"")

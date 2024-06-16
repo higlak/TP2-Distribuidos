@@ -97,12 +97,12 @@ class Accumulator(Worker, ABC):
         return ChangingFile(client_id, keys, entries)
     
     @abstractmethod
-    def final_results(cls, client_id):
+    def sorted_final_results(cls, client_id):
         pass
 
     def get_final_results(self, client_id):
         if client_id in self.client_contexts:
-            return [self.transform_to_result(msg) for msg in self.final_results(client_id)]    
+            return [self.transform_to_result(msg) for msg in self.sorted_final_results(client_id)]    
 
 class DecadeByAuthorAccumulator(Accumulator):
     def get_new_context(cls):
@@ -149,7 +149,7 @@ class DecadeByAuthorAccumulator(Accumulator):
     def process_previous_context(self, previous_context):
         return previous_context
 
-    def final_results(self, client_id):
+    def sorted_final_results(self, client_id):
         return []
     
 class AmountOfReviewByTitleAccumulator(Accumulator):
@@ -187,14 +187,14 @@ class AmountOfReviewByTitleAccumulator(Accumulator):
         self.client_context_storage_updates[scale][title] = (old_value, new_value)
         self.client_contexts[client_id][title] = new_value
 
-    def final_results(self, client_id):
-        results = []
-        for title, accum in self.client_contexts[client_id].items():
+    def sorted_final_results(self, client_id):
+        sorted_results = []
+        for title, accum in sorted(self.client_contexts[client_id].items()):
             if accum[0] >= int(self.values):
                 authors = accum[2].split(';')
                 result = QueryMessage(msg_type=BOOK_MSG_TYPE, title=title, authors=authors, rating=accum[1] / accum[0])
-                results.append(result)
-        return results
+                sorted_results.append(result)
+        return sorted_results
     
     def get_context_storage_types(self, scale_of_update_file):
         return [int, float, str], [CONTEXT_INT_BYTES, CONTEXT_FLOAT_BYTES, 2**scale_of_update_file]
@@ -232,13 +232,12 @@ class RatingByTitleAccumulator(Accumulator):
             self.client_context_storage_updates[scale] = {}
         self.client_context_storage_updates[scale][old_book_attribute.title] = ([old_book_attribute.attribute], new_value)
 
-    def final_results(self, client_id):
+    def sorted_final_results(self, client_id):
         results = []
         while len(self.client_contexts[client_id]) > 0:
             result = heapq.heappop(self.client_contexts[client_id])
             results.append(QueryMessage(BOOK_MSG_TYPE, title=result.title, rating= result.attribute))
-        results.reverse()
-        return results
+        return sorted(results, key=lambda q: q.title)
     
     def get_context_storage_types(self, scale_of_update_file):
         return [float], [CONTEXT_FLOAT_BYTES]
@@ -275,12 +274,12 @@ class ReviewTextByTitleAccumulator(Accumulator):
         self.client_context_storage_updates[scale][title] = (old_value, new_value)
         self.client_contexts[client_id][title] = new_value
 
-    def final_results(self, client_id):
-        results = []
-        for title, result in self.client_contexts[client_id].items():
+    def sorted_final_results(self, client_id):
+        sorted_results = []
+        for title, result in sorted(self.client_contexts[client_id].items()):
             msp = result[1] / result[0]
-            results.append(QueryMessage(msg_type=BOOK_MSG_TYPE, title=title, mean_sentiment_polarity=msp))
-        return results
+            sorted_results.append(QueryMessage(msg_type=BOOK_MSG_TYPE, title=title, mean_sentiment_polarity=msp))
+        return sorted_results
     
     def get_context_storage_types(self, scale_of_update_file):
         return [int, float], [CONTEXT_INT_BYTES, CONTEXT_FLOAT_BYTES]
@@ -305,14 +304,14 @@ class MeanSentimentPolarityByTitleAccumulator(Accumulator):
         self.client_context_storage_updates[scale][title] = (old_value, [new_value])
         bisect.insort(self.client_contexts[client_id], BookAtribute(title, msp))
 
-    def final_results(self, client_id):
+    def sorted_final_results(self, client_id):
         percentil_90_index = int(len(self.client_contexts[client_id]) * (int(self.values) / 100))
-        results = []
-        for a in self.client_contexts[client_id]:
-            if a >= self.client_contexts[client_id][percentil_90_index]:
-                results.append(a)
+        sorted_results = []
+        for book_attr in self.client_contexts[client_id]:
+            if book_attr >= self.client_contexts[client_id][percentil_90_index]:
+                bisect.insort(sorted_results, book_attr)
 
-        return [QueryMessage(BOOK_MSG_TYPE, title=result.title) for result in results]
+        return [QueryMessage(BOOK_MSG_TYPE, title=result.title) for result in sorted_results]
     
     def get_context_storage_types(self, scale_of_update_file):
         return [float], [CONTEXT_FLOAT_BYTES]

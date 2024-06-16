@@ -193,7 +193,7 @@ class QueryMessage():
             if value:
                 csv_values.append(value)
         return csv_values
-    
+
     def __eq__(self, other):
         return self.fields_to_list() == other.fields_to_list()
     

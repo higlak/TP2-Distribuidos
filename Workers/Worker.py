@@ -153,14 +153,14 @@ class Worker(ABC):
     def get_final_results(self, client_id):
         pass
     
-    def send_final_results(self, client_id):
+    def send_final_results(self, client_id, already_sent_logs=0):
         fr = self.get_final_results(client_id)
         if not fr:
             return True
         
         final_results = []
         append_extend(final_results,fr)
-        i = 0
+        i = already_sent_logs
         while True:
             batch = Batch.new(client_id, self.id, final_results[i:i+BATCH_SIZE])
             if batch.size() == 0:
@@ -207,9 +207,9 @@ class Worker(ABC):
         pass
 
     def remove_client(self, client_id):
-        self.pending_eof.pop(client_id)
+        self.pending_eof.pop(client_id, None)
         self.remove_client_context(client_id)
-        client_storage = self.client_contexts_storage[client_id]
+        client_storage = self.client_contexts_storage.get(client_id, {})
         while len(client_storage) > 0:
             filename, storage = client_storage.popitem()
             storage.delete()
@@ -224,7 +224,7 @@ class Worker(ABC):
         if not self.send_batch(Batch.eof(client_id, self.id)):
             print(f"[Worker {self.id}] Disconnected from MOM, while sending eof")
             return False
-        self.logger.log(FinishedSendingResultsOfClient(client_id))
+        self.logger.log(FinishedSendingResults(client_id))
         return True
 
     def handle_eof(self, client_id):
@@ -378,7 +378,7 @@ class Worker(ABC):
         return True
 
 
-    def initialize_based_on_log_finished_writing(self):
+    def initialize_based_on_log_finished_writing(self, log):
         #recibir un batch
         batch_bytes = self.receive_batch()
         if not batch_bytes:
@@ -398,13 +398,26 @@ class Worker(ABC):
         
         return self.send_any_ready_final_results(self)
 
+    def initialize_based_on_log_acked_batch(self, log):
+        return self.send_any_ready_final_results()
+
+    def initialize_based_on_log_sent_final_result(self, log):
+        client_id, already_sent_logs = log.client_id, log.n
+        return self.send_final_results(client_id, already_sent_logs)
+    
+    def initialize_based_on_log_finished_sending_results(self, log):
+        return self.remove_client(log.client_id)
+
     def initialize_based_on_last_execution(self):
         last_log = self.logger.read_last_log()
         switch = {
             LogType.ChangingFile: self.intialize_based_on_log_changing_file,
             LogType.FinishedWriting: self.initialize_based_on_log_finished_writing,
+            LogType.AckedBatch: self.initialize_based_on_log_acked_batch,
+            LogType.SentFinalResult: self.initialize_based_on_log_sent_final_result,
+            LogType.FinishedSendingResults: self.initialize_based_on_log_finished_sending_results
         }
-        switch[last_log.log_type](last_log)
+        return switch[last_log.log_type](last_log)
         
 
     def rollback(self, storage, client_id, keys, old_entries):
