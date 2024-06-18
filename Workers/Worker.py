@@ -94,8 +94,8 @@ class Worker(ABC):
         while len(previouse_metadata) > 0:
             entry = previouse_metadata.popitem()
             if entry[0].startswith(CLIENT_PENDING_EOF):
-                sender_id = int(entry[0].strip(CLIENT_PENDING_EOF))
-                self.pending_eof[entry[0]] = entry[1]
+                client_id = int(entry[0].strip(CLIENT_PENDING_EOF))
+                self.pending_eof[client_id] = entry[1]
             elif entry[0].startswith(LAST_RECEIVED_FROM_WORKER):
                 sender_id = SenderID.from_string(entry[0].strip(LAST_RECEIVED_FROM_WORKER))
                 if sender_id == None:
@@ -196,10 +196,10 @@ class Worker(ABC):
     def start(self):
         if not self.load_from_disk(): 
             return None
+        if not self.connect():
+            return None
         if not self.initialize_based_on_last_execution():
             print("Error initializing from log")
-            return None
-        if not self.connect():
             return None
         self.loop()
         #print(f"\n\n {self.metadata_storage.get_all_entries()}\n\n")

@@ -7,7 +7,7 @@ from Workers.Filters import Filter
 from Persistance.KeyValueStorage import KeyValueStorage
 from Persistance.log import LogReadWriter
 
-PANIC_PROB = 0.01
+PANIC_PROB = 0.0005
 
 class FaultyError(Exception):
     def __init__(self, msg):
@@ -18,7 +18,7 @@ def set_faulty_if_needed():
         set_class_as_faulty(Worker)
         set_class_as_faulty(Accumulator)
         set_class_as_faulty(Filter)
-        set_class_as_faulty(KeyValueStorage)
+        #set_class_as_faulty(KeyValueStorage)
         #set_class_as_faulty(LogReadWriter)
 
 def get_new_method(cls, old_method, method_name):
@@ -35,6 +35,10 @@ def set_class_as_faulty(cls):
         if method_name.startswith('__'):
             continue
     
-    method = getattr(cls, method_name)
-    if callable(method):
-        setattr(cls, method_name, get_new_method(cls, method, method_name))
+        method = getattr(cls, method_name)
+        try:
+            method.__self__
+            continue
+        except:
+            if callable(method):
+                setattr(cls, method_name, get_new_method(cls, method, method_name))
