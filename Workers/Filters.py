@@ -54,5 +54,8 @@ class Filter(Worker):
             return False
         return method(self.valid_values)
 
+    def process_previous_context(self, previous_context):
+        return previous_context
+
     def get_final_results(self, _client_id):
         return []

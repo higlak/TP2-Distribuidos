@@ -138,6 +138,9 @@ class Log(ABC):
 
     def __ne__(self, other):
         return not self.__eq__(other)
+    
+    def __repr__(self):
+        return self.__dict__.__repr__()
 
 class NoArgsLog(Log, ABC):
     def get_log_arg_bytes(self):
@@ -159,6 +162,8 @@ class ChangingFile(Log):
         self.filename = filename
         self.keys = keys
         self.entries = entries
+        if entries == None:
+            self.entries = [None] * len(self.keys)
         if len(self._first_entry_value()) > 2**(8* VALUES_TYPES_LEN):
             raise TooManyValues
     
@@ -412,7 +417,7 @@ if __name__ == '__main__':
     import unittest
     from unittest import TestCase
     from io import BytesIO
-    import pudb; pu.db
+    #import pudb; pu.db
     
     class TestLog(TestCase):
         def get_mock_file(self):

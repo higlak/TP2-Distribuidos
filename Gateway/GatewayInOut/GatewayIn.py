@@ -10,7 +10,6 @@ from utils.auxiliar_functions import append_extend
 from utils.SenderID import SenderID
 
 FIRST_POOL = 0
-GATEWAY_SENDER_ID = SenderID(0,0,1)
 
 class GatewayIn():
     def __init__(self, client_id, socket, next_pools, book_query_numbers, review_query_numbers):
@@ -18,6 +17,7 @@ class GatewayIn():
         self.com = None
         self.sigterm_queue = Queue()
         self.client_id = client_id
+        self.id = SenderID(0,0,client_id)
         self.book_query_numbers = book_query_numbers
         self.review_query_numbers = review_query_numbers
         self.next_pools = next_pools
@@ -53,7 +53,7 @@ class GatewayIn():
         return Batch.from_socket(self.socket, DatasetLine)
     
     def send_eof(self):
-        return self.com.produce_to_all_group_members(Batch.eof(self.client_id, GATEWAY_SENDER_ID).to_bytes())
+        return self.com.produce_to_all_group_members(Batch.eof(self.client_id, self.id).to_bytes())
         
     def get_query_messages(self, obj, query_number):
         switch = {
@@ -85,7 +85,7 @@ class GatewayIn():
                 if query_message:
                     append_extend(query_messages, query_message)
             pool = f'{query_number}.{FIRST_POOL}'
-            batch = Batch.new(self.client_id, GATEWAY_SENDER_ID, query_messages)
+            batch = Batch.new(self.client_id, self.id, query_messages)
             if not self.com.produce_batch_of_messages(batch, pool, self.next_pools.shard_by_of_pool(pool)):
                 return False
         return True

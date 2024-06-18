@@ -2,8 +2,9 @@ import signal
 from multiprocessing import Process, Pipe
 from utils.NextPools import NextPools
 from utils.Batch import Batch, AMOUNT_OF_CLIENT_ID_BYTES
+from utils.SenderID import SenderID
 from utils.auxiliar_functions import get_env_list, send_all
-from GatewayInOut.GatewayIn import gateway_in_main, GATEWAY_SENDER_ID
+from GatewayInOut.GatewayIn import gateway_in_main
 from GatewayInOut.GatewayOut import gateway_out_main
 import socket
 import os
@@ -13,6 +14,7 @@ AMOUNT_OF_IDS = 2**(8*AMOUNT_OF_CLIENT_ID_BYTES) - 1
 JOIN_HANDLE_POS = 1
 ID_POS = 0
 SERVER_SOCKET_TIMEOUT = 5
+GATEWAY_SENDER_ID = SenderID(0,0,1)
 NO_CLIENT_ID = AMOUNT_OF_IDS
 
 class Gateway():

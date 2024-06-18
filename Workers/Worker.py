@@ -14,7 +14,7 @@ from utils.NextPools import NextPools, GATEWAY_QUEUE_NAME
 from queue import Queue
 
 PERSISTANCE_PATH = '/persistance_files/'
-LOG_PATH = PERSISTANCE_PATH + './log.bin'
+LOG_FILENAME = 'log.bin'
 METADATA_FILENAME = 'metadata.bin'
 CLIENT_CONTEXT_FILENAME = 'client_context'
 SCALE_SEPARATOR = '_S'
@@ -70,11 +70,11 @@ class Worker(ABC):
     def load_all_context(self):
         try:
             for filename in os.listdir(self.worker_folder()):
-                if filename == METADATA_FILENAME:
+                if filename == METADATA_FILENAME or filename == LOG_FILENAME:
                     continue
                 path = os.path.join(self.worker_folder(), filename)
                 if os.path.isfile(path):            
-                    client_id, scale_of_file = info_from_filename()
+                    client_id, scale_of_file = info_from_filename(filename)
                     self.client_contexts_storage[client_id] = self.client_contexts_storage.get(client_id, {})
                     if not self.load_context(path, filename, client_id, scale_of_file):
                         print(f"[Worker [{self.id}]]: Could not load context: {path}")
@@ -124,7 +124,7 @@ class Worker(ABC):
             return False
         if not self.load_all_context():
            return False
-        self.logger = LogReadWriter.new(LOG_PATH)
+        self.logger = LogReadWriter.new(self.worker_folder() + LOG_FILENAME)
         if not self.logger:
             return False
         #if not self.load_context():
@@ -195,6 +195,9 @@ class Worker(ABC):
         
     def start(self):
         if not self.load_from_disk(): 
+            return None
+        if not self.initialize_based_on_last_execution():
+            print("Error initializing from log")
             return None
         if not self.connect():
             return None
@@ -272,13 +275,18 @@ class Worker(ABC):
 
     def dump_metadata_to_disk(self, batch):
         keys = [LAST_RECEIVED_FROM_WORKER + str(batch.sender_id), LAST_SENT_SEQ_NUM]
-        entries = [[batch.seq_num], [SeqNumGenerator.seq_num]]
+        old_batch_seq_num = self.last_received_batch.get(batch.sender_id, None)
+        if old_batch_seq_num != None:
+            old_batch_seq_num = [old_batch_seq_num]
+        old_entries = [old_batch_seq_num, [SeqNumGenerator.seq_num -1]]
+        new_entries = [[batch.seq_num], [SeqNumGenerator.seq_num]]
         if batch.is_empty():
             keys.append(CLIENT_PENDING_EOF + str(batch.client_id))
-            entries.append([self.pending_eof[batch.client_id]])
-            
-        self.logger.log(ChangingFile(METADATA_FILENAME, keys, entries))
-        self.metadata_storage.store_all(keys, entries)
+            old_entries.append([self.pending_eof[batch.client_id] + 1])
+            new_entries.append([self.pending_eof[batch.client_id]])
+        self.last_received_batch[batch.sender_id] = batch.seq_num
+        self.logger.log(ChangingFile(METADATA_FILENAME, keys, old_entries))
+        self.metadata_storage.store_all(keys, new_entries)
 
     def dump_to_disk(self, batch):
         try:
@@ -317,13 +325,17 @@ class Worker(ABC):
                 break
             batch = Batch.from_bytes(batch_bytes)
             
+            if self.id == SenderID(3,1,0):
+                print("\n recibido: ", batch.seq_num)
+                print("en metdadata: ", self.last_received_batch.get(batch.sender_id, None))
+                print(self.client_contexts)
+
             ########### filter dup
             if not batch or self.is_dup_batch(batch):
                 if not self.communicator.acknowledge_last_message():
                     print(f"[Worker {self.id}] Disconnected from MOM, while acking_message")
                     break
                 continue
-            self.last_received_batch[batch.sender_id] = batch.seq_num
 
             ############ proccess batch
             result_batch = self.process_batch(batch)
@@ -353,10 +365,7 @@ class Worker(ABC):
                 self.remove_client(batch.client_id)
             
             ############ Clean Log
-            if x > 10:
-                self.logger.clean()
-                x = 0
-            x+=1
+            #self.logger.clean()
 
     def intialize_based_on_log_changing_file(self, log):
         logs = self.logger.read_while_log_type(LogType.ChangingFile)
@@ -368,6 +377,7 @@ class Worker(ABC):
                 client_id, _log_scale = info_from_filename(log.filename)
                 storage = self.client_contexts_storage[client_id][log.filename]
             self.rollback(storage, client_id, log.keys, log.entries)
+        return True
 
     def send_any_ready_final_results(self):
         for client_id, pending_eof in self.pending_eof.items():
@@ -406,10 +416,12 @@ class Worker(ABC):
         return self.send_final_results(client_id, already_sent_logs)
     
     def initialize_based_on_log_finished_sending_results(self, log):
-        return self.remove_client(log.client_id)
+        self.remove_client(log.client_id)
+        return True
 
     def initialize_based_on_last_execution(self):
         last_log = self.logger.read_last_log()
+        print(last_log)
         switch = {
             LogType.ChangingFile: self.intialize_based_on_log_changing_file,
             LogType.FinishedWriting: self.initialize_based_on_log_finished_writing,
@@ -417,6 +429,8 @@ class Worker(ABC):
             LogType.SentFinalResult: self.initialize_based_on_log_sent_final_result,
             LogType.FinishedSendingResults: self.initialize_based_on_log_finished_sending_results
         }
+        if not last_log:
+            return True
         return switch[last_log.log_type](last_log)
         
 
