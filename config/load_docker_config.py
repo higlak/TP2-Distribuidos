@@ -213,7 +213,9 @@ def process_waker(file, i, worker_containers, waker_containers):
     environment:
       - WORKERS_CONTAINERS={";".join(worker_containers)}
       - WAKERS_CONTAINERS={";".join(other_waker_containers)}
-      - WAKER_ID={i}\n\n"""
+      - WAKER_ID={i}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock\n\n"""
   file.write(waker_str)
   return True
 

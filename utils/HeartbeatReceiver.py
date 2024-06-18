@@ -6,12 +6,12 @@ import docker
 
 from utils.auxiliar_functions import recv_exactly
 
+# @TODO llevarlo a config
 HEARTBEAT_MSG = b'H'
 HEARTBEAT_BYTES = 1
 WAKER_SOCKET_TIMEOUT = 10
 HEARTBEAT_PORT = 1000
 STARTING_WAKER_WAIT = 1
-HEARTBEAT_DELAY = 1
 MAX_ATTEMPTS = 5
 
 class HeartbeatReceiver():
@@ -67,10 +67,12 @@ class HeartbeatReceiver():
                 recv_bytes = recv_exactly(self.socket, HEARTBEAT_BYTES)
                 if recv_bytes:
                     self.received_amount += 1
+                    print(f"[Waker {self.waker_id}] Got heartbeat {recv_bytes.decode()}", flush=True)
+
             except socket.timeout:
                 print(f"[Waker {self.waker_id}] Timeout for {self.container_name}")
-                self.socket.close()
-                break
+                if not self.finished and self.handle_container_reconnection():
+                    break
             if not self.finished and not recv_bytes:
                 print(f"[Waker {self.waker_id}] Connection to {self.container_name} lost")
                 if not self.handle_container_reconnection():
@@ -78,7 +80,7 @@ class HeartbeatReceiver():
                 print(f"[Waker {self.waker_id}] Reconnected to {self.container_name}. Continuing...")
                 continue
                 
-        print(f"[Waker {self.waker_id}] Received {self.received_amount} heartbeats from {self.container_name}")
+        print(f"[Waker {self.waker_id}] Received {self.received_amount} heartbeats from {self.container_name}", flush=True)
 
     def handle_container_reconnection(self):
         self.socket.close()
