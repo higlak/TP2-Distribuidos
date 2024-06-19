@@ -201,6 +201,7 @@ class KeyValueStorage():
             return None
         if len(byte_array) < self.entry_byte_size:
             self.del_last_bytes(len(byte_array))
+            os.sync(self.file.fileno())
             return None
 
         key_bytes = remove_bytes(byte_array, self.key_type.get_size_in_bytes(self.fixed_key_size))
@@ -281,6 +282,7 @@ class KeyValueStorage():
 
         self.write_values(key, values)
         self.file.flush()
+        os.fsync(self.file.fileno())
 
     def remove(self, key):
         key = self.key_type(key, self.fixed_key_size)
@@ -304,15 +306,18 @@ class KeyValueStorage():
             self.key_pos[last_key] = pos_to_remove
             self._store_in_pos(pos_to_remove, last_key, last_values, stepping=True)
         self.del_last_line()
-        self.file.flush()
+        
+        os.fsync(self.file.fileno())
 
     def cross_out_key(self, key_pos):
         self.file.seek(key_pos*self.entry_byte_size, STARTING_FILE_POS)
         self.file.write(CROSS_OUT_BYTE *self.fixed_key_size)
+        self.file.flush()
 
     def del_last_bytes(self, amount_of_bytes):
         size = self.file.seek(0, LAST_FILE_POS)
         self.file.truncate(max(0,size - amount_of_bytes))
+        self.file.flush()
 
     def del_last_line(self):
         self.del_last_bytes(self.entry_byte_size)

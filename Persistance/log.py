@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from enum import IntEnum
+import os
 import struct
 from Persistance.storage_errors import KeysMustBeEqualToValuesOr0, TooManyValues, UnsupportedType
 from utils.auxiliar_functions import integer_to_big_endian_byte_array, byte_array_to_big_endian_integer, remove_bytes
@@ -28,23 +29,66 @@ CURRENT_FILE_POS = io.SEEK_CUR
 class LogReadWriter():
     def __init__(self, file):
         self.file = file
-    
+
     @classmethod
     def new(cls, path):
         try:
-            file = open(path, 'ab+')
-            return cls(file)
+            file = open(path, 'rb+')
+        except FileNotFoundError:
+            file = open(path, 'wb+')
         except OSError as e:
             print(f"Error Opening Log: {e}")
             return None
 
-    def log(self, log):
-        byte_array = log.get_log_bytes()
-        self.file.write(byte_array)
+    def prepare_file_for_log(self, log_len):
+        self.file.seek(0, END_OF_FILE_POS)
+        self.file.write(LogType.Prepare.to_bytes() * log_len + LogType.CountPrepare.to_bytes() * log_len)
         self.file.flush()
 
+    def remove_count_prepare(self, log_len):
+        size = self.file.seek(0, END_OF_FILE_POS)
+        self.file.truncate(max(0,size - log_len))
+        self.file.flush()
+
+    def log(self, log):
+        byte_array = log.get_log_bytes()
+
+        self.prepare_file_for_log(len(byte_array))
+
+        self.file.seek(-2*len(byte_array), END_OF_FILE_POS)
+        self.file.write(byte_array)
+        self.file.flush()
+        self.remove_count_prepare(len(byte_array))
+        os.fsync(self.file.fileno())
+
+    def handle_partial_logs(self, log):
+        i = 0
+        while log != None and log.log_type == LogType.CountPrepare:
+            log = Log.from_file_pos(self.file, CURRENT_FILE_POS)
+            i+=1
+        
+        i *= 2
+        self.file.seek(-i, END_OF_FILE_POS)
+        log = Log.from_file_pos(self.file, CURRENT_FILE_POS)
+        while log != None and log.log_type == LogType.Prepare:
+            log = Log.from_file_pos(self.file, CURRENT_FILE_POS)
+            i+=1
+
+        if i > 0:
+            size = self.file.seek(0, END_OF_FILE_POS)
+            self.file.truncate(max(0,size - i))
+            self.file.flush()
+            os.fsync(self.file.fileno())
+        
+        return log
+
     def read_last_log(self):
-        return Log.from_file_pos(self.file, END_OF_FILE_POS)
+        log = Log.from_file_pos(self.file, END_OF_FILE_POS)
+        if not log:
+            return None
+        if log.log_type == LogType.CountPrepare or log.log_type == LogType.Prepare:
+            return self.handle_partial_logs(log)
+        return log
     
     def read_curr_log(self):
         return Log.from_file_pos(self.file, CURRENT_FILE_POS)
@@ -70,6 +114,7 @@ class LogReadWriter():
     def clean(self):
         self.file.truncate(0)
         self.file.flush()
+        os.fsync(self.file.fileno())
 
     def close(self):
         self.file.close()
@@ -82,6 +127,8 @@ class LogType(IntEnum):
     SentFinalResult = 4
     FinishedSendingResults = 5
     FinishedClient = 6
+    Prepare = 254
+    CountPrepare = 255
 
     @classmethod
     def from_file_pos(cls, file, pos):
@@ -95,11 +142,14 @@ class LogType(IntEnum):
         log_type = LogType(byte_array_to_big_endian_integer(log_type_bytes))
         file.seek(-LOG_TYPE_BYTES, CURRENT_FILE_POS)
         return log_type
+    
+    def to_bytes(self):
+        return integer_to_big_endian_byte_array(self.value, LOG_TYPE_BYTES)
 
 class Log(ABC):
     def get_log_bytes(self):
         byte_array = self.get_log_arg_bytes()
-        byte_array.extend(integer_to_big_endian_byte_array(self.log_type.value, LOG_TYPE_BYTES))
+        byte_array.extend(self.log_type.value.to_bytes())
         return byte_array
 
     @abstractmethod
@@ -116,6 +166,8 @@ class Log(ABC):
             LogType.SentFinalResult: SentFirstFinalResults,
             LogType.FinishedSendingResults: FinishedSendingResults,
             LogType.FinishedClient: FinishedClient,
+            LogType.Prepare: PrepareLog,
+            LogType.CountPrepare: CountPrepareLog,
         }
         return switch[log_type]
 
@@ -129,7 +181,7 @@ class Log(ABC):
     
     def __eq__(self, other):
         if not isinstance(other, Log):
-            return NotImplemented
+            return False
         return self.log_type == other.log_type and self.params_eq(other)
     
     @abstractmethod
@@ -152,6 +204,14 @@ class NoArgsLog(Log, ABC):
     
     def params_eq(self, other):
         return True
+    
+class PrepareLog(NoArgsLog):
+    def __init__(self):
+        self.log_type = LogType.Prepare
+
+class CountPrepareLog(NoArgsLog):
+    def __init__(self):
+        self.log_type = LogType.CountPrepare
 
 #keys = ['key1', 'key2']
 #values = [[1,1.1,'hola', 'chau'], [2,2.2,'como', 'estas']]
@@ -417,7 +477,7 @@ if __name__ == '__main__':
     import unittest
     from unittest import TestCase
     from io import BytesIO
-    #import pudb; pu.db
+    import pudb; pu.db
     
     class TestLog(TestCase):
         def get_mock_file(self):
@@ -457,6 +517,7 @@ if __name__ == '__main__':
             mock_file = BytesIO(b"")
             logger = LogReadWriter(mock_file)
             logger.log(ChangingFile("file1", ["a", "b"], [["a", 1 , 1, 1.1], ["b", 2, 2, 2.2]]))
+            mock_file.seek(0)
             logger.log(ChangingFile("file1", ["a"], [[1]]))
             logger.log(ChangingFile("file1", ["a"], [[[1,2,3]]]))
             logger.log(ChangingFile("file1", ["a", "b"], [[1], None]))
@@ -505,5 +566,52 @@ if __name__ == '__main__':
             logger.log(SentBatch())
             logs = logger.read_until_log_type(LogType.AckedBatch)
             self.assertEqual(logs, [SentBatch(), FinishedClient()])
+        
+        def test_read_patial_log_didnt_finish_writing_Prepare(self):
+            file = BytesIO(b"")
+            logger = LogReadWriter(file)
+            logger.log(AckedBatch())
+            file.seek(0, END_OF_FILE_POS)
+            file.write(LogType.Prepare.to_bytes() * 2)
+            self.assertEqual(logger.read_last_log(), AckedBatch())
 
+        def test_read_patial_log_didnt_finish_writing_CountPrepare(self):
+            file = BytesIO(b"")
+            logger = LogReadWriter(file)
+            logger.log(AckedBatch())
+            file.seek(0, END_OF_FILE_POS)
+            log_bytes = len(FinishedSendingResults(15).get_log_bytes())
+            file.write(log_bytes * LogType.Prepare.to_bytes() + 2 * LogType.CountPrepare.to_bytes())
+            self.assertEqual(logger.read_last_log(), AckedBatch())
+
+        def test_read_patial_log_finished_preparing(self):
+            file = BytesIO(b"")
+            logger = LogReadWriter(file)
+            logger.log(AckedBatch())
+            file.seek(0, END_OF_FILE_POS)
+            log_bytes = len(FinishedSendingResults(15).get_log_bytes())
+            file.write(log_bytes * LogType.Prepare.to_bytes() + log_bytes * LogType.CountPrepare.to_bytes())
+            self.assertEqual(logger.read_last_log(), AckedBatch())
+
+        def test_read_patial_log_started_writing(self):
+            file = BytesIO(b"")
+            logger = LogReadWriter(file)
+            logger.log(AckedBatch())
+            file.seek(0, END_OF_FILE_POS)
+            log_bytes = len(FinishedSendingResults(15).get_log_bytes())
+            file.write(log_bytes * LogType.Prepare.to_bytes() + log_bytes * LogType.CountPrepare.to_bytes())
+            file.seek(-2*log_bytes, END_OF_FILE_POS)
+            file.write(FinishedSendingResults(15).get_log_bytes()[:2])
+            self.assertEqual(logger.read_last_log(), AckedBatch())
+
+        def test_read_patial_log_finished_writing_didnt_remove_count_prepare(self):
+            file = BytesIO(b"")
+            logger = LogReadWriter(file)
+            logger.log(AckedBatch())
+            file.seek(0, END_OF_FILE_POS)
+            log_bytes = len(FinishedSendingResults(15).get_log_bytes())
+            file.write(log_bytes * LogType.Prepare.to_bytes() + log_bytes * LogType.CountPrepare.to_bytes())
+            file.seek(-2*log_bytes, END_OF_FILE_POS)
+            file.write(FinishedSendingResults(15).get_log_bytes())
+            self.assertEqual(logger.read_last_log(), AckedBatch())
     unittest.main()
