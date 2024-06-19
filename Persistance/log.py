@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from enum import IntEnum
+import os
 import struct
 from Persistance.storage_errors import KeysMustBeEqualToValuesOr0, TooManyValues, UnsupportedType
 from utils.auxiliar_functions import integer_to_big_endian_byte_array, byte_array_to_big_endian_integer, remove_bytes
@@ -58,6 +59,7 @@ class LogReadWriter():
         self.file.write(byte_array)
         self.file.flush()
         self.remove_count_prepare(len(byte_array))
+        os.fsync(self.file.fileno())
 
     def handle_partial_logs(self, log):
         i = 0
@@ -76,6 +78,7 @@ class LogReadWriter():
             size = self.file.seek(0, END_OF_FILE_POS)
             self.file.truncate(max(0,size - i))
             self.file.flush()
+            os.fsync(self.file.fileno())
         
         return log
 
@@ -111,6 +114,7 @@ class LogReadWriter():
     def clean(self):
         self.file.truncate(0)
         self.file.flush()
+        os.fsync(self.file.fileno())
 
     def close(self):
         self.file.close()
