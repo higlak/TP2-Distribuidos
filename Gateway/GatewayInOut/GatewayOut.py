@@ -61,6 +61,7 @@ class GatewayOut():
         client_id = batch.client_id
         if not self.clients.get(client_id, None):
             self.batches_awaiting_clients[client_id] = self.batches_awaiting_clients.get(client_id, []) + [batch]
+            return 
         if batch.is_empty():
             self.clients[client_id][PENDING_EOF_POS] -= 1
             print(f"[GatewayOut] Pending EOF to receive: {self.clients[client_id][PENDING_EOF_POS]}")

@@ -152,15 +152,15 @@ class Worker(ABC):
     @abstractmethod
     def get_final_results(self, client_id):
         pass
-    
-    def send_final_results(self, client_id, already_sent_logs=0):
+
+    def send_final_results(self, client_id, already_sent_results=0):
         fr = self.get_final_results(client_id)
         if not fr:
             return True
         
         final_results = []
         append_extend(final_results,fr)
-        i = already_sent_logs
+        i = already_sent_results
         while True:
             batch = Batch.new(client_id, self.id, final_results[i:i+BATCH_SIZE])
             if batch.size() == 0:
@@ -186,9 +186,17 @@ class Worker(ABC):
                 result = self.process_message(batch.client_id, message)
                 if result:
                     append_extend(results, result)
-        return Batch.new(batch.client_id, self.id, results)
-        
+        result_batch = Batch.new(batch.client_id, self.id, results)
+        return self.send_partial_results(result_batch)
     
+    def send_partial_results(self, batch):
+        if not batch.is_empty():
+            if not self.send_batch(batch):
+                print(f"[Worker {self.id}] Disconnected from MOM, while sending_message")
+                return False
+        return True
+        
+
     def receive_batch(self):
         worker_name = self.id.__repr__()
         return self.communicator.consume_message(worker_name)
@@ -219,9 +227,9 @@ class Worker(ABC):
         self.metadata_storage.remove(CLIENT_PENDING_EOF+str(client_id))
         print(f"[Worker {self.id}] Client disconnected. Worker reset")
 
-    def proccess_final_results(self, client_id):
+    def proccess_final_results(self, client_id, already_sent_results=0):
         print(f"[Worker {self.id}] No more eof to receive")
-        if not self.send_final_results(client_id):
+        if not self.send_final_results(client_id, already_sent_results):
             print(f"[Worker {self.id}] Disconnected from MOM, while sending final results")
             return False
         if not self.send_batch(Batch.eof(client_id, self.id)):
@@ -233,7 +241,6 @@ class Worker(ABC):
     def handle_eof(self, client_id):
         self.pending_eof[client_id] = self.pending_eof.get(client_id, self.eof_to_receive) - 1
         print(f"[Worker {self.id}] Pending EOF to receive for client {client_id}: {self.pending_eof[client_id]}")
-        #proccess_final_results
 
     @abstractmethod
     def get_context_storage_types(self, scale_of_update_file):
@@ -305,7 +312,6 @@ class Worker(ABC):
             for pool, _next_pool_workers, shard_attribute in self.next_pools:
                 if not self.communicator.produce_batch_of_messages(batch, pool, shard_attribute):
                     return False
-        self.logger.log(SentBatch())
         return True
 
     def is_dup_batch(self, batch):
@@ -314,6 +320,13 @@ class Worker(ABC):
             print(f"[Worker {self.id}] Skipping dupped batch {batch.seq_num}, from sender {batch.sender_id}")
             return True
         return False
+
+    def acknowledge_last_message(self):
+        if not self.communicator.acknowledge_last_message():
+            print(f"[Worker {self.id}] Disconnected from MOM, while acking_message")
+            return False
+        self.logger.log(AckedBatch())
+        return True
 
     def loop(self):
         x = 0
@@ -338,23 +351,16 @@ class Worker(ABC):
                 continue
 
             ############ proccess batch
-            result_batch = self.process_batch(batch)
-
-            ############ Send results
-            if not result_batch.is_empty():
-                if not self.send_batch(result_batch):
-                    print(f"[Worker {self.id}] Disconnected from MOM, while sending_message")
-                    break
+            if not self.process_batch(batch):
+                break
 
             ############ bajar a disco
             if not self.dump_to_disk(batch):
                 break
             
             ############ ack batch
-            if not self.communicator.acknowledge_last_message():
-                print(f"[Worker {self.id}] Disconnected from MOM, while acking_message")
+            if not self.acknowledge_last_message():
                 break
-            self.logger.log(AckedBatch())
 
             ############ Send final results
             if self.pending_eof.get(batch.client_id, None) == 0:   #guarda con perder el client_id
@@ -365,7 +371,7 @@ class Worker(ABC):
                 self.remove_client(batch.client_id)
             
             ############ Clean Log
-            #self.logger.clean()
+            self.logger.clean()
 
     def intialize_based_on_log_changing_file(self, log):
         logs = self.logger.read_while_log_type(LogType.ChangingFile)
@@ -406,14 +412,14 @@ class Worker(ABC):
                 print(f"[Worker {self.id}] Disconnected from MOM, while nacking_message")
                 return False
         
-        return self.send_any_ready_final_results(self)
+        return self.send_any_ready_final_results()
 
     def initialize_based_on_log_acked_batch(self, log):
         return self.send_any_ready_final_results()
 
     def initialize_based_on_log_sent_final_result(self, log):
         client_id, already_sent_logs = log.client_id, log.n
-        return self.send_final_results(client_id, already_sent_logs)
+        return self.proccess_final_results(client_id, already_sent_logs)
     
     def initialize_based_on_log_finished_sending_results(self, log):
         self.remove_client(log.client_id)
@@ -431,6 +437,10 @@ class Worker(ABC):
         }
         if not last_log:
             return True
+        if self.id == SenderID(3,1,0):
+            with open(PERSISTANCE_PATH + 'log_type.txt', "a") as file:
+                file.write(f'{int(last_log.log_type)}\n')
+
         return switch[last_log.log_type](last_log)
         
 
