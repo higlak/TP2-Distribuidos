@@ -1,3 +1,4 @@
+from utils.auxiliar_functions import smalles_scale_for_str
 from .Worker import Worker
 from utils.QueryMessage import QueryMessage, CATEGORIES_FIELD, YEAR_FIELD, TITLE_FIELD, REVIEW_MSG_TYPE
 
@@ -7,7 +8,6 @@ class Filter(Worker):
         self.field = field
         self.valid_values = valid_values
         self.droping_fields = droping_fields
-        self.filtered_client_books = {}
 
     @classmethod
     def new(cls, field, valid_values, droping_fields=[]):
@@ -19,29 +19,30 @@ class Filter(Worker):
             return None
         return filter
 
-    def load_context(self, path):
-        pass
-
-    def get_context_storage_types(self):
-        return None
-
-    def dump_context_to_disc(self):
-        #dump context
-        pass
+    def get_context_storage_types(self, scale_of_update_file):
+        return [], []
     
+    def add_to_context(self, client_id, title):
+        self.client_contexts[client_id].add(title)
+        scale = smalles_scale_for_str(title)
+        if scale not in self.client_context_storage_updates:
+            self.client_context_storage_updates[scale] = {}
+        self.client_context_storage_updates[scale][title] = (None, [])
+
+    #self.client_context_storage_updates[scale][author] = (old_value, [new_value])
     def process_message(self, client_id, msg: QueryMessage):
-        self.filtered_client_books[client_id] = self.filtered_client_books.get(client_id, set())
-        if msg.msg_type == REVIEW_MSG_TYPE and msg.title in self.filtered_client_books[client_id]:
+        self.client_contexts[client_id] = self.client_contexts.get(client_id, set())
+        if msg.msg_type == REVIEW_MSG_TYPE and msg.title in self.client_contexts[client_id]:
             return self.transform_to_result(msg)
         if self.filter_book(msg):
-            self.filtered_client_books[client_id].add(msg.title)
+            self.add_to_context(client_id, msg.title)
             msg = msg.copy_droping_fields(self.droping_fields)
             return self.transform_to_result(msg)
         return None
     
     def remove_client_context(self, client_id):
-        if client_id in self.filtered_client_books:
-            self.filtered_client_books.pop(client_id)
+        if client_id in self.client_contexts:
+            self.client_contexts.pop(client_id)
 
     def filter_book(self, msg:QueryMessage):
         switch = {
@@ -54,8 +55,9 @@ class Filter(Worker):
             return False
         return method(self.valid_values)
 
-    def process_previous_context(self, previous_context):
-        return previous_context
+    def add_previous_context(self, previous_context, client_id):
+        self.client_contexts[client_id] = self.client_contexts.get(client_id,set())
+        self.client_contexts[client_id].update(previous_context.keys())
 
     def get_final_results(self, _client_id):
         return []

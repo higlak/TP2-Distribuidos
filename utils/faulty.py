@@ -19,7 +19,7 @@ def set_faulty_if_needed():
         set_class_as_faulty(Accumulator)
         set_class_as_faulty(Filter)
         #set_class_as_faulty(KeyValueStorage)
-        #set_class_as_faulty(LogReadWriter)
+        set_class_as_faulty(LogReadWriter)
 
 def get_new_method(cls, old_method, method_name):
     def new_method(self, *args, **kwargs):

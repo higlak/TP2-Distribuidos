@@ -167,6 +167,10 @@ class Communicator():
             return bytearray(message)
         except MIDDLEWARE_EXCEPTIONS:
             return bytearray([])
+        
+    def pending_messages(self, queue_name):
+        queue = self.channel.queue_declare(queue=queue_name, durable=True, passive=True)
+        return queue.method.message_count
 
     def acknowledge_last_message(self):
         if self.last_delivery_tag == None:

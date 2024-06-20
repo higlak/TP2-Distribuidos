@@ -60,12 +60,18 @@ class Worker(ABC):
         return id, next_pools, eof_to_receive
     
     @abstractmethod
-    def process_previous_context(self, previous_context):
+    def add_previous_context(self, previous_context, client_id):
         pass
 
-    @abstractmethod
-    def load_context(self, path, scale_of_file):
-        pass
+    def load_context(self, path, filename,  client_id, scale_of_update_file):
+        storage_types, storage_types_size = self.get_context_storage_types(scale_of_update_file)
+        self.client_contexts_storage[client_id][filename], previous_context = KeyValueStorage.new(
+            path, str, 2**scale_of_update_file, storage_types, storage_types_size)
+        print("previouse context: ", len(previous_context))
+        if not self.client_contexts_storage[client_id][filename] or previous_context == None:
+            return False
+        self.add_previous_context(previous_context, client_id)
+        return True
     
     def load_all_context(self):
         try:
@@ -126,10 +132,8 @@ class Worker(ABC):
            return False
         self.logger = LogReadWriter.new(self.worker_folder() + LOG_FILENAME)
         if not self.logger:
+            print(f"Failed to open log")
             return False
-        #if not self.load_context():
-        #    return False
-        ##hacer quilombo de logs
         return True
 
     def connect(self):
@@ -223,7 +227,7 @@ class Worker(ABC):
         client_storage = self.client_contexts_storage.get(client_id, {})
         while len(client_storage) > 0:
             filename, storage = client_storage.popitem()
-            storage.delete()
+            #storage.delete()
         self.metadata_storage.remove(CLIENT_PENDING_EOF+str(client_id))
         print(f"[Worker {self.id}] Client disconnected. Worker reset")
 
@@ -254,7 +258,7 @@ class Worker(ABC):
         for key, values in update_values.items():
             old_values.append(values[0])
             keys.append(key)
-        self.logger.log(self.change_context_log(filename, keys, old_values))
+        self.logger.log(ChangingFile(filename, keys, old_values))
 
         for key, values in update_values.items():
             if values[1] == None:
@@ -386,32 +390,40 @@ class Worker(ABC):
         return True
 
     def send_any_ready_final_results(self):
+        finished_clients = []
         for client_id, pending_eof in self.pending_eof.items():
             if pending_eof == 0:
-                if not self.proccess_final_results(client_id):
-                    return False
-                self.remove_client(client_id)
+                finished_clients.append(client_id)
+        for client_id in finished_clients:
+            if not self.proccess_final_results(client_id):
+                return False
+            self.remove_client(client_id)
         return True
 
+    def any_more_messages(self):
+        worker_name = self.id.__repr__()
+        return self.communicator.pending_messages(worker_name) > 0
 
     def initialize_based_on_log_finished_writing(self, log):
         #recibir un batch
-        batch_bytes = self.receive_batch()
-        if not batch_bytes:
-            print(f"[Worker {self.id}] Disconnected from MOM, while receiving_message")
-            return False
-        batch = Batch.from_bytes(batch_bytes)
+        batch = None
+        if self.any_more_messages():
+            batch_bytes = self.receive_batch()
+            if not batch_bytes:
+                print(f"[Worker {self.id}] Disconnected from MOM, while receiving_message")
+                return False
+            batch = Batch.from_bytes(batch_bytes)
         
         if not batch or self.is_dup_batch(batch):
             if not self.communicator.acknowledge_last_message():
                 print(f"[Worker {self.id}] Disconnected from MOM, while acking_message")
                 return False
         else:
-            self.logger.log(AckedBatch())
             if not self.communicator.nack_last_message():
                 print(f"[Worker {self.id}] Disconnected from MOM, while nacking_message")
                 return False
         
+        self.logger.log(AckedBatch())
         return self.send_any_ready_final_results()
 
     def initialize_based_on_log_acked_batch(self, log):
@@ -438,7 +450,7 @@ class Worker(ABC):
         if not last_log:
             return True
         if self.id == SenderID(3,1,0):
-            with open(PERSISTANCE_PATH + 'log_type.txt', "a") as file:
+            with open(PERSISTANCE_PATH + 'log_type' + self.id.__repr__() + '.txt', "a") as file:
                 file.write(f'{int(last_log.log_type)}\n')
 
         return switch[last_log.log_type](last_log)
@@ -454,7 +466,7 @@ class Worker(ABC):
         if client_id == None:
             self.set_previouse_metadata(storage.get_all_entries())
         else:
-            self.client_contexts[client_id] = self.process_previous_context(storage.get_all_entries())
+            self.add_previous_context(storage.get_all_entries(), client_id)
 
 def info_from_filename(filename):
     client_id, scale = filename.strip('.bin').strip(CLIENT_CONTEXT_FILENAME).split(SCALE_SEPARATOR)

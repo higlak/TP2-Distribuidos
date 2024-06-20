@@ -39,6 +39,7 @@ class LogReadWriter():
         except OSError as e:
             print(f"Error Opening Log: {e}")
             return None
+        return LogReadWriter(file)
 
     def prepare_file_for_log(self, log_len):
         self.file.seek(0, END_OF_FILE_POS)
@@ -59,7 +60,7 @@ class LogReadWriter():
         self.file.write(byte_array)
         self.file.flush()
         self.remove_count_prepare(len(byte_array))
-        os.fsync(self.file.fileno())
+        #os.fsync(self.file.fileno())
 
     def handle_partial_logs(self, log):
         i = 0
@@ -78,7 +79,7 @@ class LogReadWriter():
             size = self.file.seek(0, END_OF_FILE_POS)
             self.file.truncate(max(0,size - i))
             self.file.flush()
-            os.fsync(self.file.fileno())
+            #os.fsync(self.file.fileno())
         
         return log
 
@@ -114,7 +115,7 @@ class LogReadWriter():
     def clean(self):
         self.file.truncate(0)
         self.file.flush()
-        os.fsync(self.file.fileno())
+        #os.fsync(self.file.fileno())
 
     def close(self):
         self.file.close()
@@ -149,7 +150,7 @@ class LogType(IntEnum):
 class Log(ABC):
     def get_log_bytes(self):
         byte_array = self.get_log_arg_bytes()
-        byte_array.extend(self.log_type.value.to_bytes())
+        byte_array.extend(self.log_type.to_bytes())
         return byte_array
 
     @abstractmethod

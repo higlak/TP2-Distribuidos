@@ -11,6 +11,7 @@ services:
     build:
       context: ./
       dockerfile: Filter/Filter.dockerfile
+    restart: on-failure
     depends_on:
       - rabbitmq
     links: 
@@ -24,6 +25,7 @@ services:
       - SHARD_BY=title
       - WORKER_FIELD=year
       - WORKER_VALUE=1990,1999
+      - FAULTY=True
     volumes:
       - persistanceVolume:/persistance_files
 

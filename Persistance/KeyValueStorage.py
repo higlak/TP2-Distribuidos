@@ -201,7 +201,7 @@ class KeyValueStorage():
             return None
         if len(byte_array) < self.entry_byte_size:
             self.del_last_bytes(len(byte_array))
-            os.sync(self.file.fileno())
+            #os.sync(self.file.fileno())
             return None
 
         key_bytes = remove_bytes(byte_array, self.key_type.get_size_in_bytes(self.fixed_key_size))
@@ -282,7 +282,7 @@ class KeyValueStorage():
 
         self.write_values(key, values)
         self.file.flush()
-        os.fsync(self.file.fileno())
+        #os.fsync(self.file.fileno())
 
     def remove(self, key):
         key = self.key_type(key, self.fixed_key_size)
@@ -307,7 +307,7 @@ class KeyValueStorage():
             self._store_in_pos(pos_to_remove, last_key, last_values, stepping=True)
         self.del_last_line()
         
-        os.fsync(self.file.fileno())
+        #os.fsync(self.file.fileno())
 
     def cross_out_key(self, key_pos):
         self.file.seek(key_pos*self.entry_byte_size, STARTING_FILE_POS)
@@ -349,7 +349,7 @@ if __name__ == '__main__':
 
     class TestKeyValueStorage(TestCase):
         def str_to_bytes(self, string):
-            return bytearray(string.encode()).ljust(FIXED_STR_LEN, STR_PADDING)[:self.size]
+            return bytearray(string.encode()).ljust(FIXED_STR_LEN, STR_PADDING)[:FIXED_STR_LEN]
 
         def test_store_on_empty_storage(self):
             file = BytesIO(b"")
@@ -644,5 +644,25 @@ if __name__ == '__main__':
             self.assertEqual(storage.next_pos, 2)
             file.seek(-3, LAST_FILE_POS)
             self.assertEqual(file.read(3), bytearray([0,0,2]))
-    
+
+        def test_key_only_storage(self):
+            file = BytesIO(b"")
+            storage = KeyValueStorage(file, str, FIXED_STR_LEN, [], [])
+            storage.store("clave1", [])
+            storage.store("clave2", [])
+
+            expected_entries = {
+                "clave1": [],
+                "clave2": [],
+            }
+            expected_pos = {
+                FixedStr("clave1", FIXED_STR_LEN): 0,
+                FixedStr("clave2", FIXED_STR_LEN): 1,
+            }
+
+            entries = storage.get_all_entries()
+            self.assertEqual(entries, expected_entries)
+            self.assertEqual(storage.key_pos, expected_pos)
+            self.assertEqual(storage.next_pos, 2)
+            
     unittest.main()

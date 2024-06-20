@@ -76,3 +76,6 @@ def next_power_of_2_exponent(n):
         n = n>>1
         exponent +=1
     return exponent
+
+def smalles_scale_for_str(string):
+    return next_power_of_2_exponent(len(string.encode()))
