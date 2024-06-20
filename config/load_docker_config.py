@@ -13,7 +13,7 @@ QUERY_POOL_SEPARATOR = '.'
 GATEWAY = 'Gateway'
 QUERIES = 5
 DISTRIBUTE_BY_DEFAULT = ''
-WAKERS = 1
+WAKERS = 3
 
 FILENAME = 'docker-compose-dev.yaml'
 RABBIT = """  rabbitmq:

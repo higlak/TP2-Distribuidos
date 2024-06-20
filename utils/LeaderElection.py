@@ -15,23 +15,35 @@ class LeaderElection():
         self.socket = waker_socket
 
     def start(self):
+        while True:
+            msg, addr, n_attemps = self.send_election_messages()
+            if not msg and n_attemps == INITIAL_MAX_ATTEMPS:
+                print(f"[Waker {self.waker_id}] I'm the new leader", flush=True)
+                self.set_leader(self.waker_id)
+                self.broadcast_coordinator_message()
+                break
+            if msg == ACK_MSG:
+                print(f"[Waker {self.waker_id}] I'm not the leader. Waiting for COORDINATOR", flush=True)
+                msg, addr = self.receive_message()
+                if not msg:
+                    print(f"[Waker {self.waker_id}] Timeout waiting for COORDINATOR. Retrying election...", flush=True)
+            if msg == COORDINATOR_MSG:
+                self.set_leader(addr)
+                break
+
+    def send_election_messages(self):
         n_attemps = 0
-        ack = False
-        while not ack and n_attemps < INITIAL_MAX_ATTEMPS:
+        msg = None
+        while not msg and n_attemps < INITIAL_MAX_ATTEMPS:
+            print(f"[Waker {self.waker_id}] Sending ELECTION. N attemp: {n_attemps}", flush=True)
             for waker_container in self.wakers_containers:
                 if waker_container > f'waker{self.waker_id}':
                     self.send_message_to_container(ELECTION_MSG, waker_container)
-            ack = self.receive_ack(n_attemps)
+            msg, addr = self.receive_message() # Can receive either ACK or COORDINATOR
             n_attemps += 1
 
-        if not ack and n_attemps == INITIAL_MAX_ATTEMPS:
-            print(f"[Waker {self.waker_id}] I'm the new leader", flush=True)
-            self.set_leader(self.waker_id)
-            self.broadcast_coordinator_message()
-
-    def broadcast_coordinator_message(self):
-        print(f"[Waker {self.waker_id}] Broadcasting coordinator messages", flush=True)
-
+        return msg, addr, n_attemps
+    
     def send_message_to_container(self, message, waker_container):
         print(f"[Waker {self.waker_id}] Sending {message.decode()} to: {waker_container}", flush=True)
         self.socket.sendto(message, (waker_container, ELECTION_PORT))
@@ -40,22 +52,21 @@ class LeaderElection():
         print(f"[Waker {self.waker_id}] Sending {message.decode()} to: {addr}", flush=True)
         self.socket.sendto(message, addr)
 
-    def am_i_leader(self):
-        return self.leader_id == self.waker_id
-    
-    def set_leader(self, leader_id):
-        self.leader_id = leader_id
 
-    def receive_ack(self, n_attemps):
-        print(f"[Waker {self.waker_id}] Waiting for ACK", flush=True)
+    def set_leader(self, leader_id):
+        print(f"[Waker {self.waker_id}] Setting leader: {leader_id}", flush=True)
+        self.leader_id = leader_id
+    
+    def leader(self):
+        return self.leader_id
+
+    def receive_message(self):
+        print(f"[Waker {self.waker_id}] Waiting for message", flush=True)
         try:
             msg, addr = self.socket.recvfrom(BUFFER_BYTES)
-            if msg == ACK_MSG:
-                print(f"[Waker {self.waker_id}] Received ACK from: {addr}", flush=True)
-                return True
+            print(f"[Waker {self.waker_id}] Received {msg.decode()} from: {addr}", flush=True)
+            return msg, addr
         except socket.timeout:
-            print(f"[Waker {self.waker_id}] Timeout waiting for ACK", flush=True)
-            if n_attemps < INITIAL_MAX_ATTEMPS:
-                print(f"[Waker {self.waker_id}] Retrying election. N attemp: {n_attemps}", flush=True)
-            return False
+            print(f"[Waker {self.waker_id}] Timeout waiting for message", flush=True)
+            return None, None
 

@@ -5,8 +5,6 @@ from Waker import Waker
 
 CONTAINERS_SEPARATOR = ";"
 
-sleep(5) # TODO Esperar a que los workers se levanten para hacerles connect (ex backoff chequear)
-
 def get_env_waker_vars(containers):
     containers_names = os.getenv(containers)
     if not containers_names:
@@ -23,6 +21,5 @@ def main():
         return
     waker = Waker(waker_id, workers_containers, wakers_containers)
     waker.start()
-    print("Proceso finalizado")
 
 main()
