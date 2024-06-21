@@ -1,6 +1,6 @@
 import time
 
-ALIVE_ATTEMPS = 3
+ALIVE_ATTEMPS = 0
 
 class Event():
     def __init__(self, type, timeout, container_name=None):

@@ -5,6 +5,7 @@ import sys
 QUERY_CONFIG_FILE = "config/config_query"
 GATEWAY_CONFIG_FILE = "config/config_gateway.ini"
 CLIENT_CONFIG_FILE = "config/config_client.ini"
+WAKER_CONFIG_FILE = "config/config_waker.ini"
 FILTER_TYPE = 'filter'
 ACCUMULATOR_TYPE = 'accumulator'
 REVIEW_TEXT_FIELD = 'review_text'
@@ -13,7 +14,6 @@ QUERY_POOL_SEPARATOR = '.'
 GATEWAY = 'Gateway'
 QUERIES = 5
 DISTRIBUTE_BY_DEFAULT = ''
-WAKERS = 3
 
 FILENAME = 'docker-compose-dev.yaml'
 RABBIT = """  rabbitmq:
@@ -220,9 +220,19 @@ def process_waker(file, i, worker_containers, waker_containers):
   return True
 
 def process_wakers(file, worker_containers):
-  worker_containers.append('gateway')
-  wakers = [f"waker{i}" for i in range(WAKERS)]
-  for i in range(WAKERS):
+  config = ConfigParser()
+  try:
+    config.read(WAKER_CONFIG_FILE)
+  except:
+    print("No valid flename for client")
+    return False
+  config = config["DEFAULT"]
+  n_wakers = int(config['AMOUNT_OF_WAKERS'])
+  
+  #TODO: worker_containers.append('gateway')
+
+  wakers = [f"waker{i}" for i in range(n_wakers)]
+  for i in range(n_wakers):
     if not process_waker(file, i, worker_containers, wakers):
       return False
   return True

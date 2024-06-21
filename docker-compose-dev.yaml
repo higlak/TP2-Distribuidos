@@ -103,7 +103,7 @@ services:
       dockerfile: Waker/Waker.dockerfile
     restart: on-failure
     environment:
-      - WORKERS_CONTAINERS=filter1.0.0;filter1.1.0;filter1.2.0;gateway
+      - WORKERS_CONTAINERS=filter1.0.0;filter1.1.0;filter1.2.0
       - WAKERS_CONTAINERS=waker1
       - WAKER_ID=0
     volumes:
@@ -115,7 +115,7 @@ services:
       dockerfile: Waker/Waker.dockerfile
     restart: on-failure
     environment:
-      - WORKERS_CONTAINERS=filter1.0.0;filter1.1.0;filter1.2.0;gateway
+      - WORKERS_CONTAINERS=filter1.0.0;filter1.1.0;filter1.2.0
       - WAKERS_CONTAINERS=waker0
       - WAKER_ID=1
     volumes:

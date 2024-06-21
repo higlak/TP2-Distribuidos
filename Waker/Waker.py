@@ -4,8 +4,7 @@ import signal
 import socket
 from time import sleep
 import time
-from utils.LeaderElection import ACK_MSG, BUFFER_BYTES, COORDINATOR_MSG, ELECTION_MSG, LeaderElection
-from utils.HeartbeatReceiver import HEARTBEAT_MSG
+from utils.LeaderElection import ACK_MSG, BUFFER_BYTES, COORDINATOR_MSG, ELECTION_MSG
 import heapq
 import docker
 from utils.Event import Event
@@ -102,11 +101,14 @@ class Waker():
         event = Event(HEALTHCHECK_TYPE, time.time() + HEALTHCHECK_DELAY)
         heapq.heappush(self.events, event)
 
-        # @TODO: hacer también con los workers
         for container in self.wakers_containers:
-            if container < f'waker{self.waker_id}': # Por si soy lider pero hay un id mas grande que todavia no reconoci
-                event = Event(ALIVE_TYPE, time.time() + ALIVE_TIMEOUT, container)
-                heapq.heappush(self.events, event)
+            #if container < f'waker{self.waker_id}': # Por si soy lider pero hay un id mas grande que todavia no reconoci
+            event = Event(ALIVE_TYPE, time.time() + ALIVE_TIMEOUT, container)
+            heapq.heappush(self.events, event)
+
+        for container in self.workers_containers:
+            event = Event(ALIVE_TYPE, time.time() + ALIVE_TIMEOUT, container)
+            heapq.heappush(self.events, event)
         
         self.show_events()
     
@@ -117,8 +119,6 @@ class Waker():
         self.print(f"{events[:-1]}")
 
     def broadcast_coordinator_message(self):
-        # @TODO: enviar a los workers también
-
         self.print(f"Broadcasting coordinator messages")
         for waker_container in self.wakers_containers:
             self.send_message_to_container(COORDINATOR_MSG, waker_container)
@@ -130,6 +130,13 @@ class Waker():
         except OSError:
             self.print(f"Error sending message to {waker_container}")
 
+    def pending_healthcheck(self, event):
+        return self.am_i_leader() and event.type == HEALTHCHECK_TYPE
+    
+    def pending_alive(self, event, addr):
+        container_name = self.get_container_name_by_address(addr[0])
+        return event.container_name != container_name and event.type == ALIVE_TYPE
+
     def loop(self):
         self.print(f"Starting main loop")
         while not self.finished:
@@ -139,8 +146,7 @@ class Waker():
             try:
                 msg, addr = self.socket.recvfrom(BUFFER_BYTES)
                 self.handle_message(msg, addr)
-                if self.am_i_leader() and event.type == HEALTHCHECK_TYPE:
-                    # Estaba esperando al timeout para el healthcheck pero me metieron una cosa en el medio
+                if self.am_i_leader() and (self.pending_healthcheck(event) or self.pending_alive(event, addr)):  
                     heapq.heappush(self.events, event)
 
             except socket.timeout:
@@ -208,11 +214,12 @@ class Waker():
         heapq.heappush(self.events, new_event)
 
     def broadcast_healthcheck(self):
-        # @TODO enviar a los workers también
         self.print(f"Broadcasting healthcheck messages")
         for waker_container in self.wakers_containers:
-            if waker_container < f'waker{self.waker_id}':
-                self.send_message_to_container(HEALTHCHECK_MSG, waker_container)
+            #if waker_container < f'waker{self.waker_id}':
+            self.send_message_to_container(HEALTHCHECK_MSG, waker_container)
+        for worker_container in self.workers_containers:
+            self.send_message_to_container(HEALTHCHECK_MSG, worker_container)
 
     def am_i_leader(self):
         return self.leader_id == self.waker_id
@@ -228,6 +235,8 @@ class Waker():
             return None, None
         
     def have_biggest_id(self):
+        if len(self.wakers_containers) == 0:
+            return True
         return max(self.wakers_containers) < f'waker{self.waker_id}'
 
     def get_container_name_by_address(self, addr):

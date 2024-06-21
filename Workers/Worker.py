@@ -6,7 +6,7 @@ import signal
 import socket
 
 from CommunicationMiddleware.middleware import Communicator
-from utils.HeartbeatSender import HeartbeatSender
+from utils.HealthcheckReceiver import HealthcheckReceiver
 from utils.Batch import Batch
 from utils.auxiliar_functions import append_extend
 from utils.QueryMessage import query_to_query_result
@@ -45,7 +45,7 @@ class Worker(ABC):
         self.pending_eof = {}
         self.signal_queue = Queue()
         self.communicator = None
-        self.heartbeat_sender_thread = None
+        self.healthcheck_receiver_thread = None
         signal.signal(signal.SIGTERM, self.handle_SIGTERM)
         
     @classmethod
@@ -74,7 +74,7 @@ class Worker(ABC):
         self.signal_queue.put(True)
         if self.communicator:
             self.communicator.close_connection()
-        self.heartbeat_sender_thread.terminate()
+        self.healthcheck_receiver_thread.terminate()
 
     @abstractmethod
     def process_message(self, client_id, message):
@@ -121,13 +121,13 @@ class Worker(ABC):
     def start(self):    
         self.loop()
         self.communicator.close_connection()
-        self.heartbeat_sender_thread.join()
+        self.healthcheck_receiver_thread.join()
 
     def handle_waker_leader(self):
         try:            
-            heartbeat_sender = HeartbeatSender(self.id)
-            self.heartbeat_sender_thread = Process(target=heartbeat_sender.start)
-            self.heartbeat_sender_thread.start()
+            healthcheck_receiver = HealthcheckReceiver(self.id)
+            self.healthcheck_receiver_thread = Process(target=healthcheck_receiver.start)
+            self.healthcheck_receiver_thread.start()
   
         except Exception as e:
             print(f"[{self.id}] Socket disconnected: {e} \n")
