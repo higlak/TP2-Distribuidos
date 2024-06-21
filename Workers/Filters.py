@@ -1,3 +1,4 @@
+from utils.Batch import SeqNumGenerator
 from utils.auxiliar_functions import smalles_scale_for_str
 from .Worker import Worker
 from utils.QueryMessage import QueryMessage, CATEGORIES_FIELD, YEAR_FIELD, TITLE_FIELD, REVIEW_MSG_TYPE
@@ -31,6 +32,7 @@ class Filter(Worker):
 
     #self.client_context_storage_updates[scale][author] = (old_value, [new_value])
     def process_message(self, client_id, msg: QueryMessage):
+        print(f"client: {client_id}, type: {msg.msg_type}, title: {msg.title}, under batch {SeqNumGenerator.seq_num + 1}")
         self.client_contexts[client_id] = self.client_contexts.get(client_id, set())
         if msg.msg_type == REVIEW_MSG_TYPE and msg.title in self.client_contexts[client_id]:
             return self.transform_to_result(msg)

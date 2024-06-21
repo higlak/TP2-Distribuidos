@@ -359,38 +359,46 @@ class AckedBatch(NoArgsLog):
         self.log_type = LogType.AckedBatch
     
 class SentFirstFinalResults(Log):
-    def __init__(self, client_id, n):
+    def __init__(self, client_id, n, batch_seq_num):
         self.log_type = LogType.SentFinalResult
         self.client_id = client_id
         self.n = n
+        self.batch_seq_num = batch_seq_num
 
     def get_log_arg_bytes(self):
-        byte_array = get_number_byte_array(self.n, U32_BYTES)
+        byte_array = get_number_byte_array(self.batch_seq_num, U32_BYTES)
+        byte_array.extend(get_number_byte_array(self.n, U32_BYTES))
         byte_array.extend(get_number_byte_array(self.client_id, CLIENT_ID_BYTES))
         return byte_array
     
     @classmethod
     def from_file_pos(cls, file, pos):
-        n, client_id = numbers_from_file_pos(file, pos, 2, CLIENT_ID_BYTES)
-        return cls(client_id, n)
+        client_id = numbers_from_file_pos(file, pos, 1, CLIENT_ID_BYTES)[0]
+        batch_seq_num, n = numbers_from_file_pos(file, pos, 2, U32_BYTES)
+        return cls(client_id, n, batch_seq_num)
     
     def params_eq(self, other):
-        return self.n == other.n and self.client_id == other.client_id
+        return self.n == other.n and self.client_id == other.client_id and self.batch_seq_num == other.batch_seq_num
 
 class FinishedSendingResults(Log):
-    def __init__(self, client_id):
+    def __init__(self, client_id, batch_seq_num):
         self.log_type = LogType.FinishedSendingResults
         self.client_id = client_id
+        self.batch_seq_num = batch_seq_num
     
     def get_log_arg_bytes(self):
-        return get_number_byte_array(self.client_id, CLIENT_ID_BYTES)
+        byte_array = get_number_byte_array(self.batch_seq_num, U32_BYTES)
+        byte_array.extend(get_number_byte_array(self.client_id, CLIENT_ID_BYTES))
+        return byte_array
     
     @classmethod
     def from_file_pos(cls, file, pos):
-        return cls(numbers_from_file_pos(file, pos, 1, CLIENT_ID_BYTES)[0])
+        client_id = numbers_from_file_pos(file, pos, 1, CLIENT_ID_BYTES)[0]
+        batch_seq_num = numbers_from_file_pos(file, pos, 1, U32_BYTES)[0]
+        return cls(client_id, batch_seq_num)
     
     def params_eq(self, other):
-        return self.client_id == other.client_id
+        return self.client_id == other.client_id and self.batch_seq_num == other.batch_seq_num
 
 class FinishedClient(NoArgsLog):
     def __init__(self):
@@ -490,8 +498,8 @@ if __name__ == '__main__':
             logs_bytes.extend(FinishedWriting().get_log_bytes())
             logs_bytes.extend(SentBatch().get_log_bytes())
             logs_bytes.extend(AckedBatch().get_log_bytes())
-            logs_bytes.extend(SentFirstFinalResults(1, 2).get_log_bytes())
-            logs_bytes.extend(FinishedSendingResults(65536).get_log_bytes())
+            logs_bytes.extend(SentFirstFinalResults(1, 2, 4).get_log_bytes())
+            logs_bytes.extend(FinishedSendingResults(65536, 4).get_log_bytes())
             logs_bytes.extend(FinishedClient().get_log_bytes())
             return BytesIO(logs_bytes)
 
@@ -510,8 +518,8 @@ if __name__ == '__main__':
             self.assertEqual(FinishedWriting().get_log_bytes(), bytearray([LogType.FinishedWriting.value]))
             self.assertEqual(SentBatch().get_log_bytes(), bytearray([LogType.SentBatch.value]))
             self.assertEqual(AckedBatch().get_log_bytes(), bytearray([LogType.AckedBatch.value]))
-            self.assertEqual(SentFirstFinalResults(1, 2).get_log_bytes(), bytearray([0,0,0,2] + [0,0,0,1] + [LogType.SentFinalResult.value]))
-            self.assertEqual(FinishedSendingResults(65536).get_log_bytes(), bytearray([0,1,0,0] + [LogType.FinishedSendingResults.value]))
+            self.assertEqual(SentFirstFinalResults(1, 2, 4).get_log_bytes(), bytearray([0,0,0,4] + [0,0,0,2] + [0,0,0,1] + [LogType.SentFinalResult.value]))
+            self.assertEqual(FinishedSendingResults(65536, 4).get_log_bytes(), bytearray([0,0,0,4] + [0,1,0,0] + [LogType.FinishedSendingResults.value]))
             self.assertEqual(FinishedClient().get_log_bytes(), bytearray([LogType.FinishedClient.value]))
 
         def test_write_logs(self):
@@ -526,8 +534,8 @@ if __name__ == '__main__':
             logger.log(FinishedWriting())
             logger.log(SentBatch())
             logger.log(AckedBatch())
-            logger.log(SentFirstFinalResults(1, 2))
-            logger.log(FinishedSendingResults(65536))
+            logger.log(SentFirstFinalResults(1, 2, 4))
+            logger.log(FinishedSendingResults(65536, 4))
             logger.log(FinishedClient())
             mock_file.seek(0)
             self.assertEqual(mock_file.read(1000), self.get_mock_file().read(1000))
@@ -541,8 +549,8 @@ if __name__ == '__main__':
             mock_file = self.get_mock_file()
             logger = LogReadWriter(mock_file)
             self.assertEqual(FinishedClient(), logger.read_last_log())
-            self.assertEqual(FinishedSendingResults(65536),logger.read_curr_log())
-            self.assertEqual(SentFirstFinalResults(1, 2), logger.read_curr_log())
+            self.assertEqual(FinishedSendingResults(65536, 4),logger.read_curr_log())
+            self.assertEqual(SentFirstFinalResults(1, 2, 4), logger.read_curr_log())
             self.assertEqual(AckedBatch(), logger.read_curr_log())
             self.assertEqual(SentBatch(), logger.read_curr_log())
             self.assertEqual(FinishedWriting(), logger.read_curr_log())
@@ -558,7 +566,7 @@ if __name__ == '__main__':
             logger = LogReadWriter(mock_file)
 
             logs = logger.read_until_log_type(LogType.FinishedSendingResults)
-            self.assertEqual(logs, [FinishedClient(), FinishedSendingResults(65536)])
+            self.assertEqual(logs, [FinishedClient(), FinishedSendingResults(65536, 4)])
         
         def test_read_until_but_log_not_in_file(self):
             file = BytesIO(b"")
@@ -581,7 +589,7 @@ if __name__ == '__main__':
             logger = LogReadWriter(file)
             logger.log(AckedBatch())
             file.seek(0, END_OF_FILE_POS)
-            log_bytes = len(FinishedSendingResults(15).get_log_bytes())
+            log_bytes = len(FinishedSendingResults(15, 4).get_log_bytes())
             file.write(log_bytes * LogType.Prepare.to_bytes() + 2 * LogType.CountPrepare.to_bytes())
             self.assertEqual(logger.read_last_log(), AckedBatch())
 
@@ -590,7 +598,7 @@ if __name__ == '__main__':
             logger = LogReadWriter(file)
             logger.log(AckedBatch())
             file.seek(0, END_OF_FILE_POS)
-            log_bytes = len(FinishedSendingResults(15).get_log_bytes())
+            log_bytes = len(FinishedSendingResults(15, 4).get_log_bytes())
             file.write(log_bytes * LogType.Prepare.to_bytes() + log_bytes * LogType.CountPrepare.to_bytes())
             self.assertEqual(logger.read_last_log(), AckedBatch())
 
@@ -599,10 +607,10 @@ if __name__ == '__main__':
             logger = LogReadWriter(file)
             logger.log(AckedBatch())
             file.seek(0, END_OF_FILE_POS)
-            log_bytes = len(FinishedSendingResults(15).get_log_bytes())
+            log_bytes = len(FinishedSendingResults(15, 4).get_log_bytes())
             file.write(log_bytes * LogType.Prepare.to_bytes() + log_bytes * LogType.CountPrepare.to_bytes())
             file.seek(-2*log_bytes, END_OF_FILE_POS)
-            file.write(FinishedSendingResults(15).get_log_bytes()[:2])
+            file.write(FinishedSendingResults(15, 4).get_log_bytes()[:2])
             self.assertEqual(logger.read_last_log(), AckedBatch())
 
         def test_read_patial_log_finished_writing_didnt_remove_count_prepare(self):
@@ -610,9 +618,9 @@ if __name__ == '__main__':
             logger = LogReadWriter(file)
             logger.log(AckedBatch())
             file.seek(0, END_OF_FILE_POS)
-            log_bytes = len(FinishedSendingResults(15).get_log_bytes())
+            log_bytes = len(FinishedSendingResults(15, 4).get_log_bytes())
             file.write(log_bytes * LogType.Prepare.to_bytes() + log_bytes * LogType.CountPrepare.to_bytes())
             file.seek(-2*log_bytes, END_OF_FILE_POS)
-            file.write(FinishedSendingResults(15).get_log_bytes())
+            file.write(FinishedSendingResults(15, 4).get_log_bytes())
             self.assertEqual(logger.read_last_log(), AckedBatch())
     unittest.main()

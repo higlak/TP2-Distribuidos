@@ -25,7 +25,7 @@ LAST_SENT_SEQ_NUM = "last sent seq_num"
 CLIENT_PENDING_EOF = "pending eof client"
 LAST_RECEIVED_FROM_WORKER = "last received from worker" 
 
-BATCH_SIZE = 1024
+BATCH_SIZE = 2
 
 class Worker(ABC):
     def __init__(self, id, next_pools, eof_to_receive):
@@ -172,7 +172,7 @@ class Worker(ABC):
             if not self.send_batch(batch):
                 return False
             i += batch.size()
-            self.logger.log(SentFirstFinalResults(batch.client_id, i))
+            self.logger.log(SentFirstFinalResults(batch.client_id, i, batch.seq_num))
         print(f"[Worker {self.id}] Sent {i} final results")
         return True
 
@@ -190,8 +190,10 @@ class Worker(ABC):
                 result = self.process_message(batch.client_id, message)
                 if result:
                     append_extend(results, result)
-        result_batch = Batch.new(batch.client_id, self.id, results)
-        return self.send_partial_results(result_batch)
+        if len(results) > 0:
+            result_batch = Batch.new(batch.client_id, self.id, results)
+            return self.send_partial_results(result_batch)
+        return True
     
     def send_partial_results(self, batch):
         if not batch.is_empty():
@@ -199,7 +201,6 @@ class Worker(ABC):
                 print(f"[Worker {self.id}] Disconnected from MOM, while sending_message")
                 return False
         return True
-        
 
     def receive_batch(self):
         worker_name = self.id.__repr__()
@@ -227,7 +228,7 @@ class Worker(ABC):
         client_storage = self.client_contexts_storage.get(client_id, {})
         while len(client_storage) > 0:
             filename, storage = client_storage.popitem()
-            #storage.delete()
+            storage.delete()
         self.metadata_storage.remove(CLIENT_PENDING_EOF+str(client_id))
         print(f"[Worker {self.id}] Client disconnected. Worker reset")
 
@@ -239,7 +240,8 @@ class Worker(ABC):
         if not self.send_batch(Batch.eof(client_id, self.id)):
             print(f"[Worker {self.id}] Disconnected from MOM, while sending eof")
             return False
-        self.logger.log(FinishedSendingResults(client_id))
+        self.logger.log(FinishedSendingResults(client_id, SeqNumGenerator.seq_num))
+        self.metadata_storage.store(LAST_SENT_SEQ_NUM, [SeqNumGenerator.seq_num])
         return True
 
     def handle_eof(self, client_id):
@@ -284,20 +286,35 @@ class Worker(ABC):
             
             self.dump_client_updates(client_id, filename, update_values)
 
-    def dump_metadata_to_disk(self, batch):
-        keys = [LAST_RECEIVED_FROM_WORKER + str(batch.sender_id), LAST_SENT_SEQ_NUM]
-        old_batch_seq_num = self.last_received_batch.get(batch.sender_id, None)
-        if old_batch_seq_num != None:
-            old_batch_seq_num = [old_batch_seq_num]
-        old_entries = [old_batch_seq_num, [SeqNumGenerator.seq_num -1]]
-        new_entries = [[batch.seq_num], [SeqNumGenerator.seq_num]]
-        if batch.is_empty():
-            keys.append(CLIENT_PENDING_EOF + str(batch.client_id))
-            old_entries.append([self.pending_eof[batch.client_id] + 1])
-            new_entries.append([self.pending_eof[batch.client_id]])
-        self.last_received_batch[batch.sender_id] = batch.seq_num
-        self.logger.log(ChangingFile(METADATA_FILENAME, keys, old_entries))
-        self.metadata_storage.store_all(keys, new_entries)
+    def dump_metadata_to_disk(self, received_batch=None):
+        keys = []
+        old_entries = []
+        new_entries = []
+
+        keys.append(LAST_SENT_SEQ_NUM)
+        if SeqNumGenerator.seq_num - 1 < 0:
+            old_entries.append(None)
+        else:
+            old_entries.append([SeqNumGenerator.get_log_seq_num()])
+        new_entries.append([SeqNumGenerator.seq_num])
+
+        if received_batch:
+            keys.append(LAST_RECEIVED_FROM_WORKER + str(received_batch.sender_id))
+            old_batch_seq_num = self.last_received_batch.get(received_batch.sender_id, None)
+            if old_batch_seq_num != None:
+                old_batch_seq_num = [old_batch_seq_num]
+            old_entries.append(old_batch_seq_num)
+            new_entries.append([received_batch.seq_num])
+
+            if received_batch.is_empty():
+                keys.append(CLIENT_PENDING_EOF + str(received_batch.client_id))
+                old_entries.append([self.pending_eof[received_batch.client_id] + 1])
+                new_entries.append([self.pending_eof[received_batch.client_id]])
+
+            self.last_received_batch[received_batch.sender_id] = received_batch.seq_num
+        if len(keys) > 0:
+            self.logger.log(ChangingFile(METADATA_FILENAME, keys, old_entries))
+            self.metadata_storage.store_all(keys, new_entries)
 
     def dump_to_disk(self, batch):
         try:
@@ -387,6 +404,7 @@ class Worker(ABC):
                 client_id, _log_scale = info_from_filename(log.filename)
                 storage = self.client_contexts_storage[client_id][log.filename]
             self.rollback(storage, client_id, log.keys, log.entries)
+        
         return True
 
     def send_any_ready_final_results(self):
@@ -398,6 +416,7 @@ class Worker(ABC):
             if not self.proccess_final_results(client_id):
                 return False
             self.remove_client(client_id)
+
         return True
 
     def any_more_messages(self):
@@ -430,16 +449,21 @@ class Worker(ABC):
         return self.send_any_ready_final_results()
 
     def initialize_based_on_log_sent_final_result(self, log):
-        client_id, already_sent_logs = log.client_id, log.n
-        return self.proccess_final_results(client_id, already_sent_logs)
+        SeqNumGenerator.set_seq_num(log.batch_seq_num)
+        return self.proccess_final_results(log.client_id, log.n)
     
     def initialize_based_on_log_finished_sending_results(self, log):
+        SeqNumGenerator.set_seq_num(log.batch_seq_num)
+        self.metadata_storage.store(LAST_SENT_SEQ_NUM, [SeqNumGenerator.seq_num])
         self.remove_client(log.client_id)
         return True
-
+    
     def initialize_based_on_last_execution(self):
         last_log = self.logger.read_last_log()
         print(last_log)
+        if not last_log:
+            return True
+        
         switch = {
             LogType.ChangingFile: self.intialize_based_on_log_changing_file,
             LogType.FinishedWriting: self.initialize_based_on_log_finished_writing,
@@ -447,14 +471,14 @@ class Worker(ABC):
             LogType.SentFinalResult: self.initialize_based_on_log_sent_final_result,
             LogType.FinishedSendingResults: self.initialize_based_on_log_finished_sending_results
         }
-        if not last_log:
-            return True
-        if self.id == SenderID(3,1,0):
-            with open(PERSISTANCE_PATH + 'log_type' + self.id.__repr__() + '.txt', "a") as file:
-                file.write(f'{int(last_log.log_type)}\n')
 
-        return switch[last_log.log_type](last_log)
-        
+        with open(PERSISTANCE_PATH + 'log_type' + self.id.__repr__() + '.txt', "a") as file:
+            file.write(f'{int(last_log.log_type)}\n')
+
+        if switch[last_log.log_type](last_log):
+            self.logger.clean()
+            return True
+        return False
 
     def rollback(self, storage, client_id, keys, old_entries):
         for key, old_entry in zip(keys, old_entries):

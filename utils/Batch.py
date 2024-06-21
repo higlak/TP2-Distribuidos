@@ -116,6 +116,7 @@ class Batch():
 
 class SeqNumGenerator:
     seq_num = -1
+    generated = False
 
     @classmethod
     def next_seq_num(cls):
@@ -124,10 +125,17 @@ class SeqNumGenerator:
     
     @classmethod
     def set_seq_num(cls, num):
+        cls.generated = True
         if num == None:
             cls.seq_num = -1
         else: 
             cls.seq_num = num
+    
+    @classmethod
+    def get_log_seq_num(cls):
+        if cls.generated:
+            return cls.generated -1
+        return cls.seq_num
 
 if __name__ == '__main__':
     from utils.QueryMessage import BOOK_MSG_TYPE

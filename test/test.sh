@@ -47,12 +47,13 @@ else
 fi
 
 directorio="./persistance_files/"
-no_borrar="log_type.txt"
+no_borrar1="log_type3.1.0.txt"
+no_borrar2="log_type3.0.0.txt"
 
 if [ "$resultado" -eq 0 ]; then
     if [ -d "$directorio" ]; then
         echo "Borrando persistencia "
-        find "$directorio" -type f ! -name "$no_borrar" -exec rm {} \;
+        find "$directorio" -type f ! -name "$no_borrar1" ! -name "$no_borrar2" -exec rm {} \;
     else
         echo "No encontre persistencia"
     fi
