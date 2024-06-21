@@ -151,23 +151,25 @@ class Waker():
 
             except socket.timeout:
                 self.print(f"Timeout waiting for message")
-                if self.am_i_leader():
-                    if event.type == HEALTHCHECK_TYPE:
-                        self.broadcast_healthcheck()
-                        event.increase_timeout(HEALTHCHECK_DELAY)
-                    elif event.type == ALIVE_TYPE:
-                        self.print(f"{event.container_name} didn't respond in time. Attempts remaining: {event.attemps}") 
-                        if event.attemps == 0:
-                            self.handle_container_reconnection(event.container_name)
-                            event.restart_attemps()
-                        else:
-                            event.attemps -= 1
-                        event.increase_timeout(ALIVE_TIMEOUT)
-                    self.print(f"Event set: {event}")
-                    heapq.heappush(self.events, event)
-                    
-                else:
+                if not self.am_i_leader():
                     self.start_leader_election()
+                    continue 
+                self.handle_timeout_from_leader(event)
+
+    def handle_timeout_from_leader(self, event):
+        if event.type == HEALTHCHECK_TYPE:
+            self.broadcast_healthcheck()
+            event.increase_timeout(HEALTHCHECK_DELAY)
+        elif event.type == ALIVE_TYPE:
+            self.print(f"{event.container_name} didn't respond in time. Attempts remaining: {event.attemps}") 
+            if event.attemps == 0:
+                self.handle_container_reconnection(event.container_name)
+                event.restart_attemps()
+            else:
+                event.attemps -= 1
+            event.increase_timeout(ALIVE_TIMEOUT)
+        self.print(f"Event set: {event}")
+        heapq.heappush(self.events, event)
 
     def get_next_event(self):
         event = heapq.heappop(self.events)
@@ -208,6 +210,7 @@ class Waker():
                 event.increase_timeout(ALIVE_TIMEOUT)
                 self.print(f"Event set: {event}")
                 return
+            
         self.print(f"Container {container_name} alive timeout not found in events")
         new_event = Event(ALIVE_TYPE, time.time() + ALIVE_TIMEOUT, container_name)
         self.print(f"Event set: {new_event}")
@@ -216,7 +219,6 @@ class Waker():
     def broadcast_healthcheck(self):
         self.print(f"Broadcasting healthcheck messages")
         for waker_container in self.wakers_containers:
-            #if waker_container < f'waker{self.waker_id}':
             self.send_message_to_container(HEALTHCHECK_MSG, waker_container)
         for worker_container in self.workers_containers:
             self.send_message_to_container(HEALTHCHECK_MSG, worker_container)
