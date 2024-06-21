@@ -5,6 +5,8 @@ from utils.Batch import Batch, AMOUNT_OF_CLIENT_ID_BYTES
 from utils.auxiliar_functions import get_env_list, send_all
 from GatewayInOut.GatewayIn import gateway_in_main
 from GatewayInOut.GatewayOut import gateway_out_main
+from utils.HealthcheckReceiver import HealthcheckReceiver
+
 import socket
 import os
 
@@ -25,6 +27,9 @@ class Gateway():
         self.server_socket = None
         self.next_id = 0
         
+        self.healthcheck_receiver_thread = Process(target=handle_waker_leader)
+        self.healthcheck_receiver_thread.start()
+
         recv_conn, send_conn = Pipe(False)
         self.gateway_out_pipe = send_conn
         self.gateway_out_handler = Process(target=gateway_out_main, args=[recv_conn, self.eof_to_receive])
@@ -59,6 +64,7 @@ class Gateway():
         for client_handler in self.client_handlers.values():
             client_handler.terminate()
         self.gateway_out_handler.terminate()
+        self.healthcheck_receiver_thread.terminate()
         if self.server_socket:
             self.server_socket.close()
 
@@ -123,8 +129,18 @@ class Gateway():
     def close(self):
         self.join_clients(blocking=True)
         self.gateway_out_handler.join()
+        self.healthcheck_receiver_thread.join()
         self.server_socket.close()
 
+def handle_waker_leader():
+    try:            
+        healthcheck_receiver = HealthcheckReceiver('Gateway')
+        healthcheck_receiver.start()
+
+    except Exception as e:
+        print(f"[Gateway] Socket disconnected: {e} \n")
+        return
+    
 def main():
     gateway = Gateway.new()
     if not gateway:

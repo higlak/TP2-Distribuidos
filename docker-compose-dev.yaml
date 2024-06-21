@@ -11,7 +11,6 @@ services:
     build:
       context: ./
       dockerfile: Filter/Filter.dockerfile
-    restart: on-failure
     depends_on:
       - rabbitmq
     links: 
@@ -30,7 +29,6 @@ services:
     build:
       context: ./
       dockerfile: Filter/Filter.dockerfile
-    restart: on-failure
     depends_on:
       - rabbitmq
     links: 
@@ -49,7 +47,6 @@ services:
     build:
       context: ./
       dockerfile: Filter/Filter.dockerfile
-    restart: on-failure
     depends_on:
       - rabbitmq
     links: 
@@ -68,7 +65,6 @@ services:
     build:
       context: ./
       dockerfile: Gateway/Gateway.dockerfile
-    restart: on-failure
     depends_on:
       - rabbitmq
     links: 
@@ -101,9 +97,8 @@ services:
     build:
       context: ./
       dockerfile: Waker/Waker.dockerfile
-    restart: on-failure
     environment:
-      - WORKERS_CONTAINERS=filter1.0.0;filter1.1.0;filter1.2.0
+      - WORKERS_CONTAINERS=filter1.0.0;filter1.1.0;filter1.2.0;gateway
       - WAKERS_CONTAINERS=waker1
       - WAKER_ID=0
     volumes:
@@ -113,9 +108,8 @@ services:
     build:
       context: ./
       dockerfile: Waker/Waker.dockerfile
-    restart: on-failure
     environment:
-      - WORKERS_CONTAINERS=filter1.0.0;filter1.1.0;filter1.2.0
+      - WORKERS_CONTAINERS=filter1.0.0;filter1.1.0;filter1.2.0;gateway
       - WAKERS_CONTAINERS=waker0
       - WAKER_ID=1
     volumes:

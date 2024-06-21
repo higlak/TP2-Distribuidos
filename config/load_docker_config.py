@@ -88,8 +88,7 @@ class QueryConfig():
                 if pool.worker_type == ACCUMULATOR_TYPE and pool.worker_field == REVIEW_TEXT_FIELD:
                   result += f"      args:"         
                   result += f"\n        - TEXTBLOB=True\n"
-                result += f"""    restart: on-failure
-    depends_on:
+                result += f"""    depends_on:
       - rabbitmq
     links: 
       - rabbitmq
@@ -139,7 +138,6 @@ def process_gateway(queries, eof_to_receive, file):
     build:
       context: ./
       dockerfile: Gateway/Gateway.dockerfile
-    restart: on-failure
     depends_on:
       - rabbitmq
     links: 
@@ -209,7 +207,6 @@ def process_waker(file, i, worker_containers, waker_containers):
     build:
       context: ./
       dockerfile: Waker/Waker.dockerfile
-    restart: on-failure
     environment:
       - WORKERS_CONTAINERS={";".join(worker_containers)}
       - WAKERS_CONTAINERS={";".join(other_waker_containers)}
@@ -229,7 +226,7 @@ def process_wakers(file, worker_containers):
   config = config["DEFAULT"]
   n_wakers = int(config['AMOUNT_OF_WAKERS'])
   
-  #TODO: worker_containers.append('gateway')
+  worker_containers.append('gateway')
 
   wakers = [f"waker{i}" for i in range(n_wakers)]
   for i in range(n_wakers):
