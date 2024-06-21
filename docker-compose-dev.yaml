@@ -99,7 +99,7 @@ services:
       dockerfile: Waker/Waker.dockerfile
     environment:
       - WORKERS_CONTAINERS=filter1.0.0;filter1.1.0;filter1.2.0;gateway
-      - WAKERS_CONTAINERS=waker1
+      - WAKERS_CONTAINERS=waker1;waker2
       - WAKER_ID=0
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
@@ -110,8 +110,19 @@ services:
       dockerfile: Waker/Waker.dockerfile
     environment:
       - WORKERS_CONTAINERS=filter1.0.0;filter1.1.0;filter1.2.0;gateway
-      - WAKERS_CONTAINERS=waker0
+      - WAKERS_CONTAINERS=waker0;waker2
       - WAKER_ID=1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  waker2:
+    build:
+      context: ./
+      dockerfile: Waker/Waker.dockerfile
+    environment:
+      - WORKERS_CONTAINERS=filter1.0.0;filter1.1.0;filter1.2.0;gateway
+      - WAKERS_CONTAINERS=waker0;waker1
+      - WAKER_ID=2
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
 

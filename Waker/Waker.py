@@ -102,7 +102,6 @@ class Waker():
         heapq.heappush(self.events, event)
 
         for container in self.wakers_containers:
-            #if container < f'waker{self.waker_id}': # Por si soy lider pero hay un id mas grande que todavia no reconoci
             event = Event(ALIVE_TYPE, time.time() + ALIVE_TIMEOUT, container)
             heapq.heappush(self.events, event)
 
@@ -201,7 +200,8 @@ class Waker():
                 self.socket.settimeout(HEALTHCHECK_TIMEOUT)
         
         if msg == ELECTION_MSG:
-            self.socket.sendto(ACK_MSG, addr)
+            waker_id = self.get_container_name_by_address(addr[0])
+            self.send_message_to_container(ACK_MSG, waker_id)
             self.start_leader_election()   
 
     def update_container_timeout(self, container_name):
@@ -260,7 +260,7 @@ class Waker():
     
     def handle_container_reconnection(self, container_name):
         client = docker.from_env()
-        self.print(f"Trying to revive {container_name}")
+        self.print(f"\n\nTrying to revive {container_name}\n")
         try:
             container = client.containers.get(f'tp2-distribuidos-{container_name}-1')
             self.print(f"Found existing container for {container_name}, restarting it.")
