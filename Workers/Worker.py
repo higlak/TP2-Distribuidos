@@ -11,19 +11,13 @@ from utils.Batch import Batch, SeqNumGenerator
 from utils.auxiliar_functions import append_extend
 from utils.QueryMessage import query_to_query_result
 from utils.NextPools import NextPools, GATEWAY_QUEUE_NAME 
+from Persistance.metadatahandler import MetadataHandler, METADATA_FILENAME
 from queue import Queue
 
 PERSISTANCE_PATH = '/persistance_files/'
 LOG_FILENAME = 'log.bin'
-METADATA_FILENAME = 'metadata.bin'
 CLIENT_CONTEXT_FILENAME = 'client_context'
 SCALE_SEPARATOR = '_S'
-
-METADATA_KEY_BYTES = 25 + 18
-METADATA_NUM_BYTES = 4
-LAST_SENT_SEQ_NUM = "last sent seq_num"
-CLIENT_PENDING_EOF = "pending eof client"
-LAST_RECEIVED_FROM_WORKER = "last received from worker" 
 
 BATCH_SIZE = 2
 
@@ -40,7 +34,7 @@ class Worker(ABC):
         self.client_context_storage_updates = {} # {client{key: (old_value, new value)}}
         self.client_contexts = {} # {client {depende del accum}}
 
-        self.metadata_storage = None
+        self.metadata_handler = None
         self.client_contexts_storage = {}
         self.logger = None
         signal.signal(signal.SIGTERM, self.handle_SIGTERM)
@@ -65,8 +59,9 @@ class Worker(ABC):
 
     def load_context(self, path, filename,  client_id, scale_of_update_file):
         storage_types, storage_types_size = self.get_context_storage_types(scale_of_update_file)
-        self.client_contexts_storage[client_id][filename], previous_context = KeyValueStorage.new(
+        self.client_contexts_storage[client_id][filename] = KeyValueStorage.new(
             path, str, 2**scale_of_update_file, storage_types, storage_types_size)
+        previous_context = self.client_contexts_storage[client_id][filename].get_all_entries()
         print("previouse context: ", len(previous_context))
         if not self.client_contexts_storage[client_id][filename] or previous_context == None:
             return False
@@ -75,10 +70,10 @@ class Worker(ABC):
     
     def load_all_context(self):
         try:
-            for filename in os.listdir(self.worker_folder()):
+            for filename in os.listdir(self.worker_dir()):
                 if filename == METADATA_FILENAME or filename == LOG_FILENAME:
                     continue
-                path = os.path.join(self.worker_folder(), filename)
+                path = os.path.join(self.worker_dir(), filename)
                 if os.path.isfile(path):            
                     client_id, scale_of_file = info_from_filename(filename)
                     self.client_contexts_storage[client_id] = self.client_contexts_storage.get(client_id, {})
@@ -89,34 +84,19 @@ class Worker(ABC):
             print(f"[Worker [{self.id}]]: Could not load context: {e}")
         return True
 
-    def worker_folder(self):
+    def worker_dir(self):
         return PERSISTANCE_PATH + self.id.__repr__() + '/' 
 
-    def set_previouse_metadata(self, previouse_metadata):
-        SeqNumGenerator.set_seq_num(previouse_metadata.pop(LAST_SENT_SEQ_NUM, None))
-        self.pending_eof = {}
-        self.last_received_batch = {}
-
-        while len(previouse_metadata) > 0:
-            entry = previouse_metadata.popitem()
-            if entry[0].startswith(CLIENT_PENDING_EOF):
-                client_id = int(entry[0].strip(CLIENT_PENDING_EOF))
-                self.pending_eof[client_id] = entry[1]
-            elif entry[0].startswith(LAST_RECEIVED_FROM_WORKER):
-                sender_id = SenderID.from_string(entry[0].strip(LAST_RECEIVED_FROM_WORKER))
-                if sender_id == None:
-                    return False
-                self.last_received_batch[sender_id] = entry[1]
-        return True
+    def set_previouse_metadata(self):
+        self.pending_eof, self.last_received_batch = self.metadata_handler.load_stored_metadata()
 
     def load_metadata(self):
-        self.metadata_storage, previouse_metadata = KeyValueStorage.new(
-            self.worker_folder() + METADATA_FILENAME, str, METADATA_KEY_BYTES, [int], [METADATA_NUM_BYTES])
-        if not self.metadata_storage or previouse_metadata == None:
-            print(f"[Worker [{self.id}]] Error Opening Metadata: storage {self.metadata_storage} previouse {previouse_metadata}")
+        self.metadata_handler = MetadataHandler.new(self.worker_dir(), self.logger)
+        if not self.metadata_handler:
+            print(f"[Worker [{self.id}]] Error Opening Metadata")
             return False
-        
-        return self.set_previouse_metadata(previouse_metadata)
+        self.set_previouse_metadata()
+        return True
 
     def load_from_disk(self):
         path = PERSISTANCE_PATH + self.id.__repr__() + '/'
@@ -126,13 +106,14 @@ class Worker(ABC):
         except OSError as e:
             print(f"[Worker [{self.id}]] Error creating worker dir")
             
-        if not self.load_metadata():
-            return False
         if not self.load_all_context():
            return False
-        self.logger = LogReadWriter.new(self.worker_folder() + LOG_FILENAME)
+        self.logger = LogReadWriter.new(self.worker_dir() + LOG_FILENAME)
         if not self.logger:
             print(f"Failed to open log")
+            return False
+        
+        if not self.load_metadata(self.logger):
             return False
         return True
 
@@ -215,7 +196,6 @@ class Worker(ABC):
             print("Error initializing from log")
             return None
         self.loop()
-        #print(f"\n\n {self.metadata_storage.get_all_entries()}\n\n")
         self.communicator.close_connection()
 
     @abstractmethod
@@ -229,7 +209,7 @@ class Worker(ABC):
         while len(client_storage) > 0:
             filename, storage = client_storage.popitem()
             storage.delete()
-        self.metadata_storage.remove(CLIENT_PENDING_EOF+str(client_id))
+        self.metadata_handler.remove_client(client_id)
         print(f"[Worker {self.id}] Client disconnected. Worker reset")
 
     def proccess_final_results(self, client_id, already_sent_results=0):
@@ -241,7 +221,7 @@ class Worker(ABC):
             print(f"[Worker {self.id}] Disconnected from MOM, while sending eof")
             return False
         self.logger.log(FinishedSendingResults(client_id, SeqNumGenerator.seq_num))
-        self.metadata_storage.store(LAST_SENT_SEQ_NUM, [SeqNumGenerator.seq_num])
+        self.metadata_handler.update_seq_num()
         return True
 
     def handle_eof(self, client_id):
@@ -277,44 +257,18 @@ class Worker(ABC):
             filename = CLIENT_CONTEXT_FILENAME + str(client_id) + SCALE_SEPARATOR + str(scale_of_update_file) + '.bin'
 
             if filename not in self.client_contexts_storage[client_id]:
-                path = self.worker_folder() + filename
+                path = self.worker_dir() + filename
                 value_types, value_types_size = self.get_context_storage_types(scale_of_update_file)
                 if value_types == None or value_types_size == None:
                     continue
-                self.client_contexts_storage[client_id][filename], _ = KeyValueStorage.new(
+                self.client_contexts_storage[client_id][filename] = KeyValueStorage.new(
                     path, str, 2**scale_of_update_file, value_types, value_types_size)
             
             self.dump_client_updates(client_id, filename, update_values)
 
-    def dump_metadata_to_disk(self, received_batch=None):
-        keys = []
-        old_entries = []
-        new_entries = []
-
-        keys.append(LAST_SENT_SEQ_NUM)
-        if SeqNumGenerator.seq_num - 1 < 0:
-            old_entries.append(None)
-        else:
-            old_entries.append([SeqNumGenerator.get_log_seq_num()])
-        new_entries.append([SeqNumGenerator.seq_num])
-
-        if received_batch:
-            keys.append(LAST_RECEIVED_FROM_WORKER + str(received_batch.sender_id))
-            old_batch_seq_num = self.last_received_batch.get(received_batch.sender_id, None)
-            if old_batch_seq_num != None:
-                old_batch_seq_num = [old_batch_seq_num]
-            old_entries.append(old_batch_seq_num)
-            new_entries.append([received_batch.seq_num])
-
-            if received_batch.is_empty():
-                keys.append(CLIENT_PENDING_EOF + str(received_batch.client_id))
-                old_entries.append([self.pending_eof[received_batch.client_id] + 1])
-                new_entries.append([self.pending_eof[received_batch.client_id]])
-
-            self.last_received_batch[received_batch.sender_id] = received_batch.seq_num
-        if len(keys) > 0:
-            self.logger.log(ChangingFile(METADATA_FILENAME, keys, old_entries))
-            self.metadata_storage.store_all(keys, new_entries)
+    def dump_metadata_to_disk(self, received_batch):
+        self.metadata_handler.dump_metadata_to_disk(self.last_received_batch, self.pending_eof, received_batch)
+        self.last_received_batch[received_batch.sender_id] = received_batch.seq_num
 
     def dump_to_disk(self, batch):
         try:
@@ -398,7 +352,7 @@ class Worker(ABC):
         logs = self.logger.read_while_log_type(LogType.ChangingFile)
         for log in logs:
             if log.filename == METADATA_FILENAME:
-                storage = self.metadata_storage
+                storage = self.metadata_handler.storage
                 client_id = None
             else:
                 client_id, _log_scale = info_from_filename(log.filename)
@@ -454,7 +408,7 @@ class Worker(ABC):
     
     def initialize_based_on_log_finished_sending_results(self, log):
         SeqNumGenerator.set_seq_num(log.batch_seq_num)
-        self.metadata_storage.store(LAST_SENT_SEQ_NUM, [SeqNumGenerator.seq_num])
+        self.metadata_handler.update_seq_num()
         self.remove_client(log.client_id)
         return True
     
@@ -488,7 +442,7 @@ class Worker(ABC):
                 storage.store(key, old_entry)
 
         if client_id == None:
-            self.set_previouse_metadata(storage.get_all_entries())
+            self.set_previouse_metadata()
         else:
             self.add_previous_context(storage.get_all_entries(), client_id)
 
@@ -500,6 +454,7 @@ if __name__ == '__main__':
     import unittest
     from unittest import TestCase
     from Workers.Accumulators import ReviewTextByTitleAccumulator
+    from Persistance.metadatahandler import METADATA_KEY_BYTES, METADATA_NUM_BYTES, LAST_RECEIVED_FROM_WORKER, LAST_SENT_SEQ_NUM
     from io import BytesIO
     import pudb; pu.db
     
@@ -536,7 +491,7 @@ if __name__ == '__main__':
             worker = ReviewTextByTitleAccumulator(SenderID(1,1,1), 5, 5, None, None, None)
             worker.logger = self.get_test_logger(n)
             worker.client_contexts_storage[1] = {TEST_CONTEXT_FILENAME: storage}
-            worker.metadata_storage = metadata_storage
+            worker.metadata_handler = MetadataHandler(metadata_storage, worker.logger)
             return worker
 
         def get_test_logger(self, n):
@@ -553,7 +508,7 @@ if __name__ == '__main__':
             w: Worker = self.get_test_worker(1)
             w.initialize_based_on_last_execution()
             expected_metadata_entries = {LAST_SENT_SEQ_NUM: 0, LAST_RECEIVED_FROM_WORKER + '1.0.1': 2}
-            self.assertEqual(w.metadata_storage.get_all_entries(), expected_metadata_entries)
+            self.assertEqual(w.metadata_handler.storage.get_all_entries(), expected_metadata_entries)
             self.assertEqual(SeqNumGenerator.seq_num, 0)
             self.assertEqual(w.pending_eof, {})
             self.assertEqual({SenderID(1,0,1):2}, w.last_received_batch)
@@ -569,7 +524,7 @@ if __name__ == '__main__':
                 "3": 3
             }
 
-            self.assertEqual(w.metadata_storage.get_all_entries(), expected_metadata_entries)
+            self.assertEqual(w.metadata_handler.storage.get_all_entries(), expected_metadata_entries)
             self.assertEqual(SeqNumGenerator.seq_num, 0)
             self.assertEqual(w.pending_eof, {})
             self.assertEqual({SenderID(1,0,1):2}, w.last_received_batch)

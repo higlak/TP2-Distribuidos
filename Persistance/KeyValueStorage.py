@@ -179,17 +179,17 @@ class KeyValueStorage():
     @classmethod
     def new(cls, path, key_type, fixed_key_size, value_types, values_fixed_size):
         if type(value_types) != list or type(values_fixed_size) != list:
-            return None, None
+            return None
         try:
             file = open(path, 'rb+')
         except FileNotFoundError:
             file = open(path, 'wb+')
         except OSError as e:
             print(f"Error Opening Storage: {e}")
-            return None, None
+            return None
 
         storage = cls(file, key_type, fixed_key_size, value_types, values_fixed_size)
-        return storage, storage.get_all_entries()
+        return storage
 
     def is_mid_removal_entry_bytes(self, entry_bytes):
         return CROSS_OUT_BYTE[0] in entry_bytes
