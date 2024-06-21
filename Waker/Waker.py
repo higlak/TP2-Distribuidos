@@ -8,40 +8,25 @@ from utils.LeaderElection import ACK_MSG, BUFFER_BYTES, COORDINATOR_MSG, ELECTIO
 from utils.HeartbeatReceiver import HEARTBEAT_MSG
 import heapq
 import docker
+from utils.Event import Event
 
 WAKER_PORT = 5000
-HEALTHCHECK_DELAY = 10
-RECEIVE_DEFAULT_TIMEOUT = 10
-ELECTION_PORT = 5050
+
+HEALTHCHECK_TIMEOUT = 10 # Timeout to hear a healthcheck from a leader
+HEALTHCHECK_DELAY = 5 # Delay to send a healthcheck
+ALIVE_TIMEOUT = 10 # Timeout to hear an alive message from a waker after sending healthcheck
+ELECTION_TIMEOUT = 10 # Timeout to hear an ack or coord from a waker after sending election message
+
+BUFFER_BYTES = 1
+
 ELECTION_MSG = b'E'
 ACK_MSG = b'A'
 COORDINATOR_MSG = b'C'
 HEALTHCHECK_MSG = b'H'
 ALIVE_MSG = b'V'
-BUFFER_BYTES = 1
 
-ALIVE_TYPE = 'alive'
-HEALTHCHECK_TYPE = 'healthcheck'
-
-class Event():
-    def __init__(self, type, timeout, container_name=None):
-        self.type = type
-        self.container_name = container_name
-        self.timeout = timeout
-
-    def did_timeout(self):
-        return time.time() > self.timeout
-    
-    def increase_timeout(self, ammount):
-        self.timeout = time.time() + ammount
-
-    def __str__(self):
-        if self.container_name:
-            return f"{self.type} for {self.container_name} at {self.timeout}"
-        return f'send healthcheck at {self.timeout}' 
-    
-    def __lt__(self, other):
-        return self.timeout < other.timeout
+ALIVE_TYPE = 'ALIVE'
+HEALTHCHECK_TYPE = 'HEALTHCHECK'
     
 class Waker():
 
@@ -62,10 +47,7 @@ class Waker():
 
     def start(self):
         self.socket.bind(('', WAKER_PORT))
-        self.socket.settimeout(RECEIVE_DEFAULT_TIMEOUT)
-        self.print('Starting')
         self.print(f'Listening on port : {WAKER_PORT}')
-        self.print(f'Receive timeout set: {RECEIVE_DEFAULT_TIMEOUT}s')
 
         try:
             self.start_leader_election()
@@ -99,6 +81,7 @@ class Waker():
             if waker_container > f'waker{self.waker_id}':
                 self.send_message_to_container(ELECTION_MSG, waker_container)
         
+        self.socket.settimeout(ELECTION_TIMEOUT)
         msg, addr = self.receive_message() # Can receive either ACK or COORDINATOR
 
         return msg, addr
@@ -109,25 +92,29 @@ class Waker():
 
     def handle_leader(self):
         self.set_leader(self.waker_id)
-        self.set_timeouts()
+        self.set_events()
         self.broadcast_coordinator_message()
 
-    def set_timeouts(self):
-        # @TODO: hacer también con los workers
+    def set_events(self):
         self.print(f"Setting event timeouts")
         self.events = []
-        for container in self.wakers_containers:
-            if container < f'waker{self.waker_id}':
-                event = Event(ALIVE_TYPE, time.time() + HEALTHCHECK_DELAY, container)
-                heapq.heappush(self.events, event)
         
         event = Event(HEALTHCHECK_TYPE, time.time() + HEALTHCHECK_DELAY)
         heapq.heappush(self.events, event)
+
+        # @TODO: hacer también con los workers
+        for container in self.wakers_containers:
+            if container < f'waker{self.waker_id}': # Por si soy lider pero hay un id mas grande que todavia no reconoci
+                event = Event(ALIVE_TYPE, time.time() + ALIVE_TIMEOUT, container)
+                heapq.heappush(self.events, event)
+        
         self.show_events()
     
     def show_events(self):
+        events = "Pending events:\n"
         for event in self.events:
-            self.print(f"Event set: {event}")
+            events += f'- {event}\n'
+        self.print(f"{events[:-1]}")
 
     def broadcast_coordinator_message(self):
         # @TODO: enviar a los workers también
@@ -139,7 +126,7 @@ class Waker():
     def send_message_to_container(self, message, waker_container):
         self.print(f"Sending {message.decode()} to: {waker_container}")
         try:
-            self.socket.sendto(message, (waker_container, ELECTION_PORT))
+            self.socket.sendto(message, (waker_container, WAKER_PORT))
         except OSError:
             self.print(f"Error sending message to {waker_container}")
 
@@ -147,21 +134,30 @@ class Waker():
         self.print(f"Starting main loop")
         while not self.finished:
             if self.am_i_leader():
+                self.show_events()
                 event = self.get_next_event()
             try:
                 msg, addr = self.socket.recvfrom(BUFFER_BYTES)
                 self.handle_message(msg, addr)
+                if self.am_i_leader() and event.type == HEALTHCHECK_TYPE:
+                    # Estaba esperando al timeout para el healthcheck pero me metieron una cosa en el medio
+                    heapq.heappush(self.events, event)
 
             except socket.timeout:
                 self.print(f"Timeout waiting for message")
                 if self.am_i_leader():
                     if event.type == HEALTHCHECK_TYPE:
                         self.broadcast_healthcheck()
+                        event.increase_timeout(HEALTHCHECK_DELAY)
                     elif event.type == ALIVE_TYPE:
-                        self.print(f"{event.container_name} didn't respond in time")    
-                        self.handle_container_reconnection(event.container_name)
-                    event.increase_timeout(HEALTHCHECK_DELAY)
-                    self.print(f"Updated timeout for {event.container_name}: {event.timeout}. Reinserting...")
+                        self.print(f"{event.container_name} didn't respond in time. Attempts remaining: {event.attemps}") 
+                        if event.attemps == 0:
+                            self.handle_container_reconnection(event.container_name)
+                            event.restart_attemps()
+                        else:
+                            event.attemps -= 1
+                        event.increase_timeout(ALIVE_TIMEOUT)
+                    self.print(f"Event set: {event}")
                     heapq.heappush(self.events, event)
                     
                 else:
@@ -172,7 +168,7 @@ class Waker():
         self.print(f"Next event: {event}")
         new_timeout = max(event.timeout - time.time(), 0.1) # Si pongo 0 tira Resource Temporarily Unavailable
         self.socket.settimeout(new_timeout)
-        self.print(f"Set timeout to {new_timeout}")
+        self.print(f"Timeout set to {round(new_timeout, 2)}'s")
         return event
 
     def handle_message(self, msg, addr):
@@ -194,6 +190,7 @@ class Waker():
                 self.send_message_to_container(COORDINATOR_MSG, waker_id)
             else:
                 self.set_leader(waker_id)
+                self.socket.settimeout(HEALTHCHECK_TIMEOUT)
         
         if msg == ELECTION_MSG:
             self.socket.sendto(ACK_MSG, addr)
@@ -202,9 +199,13 @@ class Waker():
     def update_container_timeout(self, container_name):
         for event in self.events:
             if event.container_name == container_name:
-                event.increase_timeout(HEALTHCHECK_DELAY)
-                self.print(f"Updated timeout for {container_name}: {event.timeout}")
+                event.increase_timeout(ALIVE_TIMEOUT)
+                self.print(f"Event set: {event}")
                 return
+        self.print(f"Container {container_name} alive timeout not found in events")
+        new_event = Event(ALIVE_TYPE, time.time() + ALIVE_TIMEOUT, container_name)
+        self.print(f"Event set: {new_event}")
+        heapq.heappush(self.events, new_event)
 
     def broadcast_healthcheck(self):
         # @TODO enviar a los workers también
