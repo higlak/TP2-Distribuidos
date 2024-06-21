@@ -11,7 +11,7 @@ from utils.Batch import Batch, SeqNumGenerator
 from utils.auxiliar_functions import append_extend
 from utils.QueryMessage import query_to_query_result
 from utils.NextPools import NextPools, GATEWAY_QUEUE_NAME 
-from Persistance.metadatahandler import MetadataHandler, METADATA_FILENAME
+from Persistance.MetadataHandler import MetadataHandler, METADATA_FILENAME
 from queue import Queue
 
 PERSISTANCE_PATH = '/persistance_files/'
@@ -454,7 +454,7 @@ if __name__ == '__main__':
     import unittest
     from unittest import TestCase
     from Workers.Accumulators import ReviewTextByTitleAccumulator
-    from Persistance.metadatahandler import METADATA_KEY_BYTES, METADATA_NUM_BYTES, LAST_RECEIVED_FROM_WORKER, LAST_SENT_SEQ_NUM
+    from Persistance.MetadataHandler import METADATA_KEY_BYTES, METADATA_NUM_BYTES, LAST_RECEIVED_FROM_WORKER, LAST_SENT_SEQ_NUM
     from io import BytesIO
     import pudb; pu.db
     
