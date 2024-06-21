@@ -26,10 +26,6 @@ class Gateway():
         self.client_handlers = {} 
         self.server_socket = None
         self.next_id = 0
-        
-        self.healthcheck_receiver_thread = Process(target=handle_waker_leader)
-        self.healthcheck_receiver_thread.start()
-
         recv_conn, send_conn = Pipe(False)
         self.gateway_out_pipe = send_conn
         self.gateway_out_handler = Process(target=gateway_out_main, args=[recv_conn, self.eof_to_receive])
@@ -132,19 +128,23 @@ class Gateway():
         self.healthcheck_receiver_thread.join()
         self.server_socket.close()
 
-def handle_waker_leader():
+def handle_healthcheck_receiver(gateway_main_thread):
     try:            
-        healthcheck_receiver = HealthcheckReceiver('Gateway')
+        healthcheck_receiver = HealthcheckReceiver('Gateway', gateway_main_thread)
         healthcheck_receiver.start()
-
     except Exception as e:
         print(f"[Gateway] Socket disconnected: {e} \n")
         return
     
-def main():
+def gateway_main():
     gateway = Gateway.new()
     if not gateway:
         return None
     gateway.run()
  
+def main():
+    gateway_main_thread = Process(target=gateway_main)
+    gateway_main_thread.start()
+    handle_healthcheck_receiver(gateway_main_thread)
+
 main()

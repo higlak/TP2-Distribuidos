@@ -109,7 +109,7 @@ class Waker():
             event = Event(ALIVE_TYPE, time.time() + ALIVE_TIMEOUT, container)
             heapq.heappush(self.events, event)
         
-        self.show_events()
+        # self.show_events()
     
     def show_events(self):
         events = "Pending events:\n"
@@ -140,7 +140,7 @@ class Waker():
         self.print(f"Starting main loop")
         while not self.finished:
             if self.am_i_leader():
-                self.show_events()
+                # self.show_events()
                 event = self.get_next_event()
             try:
                 msg, addr = self.socket.recvfrom(BUFFER_BYTES)
@@ -172,10 +172,10 @@ class Waker():
 
     def get_next_event(self):
         event = heapq.heappop(self.events)
-        self.print(f"Next event: {event}")
+        # self.print(f"Next event: {event}")
         new_timeout = max(event.timeout - time.time(), 0.1) # Si pongo 0 tira Resource Temporarily Unavailable
         self.socket.settimeout(new_timeout)
-        self.print(f"Timeout set to {round(new_timeout, 2)}'s")
+        # self.print(f"Timeout set to {round(new_timeout, 2)}'s")
         return event
 
     def handle_message(self, msg, addr):
@@ -208,12 +208,12 @@ class Waker():
         for event in self.events:
             if event.container_name == container_name:
                 event.increase_timeout(ALIVE_TIMEOUT)
-                self.print(f"Event set: {event}")
+                # self.print(f"Event set: {event}")
                 return
             
         self.print(f"Container {container_name} alive timeout not found in events")
         new_event = Event(ALIVE_TYPE, time.time() + ALIVE_TIMEOUT, container_name)
-        self.print(f"Event set: {new_event}")
+        # self.print(f"Event set: {new_event}")
         heapq.heappush(self.events, new_event)
 
     def broadcast_healthcheck(self):
