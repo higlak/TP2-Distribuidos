@@ -84,8 +84,12 @@ class Gateway():
             gateway_in_handler = Process(target=gateway_in_main, args=[client_id, client_socket, self.next_pools, self.book_query_numbers, self.review_query_numbers])
             self.client_handlers[client_id] = gateway_in_handler
         else:
-            self.gateway_out_pipe.send((client_id, client_socket))
-            self.client_handlers[client_id].start()
+            if client_id in self.client_handlers:
+                self.gateway_out_pipe.send((client_id, client_socket))
+                self.client_handlers[client_id].start()
+            else:
+                gateway_in_handler = Process(target=gateway_in_main, args=[client_id, client_socket, self.next_pools, self.book_query_numbers, self.review_query_numbers])
+                self.client_handlers[client_id] = gateway_in_handler
 
         print(f"[Gateway] Client {client_id} connected")
     

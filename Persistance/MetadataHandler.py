@@ -6,24 +6,26 @@ from utils.SenderID import SenderID
 
 METADATA_KEY_BYTES = 25 + 18
 METADATA_NUM_BYTES = 4
-METADATA_FILENAME = 'metadata.bin'
+METADATA_FILENAME = 'metadata'
 LAST_SENT_SEQ_NUM = "last sent seq_num"
 CLIENT_PENDING_EOF = "pending eof client"
-LAST_RECEIVED_FROM_WORKER = "last received from worker" 
+LAST_RECEIVED_FROM = "last received from" 
 
 class MetadataHandler():
-    def __init__(self, storage, logger):
+    def __init__(self, storage, logger, filename):
         self.storage = storage
         self.logger = logger
+        self.filename = filename
         self.log_seq_num = -1
     
     @classmethod
-    def new(cls, directory, logger):
+    def new(cls, directory, logger, name_specifier=""):
+        filename = METADATA_FILENAME + name_specifier + '.bin'
         storage = KeyValueStorage.new(
-            directory + METADATA_FILENAME, str, METADATA_KEY_BYTES, [int], [METADATA_NUM_BYTES])
+            directory + filename, str, METADATA_KEY_BYTES, [int], [METADATA_NUM_BYTES])
         if not storage:
             return None
-        return MetadataHandler(storage, logger)
+        return MetadataHandler(storage, logger, filename)
     
     def load_stored_metadata(self):
         stored_metadata = self.storage.get_all_entries()
@@ -37,8 +39,8 @@ class MetadataHandler():
             if entry[0].startswith(CLIENT_PENDING_EOF):
                 client_id = int(entry[0].strip(CLIENT_PENDING_EOF))
                 pending_eof[client_id] = entry[1]
-            elif entry[0].startswith(LAST_RECEIVED_FROM_WORKER):
-                sender_id = SenderID.from_string(entry[0].strip(LAST_RECEIVED_FROM_WORKER))
+            elif entry[0].startswith(LAST_RECEIVED_FROM):
+                sender_id = SenderID.from_string(entry[0].strip(LAST_RECEIVED_FROM))
                 last_received_batch[sender_id] = entry[1]
         self.log_seq_num = last_sent_seq_num
         return last_sent_seq_num , pending_eof, last_received_batch
@@ -63,7 +65,7 @@ class MetadataHandler():
             new_entries.append([SeqNumGenerator.seq_num])
 
         if received_batch:
-            keys.append(LAST_RECEIVED_FROM_WORKER + str(received_batch.sender_id))
+            keys.append(LAST_RECEIVED_FROM + str(received_batch.sender_id))
             old_batch_seq_num = last_received_batch.get(received_batch.sender_id, None)
             if old_batch_seq_num != None:
                 old_batch_seq_num = [old_batch_seq_num]
@@ -76,6 +78,9 @@ class MetadataHandler():
                 new_entries.append([pending_eof[received_batch.client_id]])
 
         if len(keys) > 0:
-            self.logger.log(ChangingFile(METADATA_FILENAME, keys, old_entries))
+            self.logger.log(ChangingFile(self.filename, keys, old_entries))
             self.log_seq_num = SeqNumGenerator.seq_num
             self.storage.store_all(keys, new_entries)
+
+    def delete(self):
+        self.storage.delete()
