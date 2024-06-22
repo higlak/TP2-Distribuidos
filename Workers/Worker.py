@@ -388,14 +388,14 @@ class Worker(ABC):
                 return False
             batch = Batch.from_bytes(batch_bytes)
         
-        if not batch or self.is_dup_batch(batch):
-            if not self.communicator.acknowledge_last_message():
-                print(f"[Worker {self.id}] Disconnected from MOM, while acking_message")
-                return False
-        else:
-            if not self.communicator.nack_last_message():
-                print(f"[Worker {self.id}] Disconnected from MOM, while nacking_message")
-                return False
+            if not batch or self.is_dup_batch(batch):
+                if not self.communicator.acknowledge_last_message():
+                    print(f"[Worker {self.id}] Disconnected from MOM, while acking_message")
+                    return False
+            else:
+                if not self.communicator.nack_last_message():
+                    print(f"[Worker {self.id}] Disconnected from MOM, while nacking_message")
+                    return False
         
         self.logger.log(AckedBatch())
         return self.send_any_ready_final_results()

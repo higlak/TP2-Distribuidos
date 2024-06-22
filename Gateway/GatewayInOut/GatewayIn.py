@@ -6,16 +6,19 @@ from utils.Batch import Batch
 from utils.Book import Book
 from utils.DatasetHandler import DatasetLine
 from utils.Review import Review
-from utils.auxiliar_functions import append_extend
+from utils.auxiliar_functions import append_extend, send_all
 from utils.SenderID import SenderID
 
 FIRST_POOL = 0
+ACK_MESSAGE_BYTES = bytearray([0])
 
 class GatewayIn():
     def __init__(self, client_id, socket, next_pools, book_query_numbers, review_query_numbers):
         self.socket = socket
-        self.com = None
         self.sigterm_queue = Queue()
+        self.com = None
+        
+        self.pending_eof = 1
         self.client_id = client_id
         self.id = SenderID(0,0,client_id)
         self.book_query_numbers = book_query_numbers
@@ -36,24 +39,37 @@ class GatewayIn():
         self.close()
 
     def loop(self):
-        while True:
+        while self.pending_eof:
             datasetlines = self.recv_dataset_line_batch()
-            if datasetlines == None:
-                print(f"[GatewayIn {self.client_id}] Socket disconnected")
+            if not self.process_datasetlines(datasetlines):
                 break
-            if datasetlines.is_empty():
-                if not self.send_eof():
-                    print(f"[GatewayIn {self.client_id}] MOM disconnected")
+            if not self.ack_message():
                 break
-            if not self.send_batch_to_all_queries(datasetlines):
+
+    def ack_message(self):
+        send_all(self.socket, ACK_MESSAGE_BYTES)
+        return True
+
+    def process_datasetlines(self, datasetlines):
+        if datasetlines == None:
+            print(f"[GatewayIn {self.client_id}] Socket disconnected")
+            return False
+        datasetlines.sender_id = self.id
+        if datasetlines.is_empty():
+            if not self.send_eof():
                 print(f"[GatewayIn {self.client_id}] MOM disconnected")
-                break
+            return False
+        if not self.send_batch_to_all_queries(datasetlines):
+            print(f"[GatewayIn {self.client_id}] MOM disconnected")
+            return False
+        return True
 
     def recv_dataset_line_batch(self):
         return Batch.from_socket(self.socket, DatasetLine)
     
-    def send_eof(self):
-        return self.com.produce_to_all_group_members(Batch.eof(self.client_id, self.id).to_bytes())
+    def send_eof(self, batch):
+        self.pending_eof -= 1
+        return self.com.produce_to_all_group_members(batch.to_bytes())
         
     def get_query_messages(self, obj, query_number):
         switch = {
@@ -74,9 +90,9 @@ class GatewayIn():
                 objects.append(obj)
         if objects[0].is_book():
             return self.send_objects_to_queries(objects, self.book_query_numbers)
-        return self.send_objects_to_queries(objects, self.review_query_numbers)
+        return self.send_objects_to_queries(objects, self.review_query_numbers, batch.seq_num)
         
-    def send_objects_to_queries(self, objects, queries):
+    def send_objects_to_queries(self, objects, queries, seq_num):
         query_messages = []
         for query_number in queries:
             query_messages = []
@@ -85,18 +101,10 @@ class GatewayIn():
                 if query_message:
                     append_extend(query_messages, query_message)
             pool = f'{query_number}.{FIRST_POOL}'
-            batch = Batch.new(self.client_id, self.id, query_messages)
+            batch = Batch(self.client_id, self.id, seq_num, query_messages)
             if not self.com.produce_batch_of_messages(batch, pool, self.next_pools.shard_by_of_pool(pool)):
                 return False
         return True
-            
-    """
-    def get_hashed_batchs(self, query_messages, query_number):
-        batch = Batch(self.client_id, query_messages)
-        pool_to_send = f"{query_number}.{FIRST_POOL}"
-        amount_of_workers = self.com.amount_of_producer_group(pool_to_send)
-        return batch.get_hashed_batchs(query_number,amount_of_workers) 
-    """
 
     def get_object_from_line(self, datasetLine):
         if datasetLine.is_book():

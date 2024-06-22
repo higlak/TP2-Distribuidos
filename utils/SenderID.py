@@ -3,7 +3,7 @@ from utils.auxiliar_functions import byte_array_to_big_endian_integer, integer_t
 ID_SEPARATOR = '.'
 QUERY_BYTES = 2
 POOL_BYTES = 2
-SENDER_NUM_BYTES = 2
+SENDER_NUM_BYTES = 4
 SENDER_ID_BYTES = QUERY_BYTES + POOL_BYTES + SENDER_NUM_BYTES 
 
 import os

@@ -92,11 +92,11 @@ class Batch():
         
         return {w:Batch(self.client_id, messages) for w, messages in hashed_messages.items()}
     
-    def keep_fields(self):
+    def copy_keeping_fields(self, sender_id):
         new_messages = []
         for message in self.messages:
             new_messages.append(message.copy_keeping_fields(query_result_headers(message.msg_type)))
-        self.messages = new_messages
+        return Batch.new(self.client_id, sender_id, new_messages)
 
     def is_empty(self):
         return len(self.messages) == 0
