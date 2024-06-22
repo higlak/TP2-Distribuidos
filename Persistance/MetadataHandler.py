@@ -16,6 +16,7 @@ class MetadataHandler():
         self.storage = storage
         self.logger = logger
         self.filename = filename
+        self.log_seq_num = -1
     
     @classmethod
     def new(cls, directory, logger, name_specifier=""):
@@ -29,7 +30,7 @@ class MetadataHandler():
     def load_stored_metadata(self):
         stored_metadata = self.storage.get_all_entries()
 
-        last_sent_seq_num = stored_metadata.pop(LAST_SENT_SEQ_NUM, None)
+        last_sent_seq_num = stored_metadata.pop(LAST_SENT_SEQ_NUM, -1)
         pending_eof = {}
         last_received_batch = {}
 
@@ -41,6 +42,7 @@ class MetadataHandler():
             elif entry[0].startswith(LAST_RECEIVED_FROM):
                 sender_id = SenderID.from_string(entry[0].strip(LAST_RECEIVED_FROM))
                 last_received_batch[sender_id] = entry[1]
+        self.log_seq_num = last_sent_seq_num
         return last_sent_seq_num , pending_eof, last_received_batch
     
     def remove_client(self, client_id):
@@ -54,12 +56,13 @@ class MetadataHandler():
         old_entries = []
         new_entries = []
 
-        keys.append(LAST_SENT_SEQ_NUM)
-        if SeqNumGenerator.seq_num - 1 < 0:
-            old_entries.append(None)
-        else:
-            old_entries.append([SeqNumGenerator.get_log_seq_num()])
-        new_entries.append([SeqNumGenerator.seq_num])
+        if SeqNumGenerator.seq_num > self.log_seq_num:
+            keys.append(LAST_SENT_SEQ_NUM)
+            if self.log_seq_num == -1:
+                old_entries.append(None)
+            else:
+                old_entries.append([self.log_seq_num])
+            new_entries.append([SeqNumGenerator.seq_num])
 
         if received_batch:
             keys.append(LAST_RECEIVED_FROM + str(received_batch.sender_id))
@@ -76,6 +79,7 @@ class MetadataHandler():
 
         if len(keys) > 0:
             self.logger.log(ChangingFile(self.filename, keys, old_entries))
+            self.log_seq_num = SeqNumGenerator.seq_num
             self.storage.store_all(keys, new_entries)
 
     def delete(self):
