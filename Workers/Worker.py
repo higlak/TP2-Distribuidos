@@ -88,7 +88,8 @@ class Worker(ABC):
         return PERSISTANCE_PATH + self.id.__repr__() + '/' 
 
     def set_previouse_metadata(self):
-        self.pending_eof, self.last_received_batch = self.metadata_handler.load_stored_metadata()
+        last_sent_seq_num, self.pending_eof, self.last_received_batch = self.metadata_handler.load_stored_metadata()
+        SeqNumGenerator.set_seq_num(last_sent_seq_num)
 
     def load_metadata(self):
         self.metadata_handler = MetadataHandler.new(self.worker_dir(), self.logger)
@@ -113,7 +114,7 @@ class Worker(ABC):
             print(f"Failed to open log")
             return False
         
-        if not self.load_metadata(self.logger):
+        if not self.load_metadata():
             return False
         return True
 

@@ -18,15 +18,16 @@ class MetadataHandler():
     
     @classmethod
     def new(cls, directory, logger):
-        storage, previouse_metadata = KeyValueStorage.new(
+        storage = KeyValueStorage.new(
             directory + METADATA_FILENAME, str, METADATA_KEY_BYTES, [int], [METADATA_NUM_BYTES])
-        if not storage or previouse_metadata == None:
+        if not storage:
             return None
         return MetadataHandler(storage, logger)
     
     def load_stored_metadata(self):
         stored_metadata = self.storage.get_all_entries()
-        SeqNumGenerator.set_seq_num(stored_metadata.pop(LAST_SENT_SEQ_NUM, None))
+
+        last_sent_seq_num = stored_metadata.pop(LAST_SENT_SEQ_NUM, None)
         pending_eof = {}
         last_received_batch = {}
 
@@ -38,7 +39,7 @@ class MetadataHandler():
             elif entry[0].startswith(LAST_RECEIVED_FROM_WORKER):
                 sender_id = SenderID.from_string(entry[0].strip(LAST_RECEIVED_FROM_WORKER))
                 last_received_batch[sender_id] = entry[1]
-        return pending_eof, last_received_batch
+        return last_sent_seq_num , pending_eof, last_received_batch
     
     def remove_client(self, client_id):
         self.storage.remove(CLIENT_PENDING_EOF+str(client_id))

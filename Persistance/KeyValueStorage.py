@@ -221,9 +221,6 @@ class KeyValueStorage():
         all_entries = {}
         i = 0
         while True:
-            #print(i)
-            if i == 1068:
-                pass
             entry = self.get_entry()
             if entry == None:
                 break

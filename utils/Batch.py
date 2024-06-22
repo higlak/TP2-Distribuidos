@@ -120,12 +120,12 @@ class SeqNumGenerator:
 
     @classmethod
     def next_seq_num(cls):
+        cls.generated = True
         cls.seq_num = (cls.seq_num + 1) % AMOUNT_OF_SEQ_NUMS
         return cls.seq_num
     
     @classmethod
     def set_seq_num(cls, num):
-        cls.generated = True
         if num == None:
             cls.seq_num = -1
         else: 
@@ -134,7 +134,7 @@ class SeqNumGenerator:
     @classmethod
     def get_log_seq_num(cls):
         if cls.generated:
-            return cls.generated -1
+            return cls.seq_num -1
         return cls.seq_num
 
 if __name__ == '__main__':
