@@ -8,6 +8,7 @@ from utils.QueryMessage import QueryMessage, query_result_headers, query_to_quer
 class ClientWriter():
     def __init__(self, id, socket, queries, query_path):
         self.socket = socket
+        self.last_batch = -1
         writers = {}
         for query in queries:
             query_result = query_to_query_result(query)
@@ -31,11 +32,17 @@ class ClientWriter():
             if not result_batch:
                 print("[ClientWriter] Socket disconnected")
                 break
+            if self.dupped_batch(result_batch):
+                continue
             if result_batch.is_empty():
                 print("[ClientWriter] Finished receiving")
                 break
             self.writers[result_batch[0].msg_type].append_objects(result_batch)
+            self.last_batch = result_batch.seq_num
         self.close()
+
+    def dupped_batch(self, batch):
+        return self.last_batch == batch.seq_num
 
     def close(self):
         for writer in self.writers.values():
