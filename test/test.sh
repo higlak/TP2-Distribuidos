@@ -23,8 +23,12 @@ echo ---------------test solo query 3 ejemplo chico 2 clientes---------------
 echo
 
 resultado=0
+resultado_cliente0="./data/client0/result3.csv"
+resultado_cliente1="./data/client1/result3.csv"
+sort "$resultado_cliente0" -o "$resultado_cliente0"
+sort "$resultado_cliente1" -o "$resultado_cliente1"
 
-if cmp -s "./test/result3.csv" "./data/client0/result3.csv"; then
+if cmp -s "./test/result3.csv" "$resultado_cliente0"; then
     echo
     echo -e "\e[32mSe recibio correctamente el primer cliente\e[0m"
     echo
@@ -35,7 +39,7 @@ else
     resultado=$((resultado + 1))
 fi
 
-if cmp -s "./test/result3.csv" "./data/client0/result3.csv"; then
+if cmp -s "./test/result3.csv" "$resultado_cliente1"; then
     echo
     echo -e "\e[32mSe recibio correctamente el segundo cliente\e[0m"
     echo

@@ -20,7 +20,29 @@ services:
       - PYTHONUNBUFFERED=1
       - WORKER_ID=3.0.0
       - EOF_TO_RECEIVE=1
-      - NEXT_POOL_WORKERS=1
+      - NEXT_POOL_WORKERS=2
+      - FORWARD_TO=3.1
+      - SHARD_BY=title
+      - WORKER_FIELD=year
+      - WORKER_VALUE=1990,1999
+      - FAULTY=True
+    volumes:
+      - persistanceVolume:/persistance_files
+
+  filter3.0.1:
+    build:
+      context: ./
+      dockerfile: Filter/Filter.dockerfile
+    restart: on-failure
+    depends_on:
+      - rabbitmq
+    links: 
+      - rabbitmq
+    environment:
+      - PYTHONUNBUFFERED=1
+      - WORKER_ID=3.0.1
+      - EOF_TO_RECEIVE=1
+      - NEXT_POOL_WORKERS=2
       - FORWARD_TO=3.1
       - SHARD_BY=title
       - WORKER_FIELD=year
@@ -41,7 +63,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - WORKER_ID=3.1.0
-      - EOF_TO_RECEIVE=1
+      - EOF_TO_RECEIVE=2
       - NEXT_POOL_WORKERS=1
       - FORWARD_TO=Gateway
       - SHARD_BY=
@@ -49,7 +71,29 @@ services:
       - WORKER_VALUE=20
       - ACCUMULATE_BY=title
       - FAULTY=True
+    volumes:
+      - persistanceVolume:/persistance_files
 
+  accumulator3.1.1:
+    build:
+      context: ./
+      dockerfile: Accumulator/Accumulator.dockerfile
+    restart: on-failure
+    depends_on:
+      - rabbitmq
+    links: 
+      - rabbitmq
+    environment:
+      - PYTHONUNBUFFERED=1
+      - WORKER_ID=3.1.1
+      - EOF_TO_RECEIVE=2
+      - NEXT_POOL_WORKERS=1
+      - FORWARD_TO=Gateway
+      - SHARD_BY=
+      - WORKER_FIELD=review_count
+      - WORKER_VALUE=20
+      - ACCUMULATE_BY=title
+      - FAULTY=True
     volumes:
       - persistanceVolume:/persistance_files
 
@@ -69,8 +113,8 @@ services:
       - REVIEW_QUERIES=3
       - FORWARD_TO=3.0
       - SHARD_BY=title
-      - NEXT_POOL_WORKERS=1
-      - EOF_TO_RECEIVE=1
+      - NEXT_POOL_WORKERS=2
+      - EOF_TO_RECEIVE=2
 
   client0:
     build:

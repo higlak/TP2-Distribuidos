@@ -221,6 +221,7 @@ class Worker(ABC):
         if not self.send_batch(Batch.eof(client_id, self.id)):
             print(f"[Worker {self.id}] Disconnected from MOM, while sending eof")
             return False
+        print(f"\n [Worker {self.id}] Sent Eof for clietn {client_id}\n")
         self.logger.log(FinishedSendingResults(client_id, SeqNumGenerator.seq_num))
         self.metadata_handler.update_seq_num()
         return True
@@ -315,8 +316,8 @@ class Worker(ABC):
             batch = Batch.from_bytes(batch_bytes)
             
             if self.id == SenderID(3,1,0):
-                print("\n recibido: ", batch.seq_num)
-                print("en metdadata: ", self.last_received_batch.get(batch.sender_id, None))
+                print(f"\n recibo:{batch.seq_num} de: {batch.sender_id}")
+                print(f"en metdadata:{self.last_received_batch.get(batch.sender_id, None)} de: {batch.sender_id}")
                 print(self.client_contexts)
 
             ########### filter dup
