@@ -51,6 +51,11 @@ class MetadataHandler():
     def update_seq_num(self):
         self.storage.store(LAST_SENT_SEQ_NUM, [SeqNumGenerator.seq_num])
 
+    def dump_eof_to_receive(self, client_id, eof_to_receive):
+        key = CLIENT_PENDING_EOF + str(client_id)
+        self.logger.log(ChangingFile(self.filename, [key], [None]))
+        self.storage.store(key, [eof_to_receive])
+
     def dump_metadata_to_disk(self, last_received_batch, pending_eof, received_batch=None):
         keys = []
         old_entries = []

@@ -1,5 +1,6 @@
 from queue import Queue
 import signal
+import time
 
 from CommunicationMiddleware.middleware import Communicator
 from Persistance.MetadataHandler import MetadataHandler
@@ -14,11 +15,12 @@ PERSISTANCE_DIR = '/persistance_files/'
 LOG_FILENAME = 'log_out.bin'
 
 class GatewayOut():
-    def __init__(self, recv_conn, eof_to_receive):
+    def __init__(self, gateway_conn, eof_to_receive):
         self.com = None
         self.sigterm_queue = Queue()
         self.eof_to_receive = eof_to_receive
-        self.recv_clients = recv_conn
+        self.gateway_conn = gateway_conn
+        self.finished = False
         
         self.metadata_handler = None
         self.logger = None
@@ -31,6 +33,7 @@ class GatewayOut():
     def handle_SIGTERM(self, _signum, _frame):
         print("\n\n [GatewayOut] SIGTERM detected\n\n")
         self.sigterm_queue.put(True)
+        self.finished = True
         self.close()
 
     def connect(self):
@@ -66,14 +69,14 @@ class GatewayOut():
         return False
 
     def loop(self):
-        while True:
+        while not self.finished:
             batch_bytes = self.com.consume_message(GATEWAY_QUEUE_NAME)
             if batch_bytes == None:
                 print(f"[GatewayOut] Disconnected from MOM")
                 break
             batch = Batch.from_bytes(batch_bytes)
 
-            self.get_new_clients()
+            self.get_clients_until(batch.client_id)
 
             if not batch or self.is_dup_batch(batch):
                 if not self.com.acknowledge_last_message():
@@ -89,18 +92,46 @@ class GatewayOut():
             if not self.acknowledge_last_message():
                 break
 
-            if not self.pending_eof[batch.client_id]:
-                self.finished_client(batch.client_id)
+            if self.pending_eof.get(batch.client_id, None) == 0:
+                if not self.finished_client(batch.client_id):
+                    break
             
             self.logger.clean()
 
-    def get_new_clients(self):
-        while self.recv_clients.poll():
-            id, client_socket = self.recv_clients.recv()
-            print(f"[GatewatOut] Received new client with id: {id}")
-            self.clients_sockets[id] = client_socket
+    def add_client(self, client_id, client_socket):
+        print(f"[GatewatOut] Received new client with id: {id}")
+        if id not in self.clients_sockets:
             self.pending_eof[id] = self.eof_to_receive
+            self.metadata_handler.dump_eof_to_receive(id, self.eof_to_receive)
+        self.clients_sockets[id] = client_socket
+
+    def get_clients_until(self, client_id):
+        while not self.finished:
+            if not self.gateway_conn.poll():
+                if client_id in self.clients_sockets:
+                    break
+                else:
+                    time.sleep(0.1)
+                    continue
+            id, client_socket = self.gateway_conn.recv()
+
+            if client_socket == None:
+                self.clients_sockets[client_id] = None
+            else:
+                self.add_client(id, client_socket)
     
+    def send_batch_to_client(self, client_id, batch):
+        if self.clients_sockets[client_id] == None:
+            return True
+        try:
+            send_all(self.clients_sockets[client_id], batch.to_bytes())
+        except OSError as e:
+            print(f"Disconected from client {client_id}, {e}")
+            if self.finished:
+                return False
+            self.clients_sockets[client_id] = None
+            return False
+
     def proccess_batch(self, batch):
         client_id = batch.client_id
         if not self.clients_sockets.get(client_id, None):
@@ -115,11 +146,7 @@ class GatewayOut():
         else:
             batch_to_send = batch.copy_keeping_fields(GATEWAY_SENDER_ID)
             print(f"[GatewayOut] Sending result to client {client_id} with {batch.size()} elements")
-            try:
-                send_all(self.clients_sockets[client_id], batch_to_send.to_bytes())
-            except OSError as e:
-                print("Disconected from client")
-                return False #hay que hacer que no corte
+            self.send_batch_to_client(client_id, batch_to_send)
         return True
     
     def dump_to_disk(self, received_batch):
@@ -141,9 +168,11 @@ class GatewayOut():
 
     def finished_client(self, client_id):
         print(f"[Gateway] No more EOF to receive. Sending EOF to client {client_id}")
-        send_all(self.clients_sockets[client_id], Batch.eof(client_id, GATEWAY_SENDER_ID).to_bytes())
+        if not self.send_batch_to_client(client_id, Batch.eof(client_id, GATEWAY_SENDER_ID)):
+            return False
         self.logger.log(FinishedSendingResults(client_id, SeqNumGenerator.seq_num))
         self.remove_client(client_id)
+        return True
 
     def set_previouse_metadata(self):
         last_sent_seq_num, self.pending_eof, self.last_received_batch = self.metadata_handler.load_stored_metadata()
@@ -175,16 +204,21 @@ class GatewayOut():
                 self.metadata_handler.storage.store(key, old_entry)
 
         self.set_previouse_metadata()
-
+        self.send_last_execution_clients()
         return True
 
     def handle_any_finished_client(self):
-        finished_clients = []
+        finished_client = None
         for client_id, pending_eof in self.pending_eof.items():
             if pending_eof == 0:
-                finished_clients.append(client_id)
-        for client_id in finished_clients:
-            self.finished_client(client_id)
+                finished_client = client_id
+
+        if finished_client == None:
+            return True
+
+        self.get_clients_until(finished_client)
+        if not self.finished_client(finished_client):
+            return False
 
         return True
 
@@ -214,7 +248,7 @@ class GatewayOut():
         return self.handle_any_finished_client()
 
     def initialize_based_on_log_acked_batch(self, log):
-        return self.send_any_ready_final_results()
+        return self.handle_any_finished_client()
     
     def initialize_based_on_log_finished_sending_results(self, log):
         SeqNumGenerator.set_seq_num(log.batch_seq_num)
@@ -222,12 +256,21 @@ class GatewayOut():
         self.remove_client(log.client_id)
         return True
     
+    def send_last_execution_clients(self):
+        for client_id in self.pending_eof.keys():
+            self.gateway_conn.send(client_id)
+        self.gateway_conn.send(None)
+
     def initialize_based_on_last_execution(self):
         last_log = self.logger.read_last_log()
         print(last_log)
         if not last_log:
+            self.send_last_execution_clients()
             return True
         
+        if last_log.log_type != LogType.ChangingFile:
+            self.send_last_execution_clients()
+
         switch = {
             LogType.ChangingFile: self.intialize_based_on_log_changing_file,
             LogType.FinishedWriting: self.initialize_based_on_log_finished_writing,

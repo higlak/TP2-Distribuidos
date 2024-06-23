@@ -17,6 +17,7 @@ class GatewayIn():
         self.socket = socket
         self.sigterm_queue = Queue()
         self.com = None
+        self.finished = False
         
         self.pending_eof = 1
         self.client_id = client_id
@@ -28,6 +29,7 @@ class GatewayIn():
     
     def handle_SIGTERM(self, _signum, _frame):
         self.sigterm_queue.put(True)
+        self.finished = True
         print(f"\n\n [GatewayIn {self.client_id}] SIGTERM detected\n\n")
         self.close()
 
@@ -41,13 +43,21 @@ class GatewayIn():
     def loop(self):
         while self.pending_eof:
             datasetlines = self.recv_dataset_line_batch()
+            if not datasetlines:
+                break
             if not self.process_datasetlines(datasetlines):
                 break
             if not self.ack_message():
                 break
 
     def ack_message(self):
-        send_all(self.socket, ACK_MESSAGE_BYTES)
+        try:
+            send_all(self.socket, ACK_MESSAGE_BYTES)
+        except OSError as e:
+            print(f"[GatewayIn {self.client_id}] Disconected from client, {e}")
+            if not self.finished:
+                self.send_eof()
+            return False
         return True
 
     def process_datasetlines(self, datasetlines):
@@ -65,7 +75,13 @@ class GatewayIn():
         return True
 
     def recv_dataset_line_batch(self):
-        return Batch.from_socket(self.socket, DatasetLine)
+        batch = Batch.from_socket(self.socket, DatasetLine)
+        if not batch:
+            print(f"[GatewayIn {self.client_id}] Disconected from client, {e}")
+            if not self.finished:
+                self.send_eof()
+            return None
+        return batch
     
     def send_eof(self, batch):
         self.pending_eof -= 1

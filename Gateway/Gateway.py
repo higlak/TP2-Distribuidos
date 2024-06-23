@@ -1,5 +1,6 @@
 import signal
 from multiprocessing import Process, Pipe
+import time
 from utils.NextPools import NextPools
 from utils.Batch import Batch, AMOUNT_OF_CLIENT_ID_BYTES
 from utils.SenderID import SenderID
@@ -13,9 +14,10 @@ QUERY_SEPARATOR = ","
 AMOUNT_OF_IDS = 2**(8*AMOUNT_OF_CLIENT_ID_BYTES) - 1
 JOIN_HANDLE_POS = 1
 ID_POS = 0
-SERVER_SOCKET_TIMEOUT = 5
+SERVER_SOCKET_TIMEOUT = 1
 GATEWAY_SENDER_ID = SenderID(0,0,1)
 NO_CLIENT_ID = AMOUNT_OF_IDS
+TIME_FOR_RECONNECTION = 10
 
 class Gateway():
     def __init__(self, port, next_pools, eof_to_receive, book_query_numbers, review_query_numbers):
@@ -26,16 +28,18 @@ class Gateway():
         self.client_handlers = {} 
         self.server_socket = None
         self.next_id = 0
-        
-        recv_conn, send_conn = Pipe(False)
-        self.gateway_out_pipe = send_conn
-        self.gateway_out_handler = Process(target=gateway_out_main, args=[recv_conn, self.eof_to_receive])
+        self.last_execution_clients = set()
+
+        gateway_out_conn, self.gateway_out_conn = Pipe()
+        self.gateway_out_handler = Process(target=gateway_out_main, args=[gateway_out_conn, self.eof_to_receive])
         self.gateway_out_handler.start()
         signal.signal(signal.SIGTERM, self.handle_SIGTERM)
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_socket.settimeout(SERVER_SOCKET_TIMEOUT)
         self.server_socket.bind(('',port))
         self.server_socket.listen()
+
+        self.starting_time = time.time()
         
         print(f"[Gateway] Listening on: {self.server_socket.getsockname()}")
      
@@ -85,11 +89,13 @@ class Gateway():
             self.client_handlers[client_id] = gateway_in_handler
         else:
             if client_id in self.client_handlers:
-                self.gateway_out_pipe.send((client_id, client_socket))
+                self.gateway_out_conn.send((client_id, client_socket))
                 self.client_handlers[client_id].start()
             else:
-                gateway_in_handler = Process(target=gateway_in_main, args=[client_id, client_socket, self.next_pools, self.book_query_numbers, self.review_query_numbers])
-                self.client_handlers[client_id] = gateway_in_handler
+                if not self.reconected_too_late():
+                    gateway_in_handler = Process(target=gateway_in_main, args=[client_id, client_socket, self.next_pools, self.book_query_numbers, self.review_query_numbers])
+                    self.client_handlers[client_id] = gateway_in_handler
+                    self.last_execution_clients.remove(client_id)
 
         print(f"[Gateway] Client {client_id} connected")
     
@@ -115,10 +121,26 @@ class Gateway():
         for id in finished:
             self.client_handlers.pop(id)
 
+    def get_last_execution_clients(self):
+        client_id = self.gateway_out_conn.recv()
+        while client_id != None:
+            self.last_execution_clients.append(client_id)
+            client_id = self.gateway_out_conn.recv()
+
+    def reconected_too_late(self):
+        self.starting_time + TIME_FOR_RECONNECTION > time.time()
+
+    def handle_last_execution_client_reconection(self):
+        if self.reconected_too_late():
+            for id in self.last_execution_clients:
+                self.gateway_out_conn.send((id, None))
+
     def run(self):
+        self.get_last_execution_clients()
         while True:
             try:
                 self.handle_new_client_connection()
+                self.handle_last_execution_client_reconection()
                 self.join_clients(blocking=False)
             except Exception:
                 print("[Gateway] Socket disconnected \n")
