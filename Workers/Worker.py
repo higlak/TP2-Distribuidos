@@ -71,7 +71,7 @@ class Worker(ABC):
     def load_all_context(self):
         try:
             for filename in os.listdir(self.worker_dir()):
-                if filename == METADATA_FILENAME or filename == LOG_FILENAME:
+                if filename == METADATA_FILENAME + '.bin' or filename == LOG_FILENAME:
                     continue
                 path = os.path.join(self.worker_dir(), filename)
                 if os.path.isfile(path):            
@@ -315,10 +315,10 @@ class Worker(ABC):
                 break
             batch = Batch.from_bytes(batch_bytes)
             
-            if self.id == SenderID(3,1,0):
-                print(f"\n recibo:{batch.seq_num} de: {batch.sender_id}")
-                print(f"en metdadata:{self.last_received_batch.get(batch.sender_id, None)} de: {batch.sender_id}")
-                print(self.client_contexts)
+            #if self.id == SenderID(3,1,0):
+                #print(f"\n recibo:{batch.seq_num} de: {batch.sender_id}")
+                #print(f"en metdadata:{self.last_received_batch.get(batch.sender_id, None)} de: {batch.sender_id}")
+                #print(self.client_contexts)
 
             ########### filter dup
             if not batch or self.is_dup_batch(batch):
@@ -353,7 +353,7 @@ class Worker(ABC):
     def intialize_based_on_log_changing_file(self, log):
         logs = self.logger.read_while_log_type(LogType.ChangingFile)
         for log in logs:
-            if log.filename == METADATA_FILENAME:
+            if log.filename == METADATA_FILENAME + '.bin':
                 storage = self.metadata_handler.storage
                 client_id = None
             else:
@@ -497,7 +497,7 @@ if __name__ == '__main__':
             return worker
 
         def get_test_logger(self, n):
-            logs = [ChangingFile(METADATA_FILENAME, [LAST_SENT_SEQ_NUM, LAST_RECEIVED_FROM_WORKER + '1.0.1'], [[0], [2]]),
+            logs = [ChangingFile(METADATA_FILENAME + '.bin', [LAST_SENT_SEQ_NUM, LAST_RECEIVED_FROM_WORKER + '1.0.1'], [[0], [2]]),
                     ChangingFile(TEST_CONTEXT_FILENAME, ["2", "4"], [[1], None]),
                     FinishedWriting()]
             log_file = BytesIO(b"")

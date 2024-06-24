@@ -2,7 +2,7 @@ from Workers.Filters import Filter
 from utils.QueryMessage import ALL_MESSAGE_FIELDS, YEAR_FIELD, TITLE_FIELD
 import os
 
-from utils.faulty import set_faulty_if_needed
+from utils.faulty import set_worker_as_faulty_if_needed
 
 def get_env_worker_field():
     worker_field = os.getenv('WORKER_FIELD')
@@ -35,7 +35,7 @@ def get_env_filter_vars():
     return filter_type, filter_value, drop_fields
 
 def main():
-    set_faulty_if_needed()
+    set_worker_as_faulty_if_needed()
     filter_field, filter_value, drop_fields = get_env_filter_vars() 
     print(f"Iniciando filtro por {filter_field} = {filter_value}")
     if not filter_field:

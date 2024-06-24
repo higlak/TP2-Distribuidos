@@ -11,7 +11,6 @@ services:
     build:
       context: ./
       dockerfile: Filter/Filter.dockerfile
-    restart: on-failure
     depends_on:
       - rabbitmq
     links: 
@@ -25,7 +24,6 @@ services:
       - SHARD_BY=title
       - WORKER_FIELD=year
       - WORKER_VALUE=1990,1999
-      - FAULTY=True
     volumes:
       - persistanceVolume:/persistance_files
 
@@ -33,7 +31,6 @@ services:
     build:
       context: ./
       dockerfile: Filter/Filter.dockerfile
-    restart: on-failure
     depends_on:
       - rabbitmq
     links: 
@@ -47,7 +44,6 @@ services:
       - SHARD_BY=title
       - WORKER_FIELD=year
       - WORKER_VALUE=1990,1999
-      - FAULTY=True
     volumes:
       - persistanceVolume:/persistance_files
 
@@ -55,7 +51,6 @@ services:
     build:
       context: ./
       dockerfile: Accumulator/Accumulator.dockerfile
-    restart: on-failure
     depends_on:
       - rabbitmq
     links: 
@@ -70,7 +65,7 @@ services:
       - WORKER_FIELD=review_count
       - WORKER_VALUE=20
       - ACCUMULATE_BY=title
-      - FAULTY=True
+
     volumes:
       - persistanceVolume:/persistance_files
 
@@ -78,7 +73,6 @@ services:
     build:
       context: ./
       dockerfile: Accumulator/Accumulator.dockerfile
-    restart: on-failure
     depends_on:
       - rabbitmq
     links: 
@@ -93,7 +87,7 @@ services:
       - WORKER_FIELD=review_count
       - WORKER_VALUE=20
       - ACCUMULATE_BY=title
-      - FAULTY=True
+
     volumes:
       - persistanceVolume:/persistance_files
 
@@ -101,7 +95,7 @@ services:
     build:
       context: ./
       dockerfile: Gateway/Gateway.dockerfile
-    restart: on-failure
+    restart: always
     depends_on:
       - rabbitmq
     links: 
@@ -115,6 +109,9 @@ services:
       - SHARD_BY=title
       - NEXT_POOL_WORKERS=2
       - EOF_TO_RECEIVE=2
+      - FAULTY=True
+    volumes:
+      - persistanceGateway:/persistance_files
 
   client0:
     build:
@@ -156,4 +153,10 @@ volumes:
     driver_opts:
       type: none
       device: ./persistance_files
+      o: bind
+  persistanceGateway:
+    driver: local
+    driver_opts:
+      type: none
+      device: ./persistanceGateway
       o: bind

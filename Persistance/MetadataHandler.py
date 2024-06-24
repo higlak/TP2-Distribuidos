@@ -9,6 +9,7 @@ METADATA_NUM_BYTES = 4
 METADATA_FILENAME = 'metadata'
 LAST_SENT_SEQ_NUM = "last sent seq_num"
 CLIENT_PENDING_EOF = "pending eof client"
+LAST_CLIENT_ID = "last clientid"
 LAST_RECEIVED_FROM = "last received from" 
 
 class MetadataHandler():
@@ -17,6 +18,7 @@ class MetadataHandler():
         self.logger = logger
         self.filename = filename
         self.log_seq_num = -1
+        self.log_last_client = -1
     
     @classmethod
     def new(cls, directory, logger, name_specifier=""):
@@ -27,10 +29,11 @@ class MetadataHandler():
             return None
         return MetadataHandler(storage, logger, filename)
     
-    def load_stored_metadata(self):
+    def load_stored_metadata(self, get_last_client=False):
         stored_metadata = self.storage.get_all_entries()
 
-        last_sent_seq_num = stored_metadata.pop(LAST_SENT_SEQ_NUM, -1)
+        self.last_sent_seq_num = stored_metadata.pop(LAST_SENT_SEQ_NUM, -1)
+        self.log_last_client = stored_metadata.pop(LAST_CLIENT_ID, -1)
         pending_eof = {}
         last_received_batch = {}
 
@@ -42,8 +45,10 @@ class MetadataHandler():
             elif entry[0].startswith(LAST_RECEIVED_FROM):
                 sender_id = SenderID.from_string(entry[0].strip(LAST_RECEIVED_FROM))
                 last_received_batch[sender_id] = entry[1]
-        self.log_seq_num = last_sent_seq_num
-        return last_sent_seq_num , pending_eof, last_received_batch
+        
+        if not get_last_client:
+            return self.last_sent_seq_num , pending_eof, last_received_batch
+        return self.last_sent_seq_num , pending_eof, last_received_batch, self.log_last_client
     
     def remove_client(self, client_id):
         self.storage.remove(CLIENT_PENDING_EOF+str(client_id))
@@ -51,10 +56,20 @@ class MetadataHandler():
     def update_seq_num(self):
         self.storage.store(LAST_SENT_SEQ_NUM, [SeqNumGenerator.seq_num])
 
-    def dump_eof_to_receive(self, client_id, eof_to_receive):
-        key = CLIENT_PENDING_EOF + str(client_id)
-        self.logger.log(ChangingFile(self.filename, [key], [None]))
-        self.storage.store(key, [eof_to_receive])
+    def dump_new_client(self, client_id, eof_to_receive):
+        keys = [CLIENT_PENDING_EOF + str(client_id), LAST_CLIENT_ID]
+        values = [[eof_to_receive], [client_id]]
+        if self.log_last_client == -1:
+            log_last_client = None
+        else:
+            log_last_client = [self.log_last_client]
+
+        old_values = [None, log_last_client]
+
+        self.logger.log(ChangingFile(self.filename, keys, old_values))
+        self.storage.store_all(keys, values)
+
+        self.log_last_client = client_id
 
     def dump_metadata_to_disk(self, last_received_batch, pending_eof, received_batch=None):
         keys = []

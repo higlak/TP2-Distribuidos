@@ -4,9 +4,10 @@ import time
 from utils.NextPools import NextPools
 from utils.Batch import Batch, AMOUNT_OF_CLIENT_ID_BYTES
 from utils.SenderID import SenderID
-from utils.auxiliar_functions import get_env_list, send_all
-from GatewayInOut.GatewayIn import gateway_in_main
-from GatewayInOut.GatewayOut import gateway_out_main
+from utils.faulty import set_classes_as_faulty_if_needed
+from utils.auxiliar_functions import get_env_list, process_has_been_started, send_all
+from GatewayInOut.GatewayIn import gateway_in_main, GatewayIn
+from GatewayInOut.GatewayOut import gateway_out_main, GatewayOut
 import socket
 import os
 
@@ -29,9 +30,11 @@ class Gateway():
         self.server_socket = None
         self.next_id = 0
         self.last_execution_clients = set()
+        self.finished = False
 
-        gateway_out_conn, self.gateway_out_conn = Pipe()
-        self.gateway_out_handler = Process(target=gateway_out_main, args=[gateway_out_conn, self.eof_to_receive])
+        gateway_conn, self.gateway_out_conn = Pipe()
+        self.gateway_out_handler = Process(target=gateway_out_main, args=[gateway_conn, self.eof_to_receive])
+        self.gateway_out_handler.daemon = True
         self.gateway_out_handler.start()
         signal.signal(signal.SIGTERM, self.handle_SIGTERM)
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -62,47 +65,78 @@ class Gateway():
 
     def handle_SIGTERM(self, _signum, _frame):
         print("\n\n [Gateway] SIGTERM detected\n\n")
-        for client_handler in self.client_handlers.values():
-            client_handler.terminate()
-        self.gateway_out_handler.terminate()
-        if self.server_socket:
-            self.server_socket.close()
+        self.finished = False
+        self.close()
 
     def get_next_id(self):
         id = self.next_id
         self.next_id = (self.next_id + 1) % AMOUNT_OF_IDS
         return id
 
+    def send_to_gateway_out(self, to_send):
+        try:
+            self.gateway_out_conn.send(to_send)
+            return True
+        except Exception as e:
+            print("[Gateway] error communicating with gateway out. ", e)
+        return False
+
     def handle_new_client_connection(self):
         try:
             client_socket, addr = self.server_socket.accept()
         except socket.timeout:
-            return
+            return True
+        except OSError as e:
+            print("[Gateway] Error accepting connections")
+            return False
 
         client_id = self.rcv_client_id(client_socket)
         if client_id == None:
-            return
+            client_socket.close()
+            return True
 
         if client_id == NO_CLIENT_ID:
-            client_id = self.send_next_client_id(client_socket)
-            gateway_in_handler = Process(target=gateway_in_main, args=[client_id, client_socket, self.next_pools, self.book_query_numbers, self.review_query_numbers])
-            self.client_handlers[client_id] = gateway_in_handler
+            if not self.handle_receiving_connection(client_socket, client_id):
+                return False
+            print("[Gateway] New client recv conn")
         else:
             if client_id in self.client_handlers:
-                self.gateway_out_conn.send((client_id, client_socket))
-                self.client_handlers[client_id].start()
+                if not self.send_to_gateway_out((client_id, client_socket)):
+                    return False
+                if not process_has_been_started(self.client_handlers[client_id]):
+                    self.client_handlers[client_id].start()
             else:
                 if not self.reconected_too_late():
-                    gateway_in_handler = Process(target=gateway_in_main, args=[client_id, client_socket, self.next_pools, self.book_query_numbers, self.review_query_numbers])
-                    self.client_handlers[client_id] = gateway_in_handler
-                    self.last_execution_clients.remove(client_id)
+                    if not self.handle_receiving_connection(client_socket, client_id):
+                        return False
+                    print("[Gateway] New client recv conn")
+                    try:
+                        self.last_execution_clients.remove(client_id)
+                    except:
+                        client_socket.close()
+                        print("[Gateway] I closed it, so sad")
 
         print(f"[Gateway] Client {client_id} connected")
+        return True
     
-    def send_next_client_id(self, sock):
-        id = self.get_next_id()
+    def handle_receiving_connection(self, client_socket, client_id):
+        client_id = self.send_client_id(client_socket, client_id)
+        if client_id == None:
+            return False
+        gateway_in_handler = Process(target=gateway_in_main, args=[client_id, client_socket, self.next_pools, self.book_query_numbers, self.review_query_numbers])
+        gateway_in_handler.daemon = True
+        self.client_handlers[client_id] = gateway_in_handler
+        return True
+    
+    def send_client_id(self, sock, id=NO_CLIENT_ID):
+        if id == NO_CLIENT_ID:
+            id = self.get_next_id()
         batch = Batch.new(id, GATEWAY_SENDER_ID, [])
-        send_all(sock, batch.to_bytes())
+        try:
+            send_all(sock, batch.to_bytes())
+        except OSError as e:
+            print("[Gateway] Disconected sending id")
+            return None
         print(f"[Gateway] Assigning client id {id}")
         return id
 
@@ -110,22 +144,31 @@ class Gateway():
         id_batch = Batch.from_socket(sock)
         if id_batch:
             return id_batch.client_id
+        print("[Gateway] Failed to receive client_id")
         return None
 
     def join_clients(self, blocking):
         finished = []
+        process_failed = False
         for id, client_handler in self.client_handlers.items():
-            if (blocking or not client_handler.is_alive()) and client_handler.exitcode != None:
+            if (blocking or not client_handler.is_alive()) and process_has_been_started(client_handler):
                 client_handler.join()
+                if client_handler.exitcode != 0:
+                    process_failed = True
                 finished.append(id)
         for id in finished:
             self.client_handlers.pop(id)
+        return not process_failed
 
     def get_last_execution_clients(self):
-        client_id = self.gateway_out_conn.recv()
-        while client_id != None:
-            self.last_execution_clients.append(client_id)
+        try:
+            self.next_id = self.gateway_out_conn.recv() + 1
             client_id = self.gateway_out_conn.recv()
+            while client_id != None:
+                self.last_execution_clients.add(client_id)
+                client_id = self.gateway_out_conn.recv()
+        except Exception as e:
+            print("[Gateway] Disconected from_gateway out")
 
     def reconected_too_late(self):
         self.starting_time + TIME_FOR_RECONNECTION > time.time()
@@ -133,27 +176,43 @@ class Gateway():
     def handle_last_execution_client_reconection(self):
         if self.reconected_too_late():
             for id in self.last_execution_clients:
-                self.gateway_out_conn.send((id, None))
+                if not self.send_to_gateway_out((id, None)):
+                    return False
+                #meter al sistema los eof(se la bancan los workers si es lo unico que tienen de un cliente?)
+        return True
 
     def run(self):
         self.get_last_execution_clients()
-        while True:
-            try:
-                self.handle_new_client_connection()
-                self.handle_last_execution_client_reconection()
-                self.join_clients(blocking=False)
-            except Exception:
-                print("[Gateway] Socket disconnected \n")
+        while not self.finished:
+            print("[Gateway] en loop, ",self.client_handlers)
+            if not self.handle_new_client_connection():
                 break
-        
+            if not self.handle_last_execution_client_reconection():
+                break
+            if not self.join_clients(blocking=False):
+                break
+
         self.close()
+        if not self.finished:
+            print("[Gateway] me fui sin sigterm")
     
     def close(self):
+        if self.finished:
+            return
+        for client_handler in self.client_handlers.values():
+            print("[Gateway] en el terminate, ",self.client_handlers)
+            print("[Gateway] en el terminate el elemento, ",client_handler)
+            if client_handler.is_alive():
+                client_handler.terminate()
+        self.gateway_out_handler.terminate()
+        if self.server_socket:
+            self.server_socket.close()
         self.join_clients(blocking=True)
         self.gateway_out_handler.join()
         self.server_socket.close()
 
 def main():
+    set_classes_as_faulty_if_needed([Gateway, GatewayIn, GatewayOut])
     gateway = Gateway.new()
     if not gateway:
         return None

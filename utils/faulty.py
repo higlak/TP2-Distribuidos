@@ -1,24 +1,32 @@
 import os
 import random
 import time
-from Workers.Worker import Worker
-from Workers.Accumulators import Accumulator
-from Workers.Filters import Filter
 from Persistance.KeyValueStorage import KeyValueStorage
 from Persistance.log import LogReadWriter
+from Persistance.MetadataHandler import MetadataHandler
+try:
+    from Workers.Worker import Worker
+    from Workers.Accumulators import Accumulator
+    from Workers.Filters import Filter
+except:
+    from GatewayInOut.GatewayIn import GatewayIn
+    from GatewayInOut.GatewayOut import GatewayOut
 
-PANIC_PROB = 0.0005
+#PANIC_PROB = 0.0005
+PANIC_PROB = 0.001
 
 class FaultyError(Exception):
     def __init__(self, msg):
         super().__init__(msg)
 
-def set_faulty_if_needed():
+def set_worker_as_faulty_if_needed():
+    set_classes_as_faulty_if_needed([Worker, Accumulator, Filter])
+
+def set_classes_as_faulty_if_needed(classes):
     if os.getenv('FAULTY'):
-        set_class_as_faulty(Worker)
-        set_class_as_faulty(Accumulator)
-        set_class_as_faulty(Filter)
-        #set_class_as_faulty(KeyValueStorage)
+        for c in classes:
+            set_class_as_faulty(c)
+        set_class_as_faulty(KeyValueStorage)
         set_class_as_faulty(LogReadWriter)
 
 def get_new_method(cls, old_method, method_name):

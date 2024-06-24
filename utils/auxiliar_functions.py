@@ -79,3 +79,6 @@ def next_power_of_2_exponent(n):
 
 def smalles_scale_for_str(string):
     return next_power_of_2_exponent(len(string.encode()))
+
+def process_has_been_started(process):
+    return process._popen != None

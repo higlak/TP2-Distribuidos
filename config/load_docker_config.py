@@ -36,6 +36,12 @@ VOLUMES = """volumes:
     driver_opts:
       type: none
       device: ./persistance_files
+      o: bind
+  persistanceGateway:
+    driver: local
+    driver_opts:
+      type: none
+      device: ./persistanceGateway
       o: bind"""
 
 class Pool():
@@ -154,7 +160,9 @@ def process_gateway(queries, eof_to_receive, file):
       - FORWARD_TO={forward_to}
       - SHARD_BY={shard_by}
       - NEXT_POOL_WORKERS={next_pool_workers}
-      - EOF_TO_RECEIVE={eof_to_receive[GATEWAY]}\n\n"""
+      - EOF_TO_RECEIVE={eof_to_receive[GATEWAY]}
+    volumes:
+      - persistanceGateway:/persistance_files\n\n"""
   file.write(gateway_str)
   print("Processed gateway")
   return config["PORT"]

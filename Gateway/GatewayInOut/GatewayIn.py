@@ -45,6 +45,7 @@ class GatewayIn():
             datasetlines = self.recv_dataset_line_batch()
             if not datasetlines:
                 break
+            print(f"[GatewayIn {self.client_id}] Received {datasetlines.seq_num}")
             if not self.process_datasetlines(datasetlines):
                 break
             if not self.ack_message():
@@ -56,7 +57,7 @@ class GatewayIn():
         except OSError as e:
             print(f"[GatewayIn {self.client_id}] Disconected from client, {e}")
             if not self.finished:
-                self.send_eof()
+                self.send_eof(Batch.eof(self.client_id))
             return False
         return True
 
@@ -66,7 +67,7 @@ class GatewayIn():
             return False
         datasetlines.sender_id = self.id
         if datasetlines.is_empty():
-            if not self.send_eof():
+            if not self.send_eof(datasetlines):
                 print(f"[GatewayIn {self.client_id}] MOM disconnected")
             return False
         if not self.send_batch_to_all_queries(datasetlines):
@@ -77,9 +78,9 @@ class GatewayIn():
     def recv_dataset_line_batch(self):
         batch = Batch.from_socket(self.socket, DatasetLine)
         if not batch:
-            print(f"[GatewayIn {self.client_id}] Disconected from client, {e}")
+            print(f"[GatewayIn {self.client_id}] Disconected from client while receiving batch")
             if not self.finished:
-                self.send_eof()
+                self.send_eof(Batch.eof(self.client_id, self.id))
             return None
         return batch
     
@@ -105,7 +106,7 @@ class GatewayIn():
             if obj:
                 objects.append(obj)
         if objects[0].is_book():
-            return self.send_objects_to_queries(objects, self.book_query_numbers)
+            return self.send_objects_to_queries(objects, self.book_query_numbers, batch.seq_num)
         return self.send_objects_to_queries(objects, self.review_query_numbers, batch.seq_num)
         
     def send_objects_to_queries(self, objects, queries, seq_num):

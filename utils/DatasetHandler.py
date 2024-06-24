@@ -55,6 +55,10 @@ class DatasetReader():
             print(f"Unable to open path {path}")
             return None
 
+    def skip_to(self, position):
+        if position != 0:
+            self.file.seek(position)
+
     def read_lines(self, n, object_type):
         lines = []
         for _ in range(n):

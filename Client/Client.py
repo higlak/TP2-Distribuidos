@@ -1,8 +1,8 @@
-from multiprocessing import Process
+from multiprocessing import Process, Pipe
 from time import sleep
 from utils.Batch import AMOUNT_OF_CLIENT_ID_BYTES, Batch
 from utils.DatasetHandler import DatasetReader
-from utils.auxiliar_functions import get_env_list, send_all
+from utils.auxiliar_functions import get_env_list, process_has_been_started, send_all
 from ClientReadWriter.ClientWriter import ClientWriter
 from ClientReadWriter.ClientReader import ClientReader, CLIENTS_SENDER_ID
 from queue import Queue, Empty
@@ -30,9 +30,18 @@ def get_file_paths():
     return sys.argv[1] , sys.argv[2]
 
 class Client():
-    def __init__(self):
-        self.threads = []
+    def __init__(self, queries, query_result_path, batch_size, server_port):
+        self.queries = queries
+        self.query_result_path = query_result_path
+        self.batch_size = batch_size
+        self.server_port = server_port
+        self.finished = False
+        
+        self.client_reader = None
+        self.writer_process = None
+        self.id = NO_CLIENT_ID
         self.signal_queue = Queue()
+        self.client_reader_conn, self.client_conn = Pipe()
         signal.signal(signal.SIGTERM, self.handle_SIGTERM)
 
     @classmethod
@@ -49,44 +58,35 @@ class Client():
             print("[Client] Error converting env vars: ", r)
             return None
         
-        client = Client()
-        send_socket, receive_socket, id = client.connect(server_port)
-        if not send_socket or not receive_socket or id == None:
-            return None
-
-        if not client.create_read_writers(id, send_socket, receive_socket, queries, query_result_path, batch_size):
-            return None
-        return client
+        return Client(queries, query_result_path, batch_size, server_port)
     
-    def connect(self,  server_port):
-        send_socket = Client.connect_to_gateway(server_port, self.signal_queue, NO_CLIENT_ID)
+    def connect(self):
+        send_socket = Client.connect_to_gateway(self.server_port, self.signal_queue, self.id)
         if not send_socket:
-            return None, None, None
+            return None, None
         
         id = self.receive_id(send_socket)
         if id == None:
-            return None, None, None
-        
-        receive_socket = Client.connect_to_gateway(server_port, self.signal_queue, id)
+            return self.connect()
+        self.id = id
+        receive_socket = Client.connect_to_gateway(self.server_port, self.signal_queue, id)
         if not receive_socket:
             send_socket.close()
-            return None, None, None
+            return None, None
         
-        return send_socket, receive_socket, id
+        return send_socket, receive_socket
 
-    def create_read_writers(self, id, send_socket, receive_socket, queries, query_result_path, batch_size):
+    def create_read_writers(self, send_socket, receive_socket):
         books_path, reviews_path = get_file_paths()
         book_reader = DatasetReader(books_path)
         review_reader = DatasetReader(reviews_path)
         if not book_reader or not review_reader:
             print(f"[Client] Reader invalid. Bookfile: {books_path}, Reviewfile: {reviews_path})")
-            return False
+            return None, None
         
-        client_reader = ClientReader(id, send_socket, book_reader, review_reader, batch_size)
-        client_writer = ClientWriter(id, receive_socket, queries, query_result_path)
-        self.threads.append(Process(target=client_reader.start))
-        self.threads.append(Process(target=client_writer.start))
-        return True
+        client_reader = ClientReader(self.id, send_socket, book_reader, review_reader, self.batch_size)
+        client_writer = ClientWriter(self.id, receive_socket, self.queries, self.query_result_path)
+        return client_reader, client_writer
         
     def receive_id(self, socket):
         batch = Batch.from_socket(socket)
@@ -98,8 +98,11 @@ class Client():
     def handle_SIGTERM(self, _signum, _frame):
         print("\n\n Entre al sigterm\n\n")
         self.signal_queue.put(True)
-        for thread in self.threads:
-            thread.terminate()
+        if self.writer_process != None:
+            if process_has_been_started(self.writer_process):
+                self.writer_process.terminate()
+        self.client_reader.close()
+        self.finished = True
 
     @classmethod
     def connect_to_gateway(cls, port, signal_queue, id):
@@ -125,15 +128,34 @@ class Client():
                 except Empty:   
                     i *= 2
 
-    def start_and_wait(self):
-        for thread in self.threads:
-            thread.start()
-        for handle in self.threads:
-            handle.join() 
+    def start(self):
+        book_reading_pos, review_reading_pos, writer_finished = (0,0, False)
+        while (book_reading_pos != None or review_reading_pos != None or not writer_finished) and not writer_finished:
+            previouse_id = self.id
+            send_socket, receive_socket = self.connect()
+            if not send_socket or not receive_socket:
+                break
+            if self.id != previouse_id:
+                book_reading_pos, review_reading_pos, writer_finished = (0,0, False)
+
+            self.client_reader, client_writer = self.create_read_writers(send_socket, receive_socket)
+            if not self.client_reader or not client_writer:
+                break 
+        
+            self.writer_process = Process(target=client_writer.start)
+            self.writer_process.start()
+            book_reading_pos, review_reading_pos = self.client_reader.start(book_reading_pos, review_reading_pos)
+            if book_reading_pos != None or review_reading_pos != None:
+                print("Terminating writer")
+                self.writer_process.terminate()
+            self.writer_process.join()
+            print("Joined writer")
+            writer_finished = self.writer_process.exitcode
+            print(f"book_reading_pos {book_reading_pos}, review_redaing_pos {review_reading_pos}, writer_finished { writer_finished}")
 
 def main():
     client = Client.new()
     if client:
-        client.start_and_wait()
+        client.start()
 
 main()

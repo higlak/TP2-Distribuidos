@@ -32,7 +32,7 @@ class Filter(Worker):
 
     #self.client_context_storage_updates[scale][author] = (old_value, [new_value])
     def process_message(self, client_id, msg: QueryMessage):
-        print(f"client: {client_id}, type: {msg.msg_type}, title: {msg.title}, under batch {SeqNumGenerator.seq_num + 1}")
+        #print(f"client: {client_id}, type: {msg.msg_type}, title: {msg.title}, under batch {SeqNumGenerator.seq_num + 1}")
         self.client_contexts[client_id] = self.client_contexts.get(client_id, set())
         if msg.msg_type == REVIEW_MSG_TYPE and msg.title in self.client_contexts[client_id]:
             return self.transform_to_result(msg)
