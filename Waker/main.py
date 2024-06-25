@@ -2,6 +2,7 @@ import os
 from time import sleep
 
 from Waker import Waker
+from utils.faulty import set_class_as_faulty
 
 CONTAINERS_SEPARATOR = ";"
 
@@ -20,6 +21,8 @@ def main():
     print(f"Iniciando waker con {workers_containers} y {wakers_containers}")
     if not workers_containers:
         return
+    
+    #set_class_as_faulty(Waker)
     waker = Waker(waker_id, workers_containers, wakers_containers)
     waker.start()
 
