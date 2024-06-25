@@ -24,7 +24,6 @@ services:
       - SHARD_BY=
       - WORKER_FIELD=categories
       - WORKER_VALUE=Computers
-      - FAULTY=True
 
   filter1.1.0:
     build:
@@ -43,7 +42,6 @@ services:
       - SHARD_BY=
       - WORKER_FIELD=year
       - WORKER_VALUE=2000,2023
-      - FAULTY=True
 
   filter1.2.0:
     build:
@@ -62,7 +60,6 @@ services:
       - SHARD_BY=
       - WORKER_FIELD=title
       - WORKER_VALUE=distributed
-      - FAULTY=True
 
   gateway:
     build:
@@ -102,7 +99,7 @@ services:
       dockerfile: Waker/Waker.dockerfile
     environment:
       - WORKERS_CONTAINERS=filter1.0.0;filter1.1.0;filter1.2.0;gateway
-      - WAKERS_CONTAINERS=waker1;waker2
+      - WAKERS_CONTAINERS=waker1;waker2;waker3
       - WAKER_ID=0
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
@@ -113,7 +110,7 @@ services:
       dockerfile: Waker/Waker.dockerfile
     environment:
       - WORKERS_CONTAINERS=filter1.0.0;filter1.1.0;filter1.2.0;gateway
-      - WAKERS_CONTAINERS=waker0;waker2
+      - WAKERS_CONTAINERS=waker0;waker2;waker3
       - WAKER_ID=1
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
@@ -124,8 +121,19 @@ services:
       dockerfile: Waker/Waker.dockerfile
     environment:
       - WORKERS_CONTAINERS=filter1.0.0;filter1.1.0;filter1.2.0;gateway
-      - WAKERS_CONTAINERS=waker0;waker1
+      - WAKERS_CONTAINERS=waker0;waker1;waker3
       - WAKER_ID=2
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  waker3:
+    build:
+      context: ./
+      dockerfile: Waker/Waker.dockerfile
+    environment:
+      - WORKERS_CONTAINERS=filter1.0.0;filter1.1.0;filter1.2.0;gateway
+      - WAKERS_CONTAINERS=waker0;waker1;waker2
+      - WAKER_ID=3
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
 

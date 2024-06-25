@@ -25,6 +25,8 @@ RABBIT = """  rabbitmq:
 
 """
 
+
+
 VOLUMES = """volumes:
   dataVolume:
     driver: local

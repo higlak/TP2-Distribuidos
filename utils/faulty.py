@@ -5,7 +5,7 @@ import time
 # from Workers.Accumulators import Accumulator
 # from Workers.Filters import Filter
 
-PANIC_PROB = 0.0005
+PANIC_PROB = 0.0008
 
 class FaultyError(Exception):
     def __init__(self, msg):
