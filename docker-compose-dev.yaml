@@ -24,6 +24,7 @@ services:
       - SHARD_BY=
       - WORKER_FIELD=categories
       - WORKER_VALUE=Computers
+      - FAULTY=True
 
   filter1.1.0:
     build:
@@ -42,6 +43,7 @@ services:
       - SHARD_BY=
       - WORKER_FIELD=year
       - WORKER_VALUE=2000,2023
+      - FAULTY=True
 
   filter1.2.0:
     build:
@@ -60,6 +62,7 @@ services:
       - SHARD_BY=
       - WORKER_FIELD=title
       - WORKER_VALUE=distributed
+      - FAULTY=True
 
   gateway:
     build:

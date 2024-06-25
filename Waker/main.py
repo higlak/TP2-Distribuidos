@@ -14,6 +14,7 @@ def get_env_waker_vars(containers):
     return containers_names.split(CONTAINERS_SEPARATOR)
 
 def main():
+    set_class_as_faulty(Waker)
     workers_containers = get_env_waker_vars('WORKERS_CONTAINERS')
     wakers_containers = get_env_waker_vars('WAKERS_CONTAINERS') 
     waker_id = os.getenv("WAKER_ID")
@@ -22,7 +23,6 @@ def main():
     if not workers_containers:
         return
     
-    #set_class_as_faulty(Waker)
     waker = Waker(waker_id, workers_containers, wakers_containers)
     waker.start()
 

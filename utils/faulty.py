@@ -1,9 +1,9 @@
 import os
 import random
 import time
-from Workers.Worker import Worker
-from Workers.Accumulators import Accumulator
-from Workers.Filters import Filter
+# from Workers.Worker import Worker
+# from Workers.Accumulators import Accumulator
+# from Workers.Filters import Filter
 
 PANIC_PROB = 0.0005
 
@@ -12,10 +12,11 @@ class FaultyError(Exception):
         super().__init__(msg)
 
 def set_faulty_if_needed():
-    if os.getenv('FAULTY'):
-        set_class_as_faulty(Worker)
-        set_class_as_faulty(Accumulator)
-        set_class_as_faulty(Filter)
+    # if os.getenv('FAULTY'):
+    #     set_class_as_faulty(Worker)
+    #     set_class_as_faulty(Accumulator)
+    #     set_class_as_faulty(Filter)
+    pass
 
 def get_new_method(cls, old_method, method_name):
     def new_method(self, *args, **kwargs):

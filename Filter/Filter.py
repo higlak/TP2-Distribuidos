@@ -4,6 +4,8 @@ from utils.QueryMessage import ALL_MESSAGE_FIELDS, YEAR_FIELD, TITLE_FIELD
 from utils.HealthcheckReceiver import HealthcheckReceiver
 import os
 
+from utils.faulty import set_faulty_if_needed
+
 def get_env_worker_field():
     worker_field = os.getenv('WORKER_FIELD')
     if not (worker_field in ALL_MESSAGE_FIELDS):
@@ -53,6 +55,7 @@ def handle_worker():
         worker.start()
 
 def main():
+    set_faulty_if_needed()
     worker_id = os.getenv("WORKER_ID")
     if not worker_id:
         print("Invalid worker id")
