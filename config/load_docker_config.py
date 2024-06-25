@@ -6,6 +6,8 @@ QUERY_CONFIG_FILE = "config/config_query"
 GATEWAY_CONFIG_FILE = "config/config_gateway.ini"
 CLIENT_CONFIG_FILE = "config/config_client.ini"
 WAKER_CONFIG_FILE = "config/config_waker.ini"
+KILLER_CONFIG_FILE = "config/config_killer.ini"
+
 FILTER_TYPE = 'filter'
 ACCUMULATOR_TYPE = 'accumulator'
 REVIEW_TEXT_FIELD = 'review_text'
@@ -25,7 +27,13 @@ RABBIT = """  rabbitmq:
 
 """
 
-
+KILLER = """   killer:
+    build:
+      context: ./
+      dockerfile: Killer/Killer.dockerfile
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock\n\n
+"""
 
 VOLUMES = """volumes:
   dataVolume:
@@ -218,6 +226,33 @@ def process_waker(file, i, worker_containers, waker_containers):
   file.write(waker_str)
   return True
 
+def process_killer(file):
+  config = ConfigParser()
+  try:
+    config.read(KILLER_CONFIG_FILE)
+  except:
+    print("No valid flename for killer")
+    return False
+  config = config["DEFAULT"]
+  kill_delay_min = int(config['KILL_DELAY_MIN'])
+  kill_delay_max = int(config['KILL_DELAY_MAX'])
+  containers_to_kill_min = int(config['CONTAINERS_TO_KILL_MIN'])
+  containers_to_kill_max = int(config['CONTAINERS_TO_KILL_MAX'])
+
+  killer_str = f"""  killer:
+    build:
+      context: ./
+      dockerfile: Killer/Killer.dockerfile
+    environment:
+      - KILL_DELAY_MIN={kill_delay_min}
+      - KILL_DELAY_MAX={kill_delay_max}
+      - CONTAINERS_TO_KILL_MIN={containers_to_kill_min}
+      - CONTAINERS_TO_KILL_MAX={containers_to_kill_max}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock\n\n"""
+  file.write(killer_str)
+  return True
+
 def process_wakers(file, worker_containers):
   config = ConfigParser()
   try:
@@ -294,6 +329,8 @@ def main():
       return
     if not process_wakers(file, worker_containers):
       return      
+    if not process_killer(file):
+      return
     file.write(VOLUMES)
 
 main()
