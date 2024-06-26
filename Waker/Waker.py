@@ -65,11 +65,8 @@ class Waker():
         self.socket.bind(('', WAKER_PORT))
         self.print(f'Listening on port : {WAKER_PORT}')
 
-        try:
-            self.start_leader_election()
-            self.loop()
-        except OSError as e:
-            self.print(f'Error with socket: {e}')
+        self.start_leader_election()
+        self.loop()
 
         self.print(f'Finished')
 
@@ -155,13 +152,14 @@ class Waker():
                 self.handle_message(msg, sender)
                 if self.am_i_leader() and self.pending_event(event, sender):  
                     heapq.heappush(self.events, event)
-
             except socket.timeout:
                 self.print(f"Timeout waiting for message")
                 if self.am_i_leader():
                     self.handle_timeout_from_leader(event) 
                 else:
                     self.handle_timeout_from_non_leader()
+            except socket.error as e:
+                self.print(f"Socket error: {e}")
                 
     def handle_timeout_from_non_leader(self):          
         if not self.leader_id:
