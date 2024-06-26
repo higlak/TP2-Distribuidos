@@ -17,7 +17,7 @@ def get_random_container():
             return container
 
 def is_valid_container(container):
-    return container.status == 'running' and 'rabbit' not in container.name and 'killer' not in container.name
+    return container.status == 'running' and 'client' not in container.name and 'rabbit' not in container.name and 'killer' not in container.name
 
 def only_one_waker_alive(containers):
     wakers = 0
