@@ -213,8 +213,8 @@ class Gateway():
         while not self.finished:
             if not self.handle_new_client_connection():
                 break
-            if not self.handle_last_execution_client_reconection():
-                break
+            #if not self.handle_last_execution_client_reconection():
+            #    break
             self.start_gateway_ins()
             if not self.join_clients(blocking=False):
                 break

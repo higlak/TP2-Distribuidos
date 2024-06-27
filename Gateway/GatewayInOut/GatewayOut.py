@@ -20,8 +20,8 @@ PERSISTANCE_DIR = '/persistance_files/'
 LOG_FILENAME = 'log_out.bin'
 RECV_TIMEOUT = 0.1
 NO_CLIENT_ID = 2**(8*AMOUNT_OF_CLIENT_ID_BYTES) - 1
-TIME_FOR_RECONNECTION = 5
-UNKNOWN_CLIENT_TIMEOUT = TIME_FOR_RECONNECTION + 1
+TIME_FOR_RECONNECTION = 15
+UNKNOWN_CLIENT_TIMEOUT = TIME_FOR_RECONNECTION + 5 
 
 class GatewayOut():
     def __init__(self, gateway_conn, eof_to_receive):
@@ -128,6 +128,8 @@ class GatewayOut():
     def get_clients(self, until_client_id=None):
         finish_time = time.time() + UNKNOWN_CLIENT_TIMEOUT
         while not self.finished:
+            if until_client_id != None:
+                print("Waiting for ", until_client_id)
             #print("[GatewayOut] waiting for ", until_client_id)
             try:
                 if not self.gateway_conn.poll():

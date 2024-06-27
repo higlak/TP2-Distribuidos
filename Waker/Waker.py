@@ -18,7 +18,7 @@ HEALTHCHECK_TIMEOUT = HEALTHCHECK_DELAY * 6
 ALIVE_TIMEOUT = HEALTHCHECK_DELAY * 5
 
 # Timeout to hear an ack or coord from a waker after sending election message
-ACK_TIMEOUT = 0.5
+ACK_TIMEOUT = HEALTHCHECK_DELAY * 10
 
 # Timeout to hear a coordinator message from a waker after sending election message
 COORDINATOR_TIMEOUT = ACK_TIMEOUT * 1.5 
@@ -205,7 +205,7 @@ class Waker():
                 event.restart_attemps()
             else:
                 event.attemps -= 1
-            event.increase_timeout(ALIVE_TIMEOUT)
+            event.increase_timeout(3* ALIVE_TIMEOUT)
         #self.print(f"Event set: {event}")
         heapq.heappush(self.events, event)
 
@@ -215,8 +215,8 @@ class Waker():
         heapq.heapify(self.events)
         #self.show_events()
         event = heapq.heappop(self.events)
-        self.print(f"Next event: {event}")
-        new_timeout = max(event.timeout - time.time(), 0) # Si pongo 0 tira Resource Temporarily Unavailable
+        #self.print(f"Next event: {event}")
+        new_timeout = max(event.timeout - time.time(), 0.0000000000000000000000000000000000001) # Si pongo 0 tira Resource Temporarily Unavailable
         self.set_timeout(new_timeout)
         #self.print(f"Timeout set to {round(new_timeout, 2)}'s")
         return event
@@ -244,6 +244,7 @@ class Waker():
             self.send_message_to_container(COORDINATOR_MSG, container_name)
         else:
             self.set_leader(container_name)
+            self.events = []
             self.set_timeout(HEALTHCHECK_TIMEOUT)
 
     def handle_election_message(self, container_name):
