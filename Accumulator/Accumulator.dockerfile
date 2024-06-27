@@ -14,6 +14,7 @@ RUN /root/textblob.sh
 COPY ./CommunicationMiddleware /root/CommunicationMiddleware
 COPY ./Workers /root/Workers
 COPY ./utils /root/utils
+COPY ./Persistance /root/Persistance
 COPY ./Accumulator/Accumulator.py /root/main.py
 RUN chmod +x /root/main.py
 

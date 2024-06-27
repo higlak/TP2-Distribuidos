@@ -1,3 +1,4 @@
+import os
 from unittest import TestCase
 import csv
 from utils.auxiliar_functions import integer_to_big_endian_byte_array, byte_array_to_big_endian_integer, remove_bytes, recv_exactly
@@ -55,6 +56,10 @@ class DatasetReader():
             print(f"Unable to open path {path}")
             return None
 
+    def skip_to(self, position):
+        if position != 0:
+            self.file.seek(position)
+
     def read_lines(self, n, object_type):
         lines = []
         for _ in range(n):
@@ -71,11 +76,14 @@ class DatasetReader():
         self.file.close()
 
 class DatasetWriter():
-    def __init__(self, path, columns):
+    def __init__(self, path, columns, append=False):
         self.file = open(path, 'a', encoding='Utf-8')
-        self.file.seek(0)
-        self.file.truncate()
-        self.header = False
+        print("append was ", append)
+        if not append:
+            self.file.seek(0)
+            self.file.truncate()
+            self.file.flush()
+            os.fsync(self.file.fileno())
         self.writer = csv.DictWriter(self.file, fieldnames=columns, lineterminator='\n')
 
     def append_objects(self, objects):
@@ -91,14 +99,19 @@ class DatasetWriter():
         Appends an object using the get_csv_values method, which must ruturn
         the amount of values specified when the Writer was created
         """
-        if not self.header:
+        if self.file.tell() == 0:
             self.writer.writeheader()
-            self.header = True
         columns = self.writer.fieldnames
         values = object.get_csv_values()
         line = {}
         for i in range(len(columns)):
+            try:
+                line[columns[i]] = values[i]
+            except:
+                print(columns)
+                print(values)
             line[columns[i]] = values[i]
+
         self.writer.writerow(line)
 
     def close(self):
@@ -150,6 +163,24 @@ if __name__ == '__main__':
             result1 = QueryMessage(BOOK_MSG_TYPE, title="Murdoca", authors="['Mazzeo']")
             result2 = QueryMessage(BOOK_MSG_TYPE, title="Fisica", authors="['Sears', 'Semanski']")
             dw.append_objects([result1, result2])
+            dw.close()
+
+            file = open('test_result.csv', 'r', encoding='Utf-8',)
+            reader = csv.DictReader(file)
+            values = [list(next(reader).values()), list(next(reader).values())]
+            file.close()
+            self.assertEqual(values, [result1.get_csv_values(), result2.get_csv_values()])
+
+        def test_append_on_existing_file(self):
+            columns = ["Title", "author"]
+            dw = DatasetWriter('test_result.csv', columns)
+            result1 = QueryMessage(BOOK_MSG_TYPE, title="Murdoca", authors="['Mazzeo']")
+            dw.append_objects([result1])
+            dw.close()
+
+            dw = DatasetWriter('test_result.csv', columns, append=True)
+            result2 = QueryMessage(BOOK_MSG_TYPE, title="Fisica", authors="['Sears', 'Semanski']")
+            dw.append_objects([result2])
             dw.close()
 
             file = open('test_result.csv', 'r', encoding='Utf-8',)

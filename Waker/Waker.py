@@ -8,16 +8,16 @@ from utils.Event import Event
 WAKER_PORT = 5000
 
 # Delay to send a healthcheck
-HEALTHCHECK_DELAY = 5
+HEALTHCHECK_DELAY = 0.25
 
 # Timeout to hear a healthcheck from a leader
-HEALTHCHECK_TIMEOUT = HEALTHCHECK_DELAY * 2
+HEALTHCHECK_TIMEOUT = HEALTHCHECK_DELAY * 6
 
 # Timeout to hear an alive message from a waker after sending healthcheck
-ALIVE_TIMEOUT = HEALTHCHECK_DELAY * 2
+ALIVE_TIMEOUT = HEALTHCHECK_DELAY * 5
 
 # Timeout to hear an ack or coord from a waker after sending election message
-ACK_TIMEOUT = 10 
+ACK_TIMEOUT = 0.5 * 6 
 
 # Timeout to hear a coordinator message from a waker after sending election message
 COORDINATOR_TIMEOUT = ACK_TIMEOUT * 1.5 
@@ -53,6 +53,7 @@ class Waker():
         self.leader_id = None
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.finished = False
+        self.current_timeout = None
 
         signal.signal(signal.SIGTERM, self.handle_SIGTERM)
 
@@ -70,6 +71,10 @@ class Waker():
 
         self.print(f'Finished')
 
+    def set_timeout(self, timeout):
+        self.socket.settimeout(timeout)
+        self.current_timeout = timeout
+
     def start_leader_election(self):
         #self.print(f"Starting leader election")
         self.set_leader(None)
@@ -86,7 +91,7 @@ class Waker():
             if waker_container > self.waker_id:
                 self.send_message_to_container(ELECTION_MSG, waker_container)
         
-        self.socket.settimeout(ACK_TIMEOUT)
+        self.set_timeout(ACK_TIMEOUT)
      
     def set_leader(self, leader_id):
         if leader_id:
@@ -125,7 +130,7 @@ class Waker():
             self.send_message_to_container(COORDINATOR_MSG, waker_container)
     
     def send_message_to_container(self, message, waker_container):
-        self.print(f"Sending {message.decode()} to: {waker_container}")
+        #self.print(f"Sending {message.decode()} to: {waker_container}")
 
         send_retries = SEND_RETRIES[message]
 
@@ -163,7 +168,7 @@ class Waker():
                 self.print(f"Socket error: {e}")
                 
     def handle_timeout_from_non_leader(self):          
-        if not self.leader_id:
+        if self.current_timeout == ACK_TIMEOUT:
             self.print('No leader response. Becoming leader')
             self.handle_leader()
         else:
@@ -193,7 +198,7 @@ class Waker():
         event = heapq.heappop(self.events)
         #self.print(f"Next event: {event}")
         new_timeout = max(event.timeout - time.time(), 0.1) # Si pongo 0 tira Resource Temporarily Unavailable
-        self.socket.settimeout(new_timeout)
+        self.set_timeout(new_timeout)
         #self.print(f"Timeout set to {round(new_timeout, 2)}'s")
         return event
 
@@ -201,7 +206,7 @@ class Waker():
         #self.print(f"Received {msg.decode()} from: {container_name}")
 
         if msg == ACK_MSG:
-            self.socket.settimeout(COORDINATOR_TIMEOUT)
+            self.set_timeout(COORDINATOR_TIMEOUT)
         
         if msg == HEALTHCHECK_MSG:
             self.send_message_to_container(ALIVE_MSG, container_name)      
@@ -220,7 +225,7 @@ class Waker():
             self.send_message_to_container(COORDINATOR_MSG, container_name)
         else:
             self.set_leader(container_name)
-            self.socket.settimeout(HEALTHCHECK_TIMEOUT)
+            self.set_timeout(HEALTHCHECK_TIMEOUT)
 
     def handle_election_message(self, container_name):
         self.send_message_to_container(ACK_MSG, container_name)

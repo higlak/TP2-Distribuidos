@@ -57,5 +57,6 @@ class HealthcheckReceiver():
     def close(self):
         self.finished = True
         self.socket.close()
+        self.main_thread.terminate()
         self.main_thread.join()
         print(f"[Worker {self.worker_id}] Healthcheck Receiver closed")

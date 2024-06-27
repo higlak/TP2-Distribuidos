@@ -4,6 +4,8 @@ from utils.QueryMessage import ALL_MESSAGE_FIELDS, YEAR_FIELD
 from utils.HealthcheckReceiver import HealthcheckReceiver
 import os
 
+from utils.faulty import set_worker_as_faulty_if_needed
+
 def get_env_worker_field():
     worker_field = os.getenv('WORKER_FIELD')
     if not (worker_field in ALL_MESSAGE_FIELDS) and worker_field != REVIEW_COUNT:
