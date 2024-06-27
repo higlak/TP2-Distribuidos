@@ -2,7 +2,6 @@ import os
 from time import sleep
 
 from Waker import Waker
-from utils.faulty import set_class_as_faulty
 
 CONTAINERS_SEPARATOR = ";"
 
