@@ -9,6 +9,7 @@ from utils.auxiliar_functions import get_env_list, process_has_been_started, sen
 from GatewayInOut.GatewayIn import gateway_in_main, GatewayIn, send_missed_reconections
 from GatewayInOut.GatewayOut import gateway_out_main, GatewayOut, TIME_FOR_RECONNECTION
 import os
+import socket
 
 QUERY_SEPARATOR = ","
 AMOUNT_OF_IDS = 2**(8*AMOUNT_OF_CLIENT_ID_BYTES) - 1

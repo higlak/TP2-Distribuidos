@@ -127,18 +127,23 @@ class GatewayOut():
 
     def get_clients(self, until_client_id=None):
         finish_time = time.time() + UNKNOWN_CLIENT_TIMEOUT
-        while not self.finished and finish_time < time.time():
+        while not self.finished:
             #print("[GatewayOut] waiting for ", until_client_id)
             try:
                 if not self.gateway_conn.poll():
                     if until_client_id == None or until_client_id in self.clients_sockets:
                         break
                     else:
+                        if finish_time < time.time():
+                            self.clients_sockets[client_id] = None
+                            self.pending_eof[client_id] = self.eof_to_receive
+                            break
                         time.sleep(RECV_TIMEOUT)
                         continue
                 client_id, client_socket = self.gateway_conn.recv()
             except Exception as e:
                 print("[GatewayOut] Disconected from gateway", e)
+                return
 
             if client_socket == None:
                 print(f"[GatewayOut] Recibi {client_id}, {client_socket}")
@@ -149,9 +154,6 @@ class GatewayOut():
                     self.pending_eof[client_id] = self.eof_to_receive
             else:
                 self.add_client(client_id, client_socket)
-        if not self.finished:
-            self.clients_sockets[client_id] = None
-            self.pending_eof[client_id] = self.eof_to_receive
         return not self.finished
     
     def send_batch_to_client(self, client_id, batch):
