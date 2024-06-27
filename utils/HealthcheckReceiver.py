@@ -21,7 +21,7 @@ class HealthcheckReceiver():
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.socket.bind(('', WAKER_PORT))
         self.socket.settimeout(HEALTHCHECK_TIMEOUT)
-        print(f"[Worker {self.worker_id}] Listening healthchecks from port {WAKER_PORT}")    
+        #print(f"[Worker {self.worker_id}] Listening healthchecks from port {WAKER_PORT}")    
 
     def start(self):
         print(f"[Worker {self.worker_id}] Starting Healthcheck Receiver")

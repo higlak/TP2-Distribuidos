@@ -1,4 +1,4 @@
-from multiprocessing import Process, Pipe
+from multiprocessing import Process
 from time import sleep
 from utils.Batch import AMOUNT_OF_CLIENT_ID_BYTES, Batch
 from utils.DatasetHandler import DatasetReader
@@ -36,7 +36,6 @@ class Client():
         self.writer_process = None
         self.id = NO_CLIENT_ID
         self.signal_queue = Queue()
-        self.client_reader_conn, self.client_conn = Pipe()
         signal.signal(signal.SIGTERM, self.handle_SIGTERM)
 
     @classmethod

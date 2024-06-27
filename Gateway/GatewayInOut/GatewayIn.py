@@ -162,7 +162,7 @@ def unknown_query():
     print("[GatewayIn] Attempting to proccess unkwown query")
     
 def gateway_in_main(client_id, client_socket, next_pools, book_query_numbers, review_query_numbers):
-    print("\n\nStarting gatewain in\n\n")
+    print(f"[GatewayIn {client_id}] Starting")
     gateway_in = GatewayIn(client_id, client_socket, next_pools, book_query_numbers, review_query_numbers)
     if gateway_in.connect():
         gateway_in.start()

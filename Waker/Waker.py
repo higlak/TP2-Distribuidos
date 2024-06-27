@@ -34,6 +34,8 @@ ALIVE_MSG = b'V'
 
 BUFFER_BYTES = 1
 
+NO_DELAY = 0.0000000000000000000000000000000000001
+
 # UDP socket send retries for prevention
 SEND_RETRIES = {
     ELECTION_MSG: 1,
@@ -85,7 +87,6 @@ class Waker():
         self.set_leader(None)
 
         if self.have_biggest_id():
-            self.print(f"I have the biggest id. I'm the new leader")
             self.handle_leader()
         else:
             event = Event(ACK_TYPE, time.time() + ACK_TIMEOUT, attempts=ELECTION_RETRIES)
@@ -101,11 +102,12 @@ class Waker():
         heapq.heappush(self.events, event)
      
     def set_leader(self, leader_id):
-        if leader_id:
-            self.print(f"Setting {leader_id} as leader")
+        # if leader_id:
+        #     self.print(f"Setting {leader_id} as leader")
         self.leader_id = leader_id
 
     def handle_leader(self):
+        #self.print(f"I'm the leader")
         self.set_leader(self.waker_id)
         self.set_events()
         self.broadcast_coordinator_message()
@@ -199,7 +201,7 @@ class Waker():
             self.broadcast_healthcheck()
             event.increase_timeout(HEALTHCHECK_DELAY)
         elif event.type == ALIVE_TYPE:
-            self.print(f"{event.container_name} didn't respond in time. Attempts remaining: {event.attemps}") 
+            #self.print(f"{event.container_name} didn't respond in time. Attempts remaining: {event.attemps}") 
             if event.attemps == 0:
                 self.handle_container_reconnection(event.container_name)
                 event.restart_attemps()
@@ -216,7 +218,7 @@ class Waker():
         #self.show_events()
         event = heapq.heappop(self.events)
         #self.print(f"Next event: {event}")
-        new_timeout = max(event.timeout - time.time(), 0.0000000000000000000000000000000000001) # Si pongo 0 tira Resource Temporarily Unavailable
+        new_timeout = max(event.timeout - time.time(), NO_DELAY)
         self.set_timeout(new_timeout)
         #self.print(f"Timeout set to {round(new_timeout, 2)}'s")
         return event

@@ -119,19 +119,18 @@ class GatewayOut():
         print(f"[GatewatOut] Received new client with id: {client_id}")
         self.las_client_id = max(client_id, self.las_client_id)
         if client_id not in self.clients_sockets:
-            print("EN ADD CLIENT: en el get ", self.pending_eof.get(client_id, "NO hay nada"))
             self.pending_eof[client_id] = self.pending_eof.get(client_id, self.eof_to_receive)
             self.metadata_handler.dump_new_client(client_id, self.pending_eof[client_id])
             self.logger.clean()
         self.clients_sockets[client_id] = client_socket
-        self.gateway_conn.send(client_id)
+        try:
+            self.gateway_conn.send(client_id)
+        except Exception as e:
+            print("[GatewayOut] Disconected from Gateway ", e)
 
     def get_clients(self, until_client_id=None):
         finish_time = time.time() + UNKNOWN_CLIENT_TIMEOUT
         while not self.finished:
-            if until_client_id != None:
-                print("Waiting for ", until_client_id)
-            #print("[GatewayOut] waiting for ", until_client_id)
             try:
                 if not self.gateway_conn.poll():
                     if until_client_id == None or until_client_id in self.clients_sockets:
@@ -151,7 +150,10 @@ class GatewayOut():
             if client_socket == None:
                 print(f"[GatewayOut] Recibi {client_id}, {client_socket}")
                 if client_id == NO_CLIENT_ID: 
-                    self.gateway_conn.send(client_id)
+                    try:
+                        self.gateway_conn.send(client_id)
+                    except Exception as e:
+                        print("[GatewayOut] Disconected from Gateway ", e)
                 else:
                     self.clients_sockets[client_id] = None
                     self.pending_eof[client_id] = self.eof_to_receive

@@ -229,7 +229,7 @@ class Worker(ABC):
         if not self.send_batch(Batch.eof(client_id, self.id)):
             print(f"[Worker {self.id}] Disconnected from MOM, while sending eof")
             return False
-        print(f"\n [Worker {self.id}] Sent Eof for clietn {client_id}\n")
+        print(f"\n [Worker {self.id}] Sent EOF for client: {client_id}\n")
         self.logger.log(FinishedSendingResults(client_id, SeqNumGenerator.seq_num))
         self.metadata_handler.update_seq_num()
         return True
@@ -435,9 +435,10 @@ class Worker(ABC):
     
     def initialize_based_on_last_execution(self):
         last_log = self.logger.read_last_log()
-        print(last_log)
         if not last_log:
+            print(f"[Worker {self.id}] Initializing based on empty log file")
             return True
+        print(f"[Worker {self.id}] Initializing based on log", last_log.log_type)
         
         switch = {
             LogType.ChangingFile: self.intialize_based_on_log_changing_file,

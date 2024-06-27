@@ -31,12 +31,13 @@ def only_one_waker_alive(containers):
         return True
     return False
 
-def handle_SIGTERM(self, _signum, _frame):
+def handle_SIGTERM(_signum, _frame):
     global finished
-    self.print('SIGTERM detected\n\n')
+    print('SIGTERM detected\n\n')
     finished = True
 
 def main():
+    global finished
     print("[Killer] Starting killer")
     signal.signal(signal.SIGTERM, handle_SIGTERM)
 
@@ -58,13 +59,13 @@ def main():
                 if not random_container:
                     print("[Killer] Tried to kill a waker but only one is alive, skipping", flush=True)
                     continue
-                print(f"[Killer] Killing {random_container.name}", flush=True)
-                random_container.kill()
+                #print(f"[Killer] Killing {random_container.name}", flush=True)
+                if not finished:
+                    random_container.kill()
             except docker.errors.APIError as e:
                 print(f"[Killer] Error killing container: {e}", flush=True)
-                return
         delay = random.randint(kill_delay_min, kill_delay_max)
-        print(f"[Killer] Sleeping for {delay} seconds", flush=True)
+        #print(f"[Killer] Sleeping for {delay} seconds", flush=True)
         sleep(delay)
     
     print("[Killer] Finished")
