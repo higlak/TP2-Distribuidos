@@ -48,12 +48,9 @@ class GatewayOutReceiverHandler():
         self.batch = batch
     
     def close(self):
-        print("[GatewayOut] teminating receiver")
         self.handle.terminate()
         self.send_queue.put(None)
-        print("[GatewayOut] joining receiver")
         self.handle.join()
-        print("[GatewayOut] joined receiver")
 
 class GatewayOutReceiver():
     def __init__(self, recv_queue: Queue, send_queue: Queue):
@@ -124,9 +121,7 @@ class GatewayOutReceiver():
         return True
 
     def close(self):
-        print("[GatewayOutReceiver] sending NOne")
         self.send_queue.put(None)
-        print("[GatewayOutReceiver] closing conn")
         if self.com:
             self.com.close_connection()
         

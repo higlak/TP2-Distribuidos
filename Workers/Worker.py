@@ -135,6 +135,10 @@ class Worker(ABC):
         if self.communicator:
             self.communicator.close_connection()
 
+    def close(self):
+        self.communicator.close_connection()
+        self.close_files()
+
     @abstractmethod
     def process_message(self, client_id, message):
         pass
@@ -177,8 +181,6 @@ class Worker(ABC):
                 if result:
                     append_extend(results, result)
         if len(results) > 0:
-            if len(results) > 65000:
-                print("\n\nBATCHES MUT GRANDES\n\n")
             result_batch = Batch.new(batch.client_id, self.id, results)
             return self.send_partial_results(result_batch)
         return True
@@ -203,7 +205,7 @@ class Worker(ABC):
             print("Error initializing from log")
             return None
         self.loop()
-        self.communicator.close_connection()
+        self.close()
 
     @abstractmethod
     def remove_client_context(self, client_id):
@@ -227,7 +229,7 @@ class Worker(ABC):
         if not self.send_batch(Batch.eof(client_id, self.id)):
             print(f"[Worker {self.id}] Disconnected from MOM, while sending eof")
             return False
-        print(f"\n [Worker {self.id}] Sent Eof for clietn {client_id}\n")
+        print(f"\n [Worker {self.id}] Sent EOF for client: {client_id}\n")
         self.logger.log(FinishedSendingResults(client_id, SeqNumGenerator.seq_num))
         self.metadata_handler.update_seq_num()
         return True
@@ -340,7 +342,7 @@ class Worker(ABC):
                 break
             
             ############ Send final results
-            if self.pending_eof.get(batch.client_id, None) == 0:   #guarda con perder el client_id
+            if self.pending_eof.get(batch.client_id, None) == 0:  
                 if not self.proccess_final_results(batch.client_id):
                     break
                 
@@ -359,7 +361,6 @@ class Worker(ABC):
 
     def intialize_based_on_log_changing_file(self, log):
         logs = self.logger.read_while_log_type(LogType.ChangingFile)
-        print(f"\n\rollbackeando {len(logs)} logs\n\n")
         for log in logs:
             if log.filename == METADATA_FILENAME + '.bin':
                 storage = self.metadata_handler.storage
@@ -434,9 +435,10 @@ class Worker(ABC):
     
     def initialize_based_on_last_execution(self):
         last_log = self.logger.read_last_log()
-        print(last_log)
         if not last_log:
+            print(f"[Worker {self.id}] Initializing based on empty log file")
             return True
+        print(f"[Worker {self.id}] Initializing based on log", last_log.log_type)
         
         switch = {
             LogType.ChangingFile: self.intialize_based_on_log_changing_file,

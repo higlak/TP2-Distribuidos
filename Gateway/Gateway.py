@@ -203,19 +203,24 @@ class Gateway():
     
     def start_gateway_ins(self):
         while self.gateway_out_conn.poll():
-            client_id = self.gateway_out_conn.recv()
-            print("starting id ", client_id)
+            try:
+                client_id = self.gateway_out_conn.recv()
+            except Exception as e:
+                print("[Gateway] error communicating with gateway out. ", e)
+                return False
             if not process_has_been_started(self.client_handlers[client_id]):
                 self.client_handlers[client_id].start()
+        return True
 
     def run(self):
         self.get_last_execution_clients()
         while not self.finished:
             if not self.handle_new_client_connection():
                 break
-            if not self.handle_last_execution_client_reconection():
+            #if not self.handle_last_execution_client_reconection():
+            #    break
+            if not self.start_gateway_ins():
                 break
-            self.start_gateway_ins()
             if not self.join_clients(blocking=False):
                 break
 

@@ -288,7 +288,7 @@ def process_wakers(file, worker_containers):
       return False
   return True
 
-def process_client(queries, port, file, config, i):
+def process_client(queries, port, file, config, book_file, review_file, i):
   client_str = f"""  client{i}:
     build:
       context: ./
@@ -300,6 +300,8 @@ def process_client(queries, port, file, config, i):
       - QUERY_RESULTS_PATH={config["QUERY_RESULTS_PATH"]}
       - QUERIES={",".join([str(query.query_number) for query in queries.values()])}
       - SERVER_PORT={port}
+      - BOOK_FILE={book_file}
+      - REVIEW_FILE={review_file}
     volumes:
       - dataVolume:/data\n\n"""
   file.write(client_str)
@@ -313,9 +315,10 @@ def process_clients(queries, port, file):
     print("No valid flename for client")
     return False
   config = config["DEFAULT"]
-  n_clients = int(config['AMOUNT_OF_CLIENTS'])
-  for i in range(n_clients):
-    if not process_client(queries, port, file, config, i):
+  book_files = config['BOOK_FILES'].split(',')
+  review_files = config['REVIEW_FILES'].split(',')
+  for i in range(len(book_files)):
+    if not process_client(queries, port, file, config, book_files[i], review_files[i], i):
       return False
   return True      
   

@@ -20,8 +20,8 @@ PERSISTANCE_DIR = '/persistance_files/'
 LOG_FILENAME = 'log_out.bin'
 RECV_TIMEOUT = 0.1
 NO_CLIENT_ID = 2**(8*AMOUNT_OF_CLIENT_ID_BYTES) - 1
-TIME_FOR_RECONNECTION = 5
-UNKNOWN_CLIENT_TIMEOUT = TIME_FOR_RECONNECTION + 1
+TIME_FOR_RECONNECTION = 15
+UNKNOWN_CLIENT_TIMEOUT = TIME_FOR_RECONNECTION + 5 
 
 class GatewayOut():
     def __init__(self, gateway_conn, eof_to_receive):
@@ -67,6 +67,7 @@ class GatewayOut():
         self.loop()
         print("[GatewayOut] Finishing")
         self.close()
+        self.metadata_handler.close()
 
     def is_dup_batch(self, batch):
         sender_last_seq_num = self.last_received_batch.get(batch.sender_id, None)
@@ -118,17 +119,18 @@ class GatewayOut():
         print(f"[GatewatOut] Received new client with id: {client_id}")
         self.las_client_id = max(client_id, self.las_client_id)
         if client_id not in self.clients_sockets:
-            print("EN ADD CLIENT: en el get ", self.pending_eof.get(client_id, "NO hay nada"))
             self.pending_eof[client_id] = self.pending_eof.get(client_id, self.eof_to_receive)
             self.metadata_handler.dump_new_client(client_id, self.pending_eof[client_id])
             self.logger.clean()
         self.clients_sockets[client_id] = client_socket
-        self.gateway_conn.send(client_id)
+        try:
+            self.gateway_conn.send(client_id)
+        except Exception as e:
+            print("[GatewayOut] Disconected from Gateway ", e)
 
     def get_clients(self, until_client_id=None):
         finish_time = time.time() + UNKNOWN_CLIENT_TIMEOUT
         while not self.finished:
-            #print("[GatewayOut] waiting for ", until_client_id)
             try:
                 if not self.gateway_conn.poll():
                     if until_client_id == None or until_client_id in self.clients_sockets:
@@ -148,7 +150,10 @@ class GatewayOut():
             if client_socket == None:
                 print(f"[GatewayOut] Recibi {client_id}, {client_socket}")
                 if client_id == NO_CLIENT_ID: 
-                    self.gateway_conn.send(client_id)
+                    try:
+                        self.gateway_conn.send(client_id)
+                    except Exception as e:
+                        print("[GatewayOut] Disconected from Gateway ", e)
                 else:
                     self.clients_sockets[client_id] = None
                     self.pending_eof[client_id] = self.eof_to_receive
@@ -194,7 +199,8 @@ class GatewayOut():
 
     def remove_client(self, client_id):
         if self.clients_sockets[client_id] != None:
-            self.clients_sockets.pop(client_id)
+            sock = self.clients_sockets.pop(client_id)
+            sock.close()
             self.pending_eof.pop(client_id)
         self.metadata_handler.remove_client(client_id)
 

@@ -15,7 +15,6 @@ class ClientWriter():
             query_result = query_to_query_result(query)
             header = query_result_headers(query_result)
             dir_path = query_path + "client" + str(id) + "/"  
-            print(f"\n\n EXSITE {dir_path} {os.path.exists(dir_path)}\n\n")
             if not os.path.exists(dir_path):
                 os.makedirs(dir_path)
             path = dir_path + "result" + str(query) + ".csv"
