@@ -6,8 +6,10 @@ from utils.QueryMessage import QueryMessage, query_result_headers, query_to_quer
 
 
 class ClientWriter():
-    def __init__(self, id, socket, queries, query_path):
+    def __init__(self, id, socket, queries, query_path, append_file):
         self.socket = socket
+        self.finished = False
+        self.last_batch = -1
         writers = {}
         for query in queries:
             query_result = query_to_query_result(query)
@@ -15,8 +17,8 @@ class ClientWriter():
             dir_path = "." + query_path + "client" + str(id) + "/"  
             if not os.path.exists(dir_path):
                 os.makedirs(dir_path)
-            path = dir_path + "result" + query + ".csv"
-            dw = DatasetWriter(path, header)
+            path = dir_path + "result" + str(query) + ".csv"
+            dw = DatasetWriter(path, header, append_file)
             writers[query_result] = dw
         self.writers = writers
 
@@ -26,16 +28,25 @@ class ClientWriter():
 
     def start(self):
         signal.signal(signal.SIGTERM, self.handle_SIGTERM)
-        while True:
+        while not self.finished:
             result_batch = Batch.from_socket(self.socket, QueryMessage)
             if not result_batch:
                 print("[ClientWriter] Socket disconnected")
                 break
+            if self.dupped_batch(result_batch):
+                continue
             if result_batch.is_empty():
                 print("[ClientWriter] Finished receiving")
+                self.finished = True
                 break
+            print(f"[ClientWriter] Received {len(result_batch.messages)} for query {result_batch.messages[0].msg_type}")
             self.writers[result_batch[0].msg_type].append_objects(result_batch)
+            self.last_batch = result_batch.seq_num
         self.close()
+        exit(self.finished)
+
+    def dupped_batch(self, batch):
+        return self.last_batch == batch.seq_num
 
     def close(self):
         for writer in self.writers.values():

@@ -11,7 +11,6 @@ services:
     build:
       context: ./
       dockerfile: Filter/Filter.dockerfile
-    restart: on-failure
     depends_on:
       - rabbitmq
     links: 
@@ -25,12 +24,13 @@ services:
       - SHARD_BY=
       - WORKER_FIELD=categories
       - WORKER_VALUE=Computers
+    volumes:
+      - persistanceVolume:/persistance_files
 
   filter1.0.1:
     build:
       context: ./
       dockerfile: Filter/Filter.dockerfile
-    restart: on-failure
     depends_on:
       - rabbitmq
     links: 
@@ -44,12 +44,13 @@ services:
       - SHARD_BY=
       - WORKER_FIELD=categories
       - WORKER_VALUE=Computers
+    volumes:
+      - persistanceVolume:/persistance_files
 
   filter1.1.0:
     build:
       context: ./
       dockerfile: Filter/Filter.dockerfile
-    restart: on-failure
     depends_on:
       - rabbitmq
     links: 
@@ -63,12 +64,13 @@ services:
       - SHARD_BY=
       - WORKER_FIELD=year
       - WORKER_VALUE=2000,2023
+    volumes:
+      - persistanceVolume:/persistance_files
 
   filter1.1.1:
     build:
       context: ./
       dockerfile: Filter/Filter.dockerfile
-    restart: on-failure
     depends_on:
       - rabbitmq
     links: 
@@ -82,12 +84,13 @@ services:
       - SHARD_BY=
       - WORKER_FIELD=year
       - WORKER_VALUE=2000,2023
+    volumes:
+      - persistanceVolume:/persistance_files
 
   filter1.2.0:
     build:
       context: ./
       dockerfile: Filter/Filter.dockerfile
-    restart: on-failure
     depends_on:
       - rabbitmq
     links: 
@@ -101,12 +104,13 @@ services:
       - SHARD_BY=
       - WORKER_FIELD=title
       - WORKER_VALUE=distributed
+    volumes:
+      - persistanceVolume:/persistance_files
 
   filter1.2.1:
     build:
       context: ./
       dockerfile: Filter/Filter.dockerfile
-    restart: on-failure
     depends_on:
       - rabbitmq
     links: 
@@ -120,12 +124,13 @@ services:
       - SHARD_BY=
       - WORKER_FIELD=title
       - WORKER_VALUE=distributed
+    volumes:
+      - persistanceVolume:/persistance_files
 
-  accumulator2.0.0:
+  filter2.0.0:
     build:
       context: ./
-      dockerfile: Accumulator/Accumulator.dockerfile
-    restart: on-failure
+      dockerfile: Filter/Filter.dockerfile
     depends_on:
       - rabbitmq
     links: 
@@ -134,18 +139,18 @@ services:
       - PYTHONUNBUFFERED=1
       - WORKER_ID=2.0.0
       - EOF_TO_RECEIVE=1
-      - NEXT_POOL_WORKERS=1
-      - FORWARD_TO=Gateway
-      - SHARD_BY=
-      - WORKER_FIELD=year
-      - WORKER_VALUE=10
-      - ACCUMULATE_BY=authors
+      - NEXT_POOL_WORKERS=2
+      - FORWARD_TO=2.1
+      - SHARD_BY=authors
+      - WORKER_FIELD=authors
+      - WORKER_VALUE=
+    volumes:
+      - persistanceVolume:/persistance_files
 
-  accumulator2.0.1:
+  filter2.0.1:
     build:
       context: ./
-      dockerfile: Accumulator/Accumulator.dockerfile
-    restart: on-failure
+      dockerfile: Filter/Filter.dockerfile
     depends_on:
       - rabbitmq
     links: 
@@ -154,6 +159,26 @@ services:
       - PYTHONUNBUFFERED=1
       - WORKER_ID=2.0.1
       - EOF_TO_RECEIVE=1
+      - NEXT_POOL_WORKERS=2
+      - FORWARD_TO=2.1
+      - SHARD_BY=authors
+      - WORKER_FIELD=authors
+      - WORKER_VALUE=
+    volumes:
+      - persistanceVolume:/persistance_files
+
+  accumulator2.1.0:
+    build:
+      context: ./
+      dockerfile: Accumulator/Accumulator.dockerfile
+    depends_on:
+      - rabbitmq
+    links: 
+      - rabbitmq
+    environment:
+      - PYTHONUNBUFFERED=1
+      - WORKER_ID=2.1.0
+      - EOF_TO_RECEIVE=2
       - NEXT_POOL_WORKERS=1
       - FORWARD_TO=Gateway
       - SHARD_BY=
@@ -161,11 +186,35 @@ services:
       - WORKER_VALUE=10
       - ACCUMULATE_BY=authors
 
+    volumes:
+      - persistanceVolume:/persistance_files
+
+  accumulator2.1.1:
+    build:
+      context: ./
+      dockerfile: Accumulator/Accumulator.dockerfile
+    depends_on:
+      - rabbitmq
+    links: 
+      - rabbitmq
+    environment:
+      - PYTHONUNBUFFERED=1
+      - WORKER_ID=2.1.1
+      - EOF_TO_RECEIVE=2
+      - NEXT_POOL_WORKERS=1
+      - FORWARD_TO=Gateway
+      - SHARD_BY=
+      - WORKER_FIELD=year
+      - WORKER_VALUE=10
+      - ACCUMULATE_BY=authors
+
+    volumes:
+      - persistanceVolume:/persistance_files
+
   filter3.0.0:
     build:
       context: ./
       dockerfile: Filter/Filter.dockerfile
-    restart: on-failure
     depends_on:
       - rabbitmq
     links: 
@@ -174,17 +223,18 @@ services:
       - PYTHONUNBUFFERED=1
       - WORKER_ID=3.0.0
       - EOF_TO_RECEIVE=1
-      - NEXT_POOL_WORKERS=4
+      - NEXT_POOL_WORKERS=2
       - FORWARD_TO=3.1
       - SHARD_BY=title
       - WORKER_FIELD=year
       - WORKER_VALUE=1990,1999
+    volumes:
+      - persistanceVolume:/persistance_files
 
   filter3.0.1:
     build:
       context: ./
       dockerfile: Filter/Filter.dockerfile
-    restart: on-failure
     depends_on:
       - rabbitmq
     links: 
@@ -193,55 +243,18 @@ services:
       - PYTHONUNBUFFERED=1
       - WORKER_ID=3.0.1
       - EOF_TO_RECEIVE=1
-      - NEXT_POOL_WORKERS=4
+      - NEXT_POOL_WORKERS=2
       - FORWARD_TO=3.1
       - SHARD_BY=title
       - WORKER_FIELD=year
       - WORKER_VALUE=1990,1999
-
-  filter3.0.2:
-    build:
-      context: ./
-      dockerfile: Filter/Filter.dockerfile
-    restart: on-failure
-    depends_on:
-      - rabbitmq
-    links: 
-      - rabbitmq
-    environment:
-      - PYTHONUNBUFFERED=1
-      - WORKER_ID=3.0.2
-      - EOF_TO_RECEIVE=1
-      - NEXT_POOL_WORKERS=4
-      - FORWARD_TO=3.1
-      - SHARD_BY=title
-      - WORKER_FIELD=year
-      - WORKER_VALUE=1990,1999
-
-  filter3.0.3:
-    build:
-      context: ./
-      dockerfile: Filter/Filter.dockerfile
-    restart: on-failure
-    depends_on:
-      - rabbitmq
-    links: 
-      - rabbitmq
-    environment:
-      - PYTHONUNBUFFERED=1
-      - WORKER_ID=3.0.3
-      - EOF_TO_RECEIVE=1
-      - NEXT_POOL_WORKERS=4
-      - FORWARD_TO=3.1
-      - SHARD_BY=title
-      - WORKER_FIELD=year
-      - WORKER_VALUE=1990,1999
+    volumes:
+      - persistanceVolume:/persistance_files
 
   accumulator3.1.0:
     build:
       context: ./
       dockerfile: Accumulator/Accumulator.dockerfile
-    restart: on-failure
     depends_on:
       - rabbitmq
     links: 
@@ -249,7 +262,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - WORKER_ID=3.1.0
-      - EOF_TO_RECEIVE=4
+      - EOF_TO_RECEIVE=2
       - NEXT_POOL_WORKERS=1,4
       - FORWARD_TO=Gateway,4.0
       - SHARD_BY=,title
@@ -257,11 +270,13 @@ services:
       - WORKER_VALUE=500
       - ACCUMULATE_BY=title
 
+    volumes:
+      - persistanceVolume:/persistance_files
+
   accumulator3.1.1:
     build:
       context: ./
       dockerfile: Accumulator/Accumulator.dockerfile
-    restart: on-failure
     depends_on:
       - rabbitmq
     links: 
@@ -269,7 +284,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - WORKER_ID=3.1.1
-      - EOF_TO_RECEIVE=4
+      - EOF_TO_RECEIVE=2
       - NEXT_POOL_WORKERS=1,4
       - FORWARD_TO=Gateway,4.0
       - SHARD_BY=,title
@@ -277,51 +292,13 @@ services:
       - WORKER_VALUE=500
       - ACCUMULATE_BY=title
 
-  accumulator3.1.2:
-    build:
-      context: ./
-      dockerfile: Accumulator/Accumulator.dockerfile
-    restart: on-failure
-    depends_on:
-      - rabbitmq
-    links: 
-      - rabbitmq
-    environment:
-      - PYTHONUNBUFFERED=1
-      - WORKER_ID=3.1.2
-      - EOF_TO_RECEIVE=4
-      - NEXT_POOL_WORKERS=1,4
-      - FORWARD_TO=Gateway,4.0
-      - SHARD_BY=,title
-      - WORKER_FIELD=review_count
-      - WORKER_VALUE=500
-      - ACCUMULATE_BY=title
-
-  accumulator3.1.3:
-    build:
-      context: ./
-      dockerfile: Accumulator/Accumulator.dockerfile
-    restart: on-failure
-    depends_on:
-      - rabbitmq
-    links: 
-      - rabbitmq
-    environment:
-      - PYTHONUNBUFFERED=1
-      - WORKER_ID=3.1.3
-      - EOF_TO_RECEIVE=4
-      - NEXT_POOL_WORKERS=1,4
-      - FORWARD_TO=Gateway,4.0
-      - SHARD_BY=,title
-      - WORKER_FIELD=review_count
-      - WORKER_VALUE=500
-      - ACCUMULATE_BY=title
+    volumes:
+      - persistanceVolume:/persistance_files
 
   accumulator4.0.0:
     build:
       context: ./
       dockerfile: Accumulator/Accumulator.dockerfile
-    restart: on-failure
     depends_on:
       - rabbitmq
     links: 
@@ -329,7 +306,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - WORKER_ID=4.0.0
-      - EOF_TO_RECEIVE=4
+      - EOF_TO_RECEIVE=2
       - NEXT_POOL_WORKERS=1
       - FORWARD_TO=4.1
       - SHARD_BY=title
@@ -337,11 +314,13 @@ services:
       - WORKER_VALUE=10
       - ACCUMULATE_BY=title
 
+    volumes:
+      - persistanceVolume:/persistance_files
+
   accumulator4.0.1:
     build:
       context: ./
       dockerfile: Accumulator/Accumulator.dockerfile
-    restart: on-failure
     depends_on:
       - rabbitmq
     links: 
@@ -349,7 +328,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - WORKER_ID=4.0.1
-      - EOF_TO_RECEIVE=4
+      - EOF_TO_RECEIVE=2
       - NEXT_POOL_WORKERS=1
       - FORWARD_TO=4.1
       - SHARD_BY=title
@@ -357,11 +336,13 @@ services:
       - WORKER_VALUE=10
       - ACCUMULATE_BY=title
 
+    volumes:
+      - persistanceVolume:/persistance_files
+
   accumulator4.0.2:
     build:
       context: ./
       dockerfile: Accumulator/Accumulator.dockerfile
-    restart: on-failure
     depends_on:
       - rabbitmq
     links: 
@@ -369,7 +350,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - WORKER_ID=4.0.2
-      - EOF_TO_RECEIVE=4
+      - EOF_TO_RECEIVE=2
       - NEXT_POOL_WORKERS=1
       - FORWARD_TO=4.1
       - SHARD_BY=title
@@ -377,11 +358,13 @@ services:
       - WORKER_VALUE=10
       - ACCUMULATE_BY=title
 
+    volumes:
+      - persistanceVolume:/persistance_files
+
   accumulator4.0.3:
     build:
       context: ./
       dockerfile: Accumulator/Accumulator.dockerfile
-    restart: on-failure
     depends_on:
       - rabbitmq
     links: 
@@ -389,7 +372,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - WORKER_ID=4.0.3
-      - EOF_TO_RECEIVE=4
+      - EOF_TO_RECEIVE=2
       - NEXT_POOL_WORKERS=1
       - FORWARD_TO=4.1
       - SHARD_BY=title
@@ -397,11 +380,13 @@ services:
       - WORKER_VALUE=10
       - ACCUMULATE_BY=title
 
+    volumes:
+      - persistanceVolume:/persistance_files
+
   accumulator4.1.0:
     build:
       context: ./
       dockerfile: Accumulator/Accumulator.dockerfile
-    restart: on-failure
     depends_on:
       - rabbitmq
     links: 
@@ -417,11 +402,13 @@ services:
       - WORKER_VALUE=10
       - ACCUMULATE_BY=title
 
+    volumes:
+      - persistanceVolume:/persistance_files
+
   filter5.0.0:
     build:
       context: ./
       dockerfile: Filter/Filter.dockerfile
-    restart: on-failure
     depends_on:
       - rabbitmq
     links: 
@@ -435,12 +422,13 @@ services:
       - SHARD_BY=title
       - WORKER_FIELD=categories
       - WORKER_VALUE=Fiction
+    volumes:
+      - persistanceVolume:/persistance_files
 
   filter5.0.1:
     build:
       context: ./
       dockerfile: Filter/Filter.dockerfile
-    restart: on-failure
     depends_on:
       - rabbitmq
     links: 
@@ -454,6 +442,8 @@ services:
       - SHARD_BY=title
       - WORKER_FIELD=categories
       - WORKER_VALUE=Fiction
+    volumes:
+      - persistanceVolume:/persistance_files
 
   accumulator5.1.0:
     build:
@@ -461,7 +451,6 @@ services:
       dockerfile: Accumulator/Accumulator.dockerfile
       args:
         - TEXTBLOB=True
-    restart: on-failure
     depends_on:
       - rabbitmq
     links: 
@@ -477,13 +466,15 @@ services:
       - WORKER_VALUE=
       - ACCUMULATE_BY=title
 
+    volumes:
+      - persistanceVolume:/persistance_files
+
   accumulator5.1.1:
     build:
       context: ./
       dockerfile: Accumulator/Accumulator.dockerfile
       args:
         - TEXTBLOB=True
-    restart: on-failure
     depends_on:
       - rabbitmq
     links: 
@@ -499,13 +490,15 @@ services:
       - WORKER_VALUE=
       - ACCUMULATE_BY=title
 
+    volumes:
+      - persistanceVolume:/persistance_files
+
   accumulator5.1.2:
     build:
       context: ./
       dockerfile: Accumulator/Accumulator.dockerfile
       args:
         - TEXTBLOB=True
-    restart: on-failure
     depends_on:
       - rabbitmq
     links: 
@@ -521,13 +514,15 @@ services:
       - WORKER_VALUE=
       - ACCUMULATE_BY=title
 
+    volumes:
+      - persistanceVolume:/persistance_files
+
   accumulator5.1.3:
     build:
       context: ./
       dockerfile: Accumulator/Accumulator.dockerfile
       args:
         - TEXTBLOB=True
-    restart: on-failure
     depends_on:
       - rabbitmq
     links: 
@@ -543,13 +538,15 @@ services:
       - WORKER_VALUE=
       - ACCUMULATE_BY=title
 
+    volumes:
+      - persistanceVolume:/persistance_files
+
   accumulator5.1.4:
     build:
       context: ./
       dockerfile: Accumulator/Accumulator.dockerfile
       args:
         - TEXTBLOB=True
-    restart: on-failure
     depends_on:
       - rabbitmq
     links: 
@@ -565,11 +562,13 @@ services:
       - WORKER_VALUE=
       - ACCUMULATE_BY=title
 
+    volumes:
+      - persistanceVolume:/persistance_files
+
   accumulator5.2.0:
     build:
       context: ./
       dockerfile: Accumulator/Accumulator.dockerfile
-    restart: on-failure
     depends_on:
       - rabbitmq
     links: 
@@ -585,6 +584,9 @@ services:
       - WORKER_VALUE=90
       - ACCUMULATE_BY=title
 
+    volumes:
+      - persistanceVolume:/persistance_files
+
   gateway:
     build:
       context: ./
@@ -599,10 +601,24 @@ services:
       - PORT=12345
       - BOOK_QUERIES=1,2,3,5
       - REVIEW_QUERIES=3,5
-      - FORWARD_TO=5.0,2.0,1.0,3.0
-      - SHARD_BY=title,authors,,title
-      - NEXT_POOL_WORKERS=2,2,2,4
-      - EOF_TO_RECEIVE=10
+      - FORWARD_TO=2.0,5.0,1.0,3.0
+      - SHARD_BY=,title,,title
+      - NEXT_POOL_WORKERS=2,2,2,2
+      - EOF_TO_RECEIVE=8
+    volumes:
+      - persistanceGateway:/persistance_files
+
+  killer:
+    build:
+      context: ./
+      dockerfile: Killer/Killer.dockerfile
+    environment:
+      - KILL_DELAY_MIN=1
+      - KILL_DELAY_MAX=1
+      - CONTAINERS_TO_KILL_MIN=1
+      - CONTAINERS_TO_KILL_MAX=1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
 
   client0:
     build:
@@ -611,7 +627,7 @@ services:
     restart: on-failure
     environment:
       - PYTHONUNBUFFERED=1
-      - BATCH_SIZE=25
+      - BATCH_SIZE=512
       - QUERY_RESULTS_PATH=/data/
       - QUERIES=1,2,3,4,5
       - SERVER_PORT=12345
@@ -625,21 +641,7 @@ services:
     restart: on-failure
     environment:
       - PYTHONUNBUFFERED=1
-      - BATCH_SIZE=25
-      - QUERY_RESULTS_PATH=/data/
-      - QUERIES=1,2,3,4,5
-      - SERVER_PORT=12345
-    volumes:
-      - dataVolume:/data
-
-  client2:
-    build:
-      context: ./
-      dockerfile: Client/Client.dockerfile
-    restart: on-failure
-    environment:
-      - PYTHONUNBUFFERED=1
-      - BATCH_SIZE=25
+      - BATCH_SIZE=512
       - QUERY_RESULTS_PATH=/data/
       - QUERIES=1,2,3,4,5
       - SERVER_PORT=12345
@@ -652,4 +654,16 @@ volumes:
     driver_opts:
       type: none
       device: ./data
+      o: bind
+  persistanceVolume:
+    driver: local
+    driver_opts:
+      type: none
+      device: ./persistance_files
+      o: bind
+  persistanceGateway:
+    driver: local
+    driver_opts:
+      type: none
+      device: ./persistanceGateway
       o: bind

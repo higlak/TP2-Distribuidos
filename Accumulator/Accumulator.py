@@ -2,6 +2,8 @@ from Workers.Accumulators import Accumulator, REVIEW_COUNT
 from utils.QueryMessage import ALL_MESSAGE_FIELDS, YEAR_FIELD
 import os
 
+from utils.faulty import set_worker_as_faulty_if_needed
+
 def get_env_worker_field():
     worker_field = os.getenv('WORKER_FIELD')
     if not (worker_field in ALL_MESSAGE_FIELDS) and worker_field != REVIEW_COUNT:
@@ -35,6 +37,7 @@ def get_env_accumulator_vars():
     return worker_field, worker_value, accumulate_by
 
 def main():
+    set_worker_as_faulty_if_needed()
     worker_field, worker_value, accumulate_by = get_env_accumulator_vars() 
     print(f"Iniciando acumulador por {accumulate_by} => {worker_field} = {worker_value} ")
     if not worker_field:

@@ -15,7 +15,7 @@ def main():
     communicator = Communicator()
     
     for _ in range(N):
-        message = communicator.consume_message(EXCHANGE_NAME) 
+        message, batch_id = communicator.consume_message(EXCHANGE_NAME) 
         print(message.decode('utf-8'))
     
     communicator.close_connection()

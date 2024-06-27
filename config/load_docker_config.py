@@ -30,6 +30,18 @@ VOLUMES = """volumes:
     driver_opts:
       type: none
       device: ./data
+      o: bind
+  persistanceVolume:
+    driver: local
+    driver_opts:
+      type: none
+      device: ./persistance_files
+      o: bind
+  persistanceGateway:
+    driver: local
+    driver_opts:
+      type: none
+      device: ./persistanceGateway
       o: bind"""
 
 class Pool():
@@ -84,8 +96,7 @@ class QueryConfig():
                 if pool.worker_type == ACCUMULATOR_TYPE and pool.worker_field == REVIEW_TEXT_FIELD:
                   result += f"      args:"         
                   result += f"\n        - TEXTBLOB=True\n"
-                result += f"""    restart: on-failure
-    depends_on:
+                result += f"""    depends_on:
       - rabbitmq
     links: 
       - rabbitmq
@@ -99,8 +110,9 @@ class QueryConfig():
       - WORKER_FIELD={pool.worker_field}
       - WORKER_VALUE={pool.worker_value}"""
                 if pool.worker_type == ACCUMULATOR_TYPE:
-                  result += f"\n      - ACCUMULATE_BY={pool.accumulate_by}"
-                result += "\n\n"
+                  result += f"\n      - ACCUMULATE_BY={pool.accumulate_by}\n"
+                result += "\n    volumes:\n"
+                result += "      - persistanceVolume:/persistance_files\n\n"
                 
         return result
 
@@ -148,7 +160,9 @@ def process_gateway(queries, eof_to_receive, file):
       - FORWARD_TO={forward_to}
       - SHARD_BY={shard_by}
       - NEXT_POOL_WORKERS={next_pool_workers}
-      - EOF_TO_RECEIVE={eof_to_receive[GATEWAY]}\n\n"""
+      - EOF_TO_RECEIVE={eof_to_receive[GATEWAY]}
+    volumes:
+      - persistanceGateway:/persistance_files\n\n"""
   file.write(gateway_str)
   print("Processed gateway")
   return config["PORT"]

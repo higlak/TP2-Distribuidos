@@ -13,7 +13,8 @@ def recv_exactly(socket, n):
             buffer += received
             n -= len(received)
         return buffer 
-    except OSError:
+    except OSError as e:
+        print(f"Error receiving: {e}")
         return None
 
 # Sends bytes until all of them are sent, or a failure occurs
@@ -68,3 +69,16 @@ def encode(string :str):
     if string == None:
         return None
     return string.encode()
+
+def next_power_of_2_exponent(n):
+    exponent = 0
+    while n > 0:
+        n = n>>1
+        exponent +=1
+    return exponent
+
+def smalles_scale_for_str(string):
+    return next_power_of_2_exponent(len(string.encode()))
+
+def process_has_been_started(process):
+    return process._popen != None
