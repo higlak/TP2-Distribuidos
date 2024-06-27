@@ -198,10 +198,12 @@ def get_next_pool_foward_info(queries, forward_to):
   return ','.join(next_pool_workers), ','.join(shard_by)
 
 def write_queries(file, queries, eof_to_receive):
-   for query in queries.values():
+  all_containers = []
+  for query in queries.values():
     docker_string, containers_name = query.to_docker_string(queries, eof_to_receive)
     file.write(docker_string)
-    return containers_name
+    all_containers += containers_name
+  return all_containers
     
 def eof_to_receive(queries):
   eof_to_receive = {}
