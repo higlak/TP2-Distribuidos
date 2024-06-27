@@ -1,7 +1,9 @@
+from multiprocessing import Process
 import os
 
 from abc import ABC, abstractmethod
 import signal
+import socket
 
 from CommunicationMiddleware.middleware import Communicator
 from Persistance.log import *
@@ -128,7 +130,7 @@ class Worker(ABC):
         return True
 
     def handle_SIGTERM(self, _signum, _frame):
-        print(f"\n\n [Worker [{self.id}]] SIGTERM detected \n\n")
+        print(f"\n\n [Worker {self.id}] SIGTERM detected \n\n")
         self.signal_queue.put(True)
         if self.communicator:
             self.communicator.close_connection()
@@ -310,7 +312,6 @@ class Worker(ABC):
         return True
 
     def loop(self):
-        x = 0
         while True:
             ########### receive batch
             batch_bytes = self.receive_batch()
@@ -319,16 +320,6 @@ class Worker(ABC):
                 break
             batch = Batch.from_bytes(batch_bytes)
             
-            if self.id == SenderID(2,1,1):
-                print(f"client {batch.client_id} batch {batch.seq_num}")
-            
-            #if self.id == SenderID(3,1,0):
-                #print(f"\n recibo:{batch.seq_num} de: {batch.sender_id}")
-                #print(f"en metdadata:{self.last_received_batch.get(batch.sender_id, None)} de: {batch.sender_id}")
-                #print(self.client_contexts)
-            
-            if self.id == SenderID(2,1,1):
-                print(f"is dup")
             ########### filter dup
             if not batch or self.is_dup_batch(batch):
                 if not self.communicator.acknowledge_last_message():
@@ -336,29 +327,20 @@ class Worker(ABC):
                     break
                 continue
 
-
-            if self.id == SenderID(2,1,1):
-                print(f"proccess")
             ############ proccess batch
             if not self.process_batch(batch):
                 break
 
-            if self.id == SenderID(2,1,1):
-                print(f"dump")
             ############ bajar a disco
             if not self.dump_to_disk(batch):
                 break
             
-            if self.id == SenderID(2,1,1):
-                print(f"ack")
             ############ ack batch
             if not self.acknowledge_last_message():
                 break
             
             ############ Send final results
             if self.pending_eof.get(batch.client_id, None) == 0:   #guarda con perder el client_id
-                if self.id == SenderID(2,1,1):
-                    print(f"final res")
                 if not self.proccess_final_results(batch.client_id):
                     break
                 

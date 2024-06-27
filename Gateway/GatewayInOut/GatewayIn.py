@@ -97,6 +97,8 @@ class GatewayIn():
             '3': obj.to_query3,
             '5': obj.to_query5,
         }
+        if not switch.get(query_number, None):
+            print(f"query_num:  {query_number}, type: {type(query_number)}")
         
         method = switch.get(query_number, unknown_query)
         return method()
@@ -157,7 +159,7 @@ class GatewayIn():
             self.com.close_connection()
 
 def unknown_query():
-    print("[Gateway] Attempting to proccess unkwown query")
+    print("[GatewayIn] Attempting to proccess unkwown query")
     
 def gateway_in_main(client_id, client_socket, next_pools, book_query_numbers, review_query_numbers):
     print("\n\nStarting gatewain in\n\n")

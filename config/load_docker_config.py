@@ -5,6 +5,9 @@ import sys
 QUERY_CONFIG_FILE = "config/config_query"
 GATEWAY_CONFIG_FILE = "config/config_gateway.ini"
 CLIENT_CONFIG_FILE = "config/config_client.ini"
+WAKER_CONFIG_FILE = "config/config_waker.ini"
+KILLER_CONFIG_FILE = "config/config_killer.ini"
+
 FILTER_TYPE = 'filter'
 ACCUMULATOR_TYPE = 'accumulator'
 REVIEW_TEXT_FIELD = 'review_text'
@@ -22,6 +25,14 @@ RABBIT = """  rabbitmq:
     ports:
       - 15672:15672
 
+"""
+
+KILLER = """   killer:
+    build:
+      context: ./
+      dockerfile: Killer/Killer.dockerfile
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock\n\n
 """
 
 VOLUMES = """volumes:
@@ -85,11 +96,14 @@ class QueryConfig():
 
     def to_docker_string(self, queries, eof_to_receive):
         result = ""
+        workers_containers = []
         for p, pool in enumerate(self.query_pools):
             for i in range(pool.worker_amount):
                 next_pool_workers, shard_by = get_next_pool_foward_info(queries, pool.forward_to) 
                 worker_id = f"{self.query_number}.{pool.pool_number}.{i}"
-                result += f"""  {pool.worker_type}{worker_id}:
+                worker_container = f'{pool.worker_type}{worker_id}'
+                workers_containers.append(worker_container) 
+                result += f"""  {worker_container}:
     build:
       context: ./
       dockerfile: {pool.worker_type_dokerfile_path()}\n"""
@@ -114,7 +128,7 @@ class QueryConfig():
                 result += "\n    volumes:\n"
                 result += "      - persistanceVolume:/persistance_files\n\n"
                 
-        return result
+        return result, workers_containers
 
 def process_all_queries(file):
   queries = {}
@@ -147,7 +161,6 @@ def process_gateway(queries, eof_to_receive, file):
     build:
       context: ./
       dockerfile: Gateway/Gateway.dockerfile
-    restart: on-failure
     depends_on:
       - rabbitmq
     links: 
@@ -200,8 +213,12 @@ def get_next_pool_foward_info(queries, forward_to):
   return ','.join(next_pool_workers), ','.join(shard_by)
 
 def write_queries(file, queries, eof_to_receive):
-   for query in queries.values():
-    file.write(query.to_docker_string(queries, eof_to_receive))
+  all_containers = []
+  for query in queries.values():
+    docker_string, containers_name = query.to_docker_string(queries, eof_to_receive)
+    file.write(docker_string)
+    all_containers += containers_name
+  return all_containers
     
 def eof_to_receive(queries):
   eof_to_receive = {}
@@ -210,6 +227,66 @@ def eof_to_receive(queries):
       for next_to_send in pool.forward_to.split(','):
         eof_to_receive[next_to_send] = eof_to_receive.get(next_to_send, 0) + pool.worker_amount
   return eof_to_receive 
+
+def process_waker(file, i, worker_containers, waker_containers):
+  other_waker_containers = waker_containers[:i] + waker_containers[i+1:]
+  waker_str = f"""  waker{i}:
+    build:
+      context: ./
+      dockerfile: Waker/Waker.dockerfile
+    environment:
+      - WORKERS_CONTAINERS={";".join(worker_containers)}
+      - WAKERS_CONTAINERS={";".join(other_waker_containers)}
+      - WAKER_ID={i}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock\n\n"""
+  file.write(waker_str)
+  return True
+
+def process_killer(file):
+  config = ConfigParser()
+  try:
+    config.read(KILLER_CONFIG_FILE)
+  except:
+    print("No valid flename for killer")
+    return False
+  config = config["DEFAULT"]
+  kill_delay_min = int(config['KILL_DELAY_MIN'])
+  kill_delay_max = int(config['KILL_DELAY_MAX'])
+  containers_to_kill_min = int(config['CONTAINERS_TO_KILL_MIN'])
+  containers_to_kill_max = int(config['CONTAINERS_TO_KILL_MAX'])
+
+  killer_str = f"""  killer:
+    build:
+      context: ./
+      dockerfile: Killer/Killer.dockerfile
+    environment:
+      - KILL_DELAY_MIN={kill_delay_min}
+      - KILL_DELAY_MAX={kill_delay_max}
+      - CONTAINERS_TO_KILL_MIN={containers_to_kill_min}
+      - CONTAINERS_TO_KILL_MAX={containers_to_kill_max}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock\n\n"""
+  file.write(killer_str)
+  return True
+
+def process_wakers(file, worker_containers):
+  config = ConfigParser()
+  try:
+    config.read(WAKER_CONFIG_FILE)
+  except:
+    print("No valid flename for client")
+    return False
+  config = config["DEFAULT"]
+  n_wakers = int(config['AMOUNT_OF_WAKERS'])
+  
+  worker_containers.append('gateway')
+
+  wakers = [f"waker{i}" for i in range(n_wakers)]
+  for i in range(n_wakers):
+    if not process_waker(file, i, worker_containers, wakers):
+      return False
+  return True
 
 def process_client(queries, port, file, config, i):
   client_str = f"""  client{i}:
@@ -261,12 +338,16 @@ def main():
       queries = {individual_query :process_query(file, filename, individual_query)}
 
     eof = eof_to_receive(queries)
-    write_queries(file, queries, eof)
+    worker_containers = write_queries(file, queries, eof)
     port = process_gateway(queries, eof, file)
     if not port:
       return
     if not process_clients(queries, port, file):
+      return
+    if not process_wakers(file, worker_containers):
       return      
+    if not process_killer(file):
+      return
     file.write(VOLUMES)
 
 main()

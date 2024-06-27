@@ -8,6 +8,7 @@ from utils.faulty import set_classes_as_faulty_if_needed, set_class_as_faulty
 from utils.auxiliar_functions import get_env_list, process_has_been_started, send_all
 from GatewayInOut.GatewayIn import gateway_in_main, GatewayIn, send_missed_reconections
 from GatewayInOut.GatewayOut import gateway_out_main, GatewayOut, TIME_FOR_RECONNECTION
+from utils.HealthcheckReceiver import HealthcheckReceiver
 import os
 import socket
 
@@ -241,12 +242,23 @@ class Gateway():
         self.server_socket.close()
         print("gateway closed everything")
 
-def main():
-    #set_classes_as_faulty_if_needed([GatewayIn, GatewayOut])
-    #set_class_as_faulty(Gateway, True)
+def handle_healthcheck_receiver(gateway_main_thread):
+    try:            
+        healthcheck_receiver = HealthcheckReceiver('Gateway', gateway_main_thread)
+        healthcheck_receiver.start()
+    except Exception as e:
+        print(f"[Gateway] Socket disconnected: {e} \n")
+        return
+    
+def gateway_main():
     gateway = Gateway.new()
     if not gateway:
         return None
     gateway.run()
  
+def main():
+    gateway_main_thread = Process(target=gateway_main)
+    gateway_main_thread.start()
+    handle_healthcheck_receiver(gateway_main_thread)
+
 main()

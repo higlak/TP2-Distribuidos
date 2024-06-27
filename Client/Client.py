@@ -11,8 +11,9 @@ import os
 import sys
 import signal
 
-STARTING_CLIENT_WAIT = 1
-MAX_ATTEMPTS = 6
+STARTING_CLIENT_WAIT = 0.5
+MAX_ATTEMPTS = 15
+MAX_WAIT = 4
 NO_CLIENT_ID = 2**(8*AMOUNT_OF_CLIENT_ID_BYTES) - 1
 
 
@@ -121,6 +122,7 @@ class Client():
                     print("[Communicator] SIGTERM received, exiting attempting connection")
                     return None
                 except Empty:   
+                    i = min(i*2, MAX_WAIT)
                     i *= 2
 
     def start(self):

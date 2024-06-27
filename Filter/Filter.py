@@ -1,5 +1,7 @@
+from multiprocessing import Process
 from Workers.Filters import Filter
 from utils.QueryMessage import ALL_MESSAGE_FIELDS, YEAR_FIELD, TITLE_FIELD, AUTHOR_FIELD
+from utils.HealthcheckReceiver import HealthcheckReceiver
 import os
 
 from utils.faulty import set_worker_as_faulty_if_needed
@@ -34,8 +36,16 @@ def get_env_filter_vars():
     drop_fields = get_drop_fields_of_filter_type(filter_type)
     return filter_type, filter_value, drop_fields
 
-def main():
-    set_worker_as_faulty_if_needed()
+def handle_healthcheck_receiver(worker_thread, worker_id):
+    try:            
+        healthcheck_receiver = HealthcheckReceiver(worker_id, worker_thread)
+        healthcheck_receiver.start()
+
+    except Exception as e:
+        print(f"[{worker_id}] Socket disconnected: {e} \n")
+        return
+
+def handle_worker():
     filter_field, filter_value, drop_fields = get_env_filter_vars() 
     print(f"Iniciando filtro por {filter_field} = {filter_value}")
     if not filter_field:
@@ -43,6 +53,17 @@ def main():
     worker = Filter.new(filter_field,filter_value, drop_fields)
     if worker:
         worker.start()
+
+def main():
+    worker_id = os.getenv("WORKER_ID")
+    if not worker_id:
+        print("Invalid worker id")
+        return
+    
+    worker_main_thread = Process(target=handle_worker)
+    worker_main_thread.start()
+    handle_healthcheck_receiver(worker_main_thread, worker_id)
+
     print("Proceso finalizado")
 
 main()

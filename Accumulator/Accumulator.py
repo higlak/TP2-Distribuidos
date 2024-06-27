@@ -1,5 +1,7 @@
+from multiprocessing import Process
 from Workers.Accumulators import Accumulator, REVIEW_COUNT
 from utils.QueryMessage import ALL_MESSAGE_FIELDS, YEAR_FIELD
+from utils.HealthcheckReceiver import HealthcheckReceiver
 import os
 
 from utils.faulty import set_worker_as_faulty_if_needed
@@ -36,8 +38,16 @@ def get_env_accumulator_vars():
         return (None, None, None)
     return worker_field, worker_value, accumulate_by
 
-def main():
-    set_worker_as_faulty_if_needed()
+def handle_healthcheck_receiver(worker_thread, worker_id):
+    try:            
+        healthcheck_receiver = HealthcheckReceiver(worker_id, worker_thread)
+        healthcheck_receiver.start()
+
+    except Exception as e:
+        print(f"[{worker_id}] Socket disconnected: {e} \n")
+        return
+
+def handle_worker():
     worker_field, worker_value, accumulate_by = get_env_accumulator_vars() 
     print(f"Iniciando acumulador por {accumulate_by} => {worker_field} = {worker_value} ")
     if not worker_field:
@@ -45,5 +55,17 @@ def main():
     worker = Accumulator.new(worker_field, worker_value, accumulate_by)
     if worker:
         worker.start()
+
+def main():
+    worker_id = os.getenv("WORKER_ID")
+    if not worker_id:
+        print("Invalid worker id")
+        return
+    
+    worker_main_thread = Process(target=handle_worker)
+    worker_main_thread.start()
+    handle_healthcheck_receiver(worker_main_thread, worker_id)
+
+    print("Proceso finalizado")
 
 main()
