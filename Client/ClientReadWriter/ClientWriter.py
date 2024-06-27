@@ -6,7 +6,7 @@ from utils.QueryMessage import QueryMessage, query_result_headers, query_to_quer
 
 
 class ClientWriter():
-    def __init__(self, id, socket, queries, query_path):
+    def __init__(self, id, socket, queries, query_path, append_file):
         self.socket = socket
         self.finished = False
         self.last_batch = -1
@@ -18,7 +18,7 @@ class ClientWriter():
             if not os.path.exists(dir_path):
                 os.makedirs(dir_path)
             path = dir_path + "result" + str(query) + ".csv"
-            dw = DatasetWriter(path, header)
+            dw = DatasetWriter(path, header, append_file)
             writers[query_result] = dw
         self.writers = writers
 
@@ -39,6 +39,7 @@ class ClientWriter():
                 print("[ClientWriter] Finished receiving")
                 self.finished = True
                 break
+            print(f"[ClientWriter] Received {len(result_batch.messages)} for query {result_batch.messages[0].msg_type}")
             self.writers[result_batch[0].msg_type].append_objects(result_batch)
             self.last_batch = result_batch.seq_num
         self.close()

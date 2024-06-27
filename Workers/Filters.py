@@ -1,7 +1,7 @@
 from utils.Batch import SeqNumGenerator
 from utils.auxiliar_functions import smalles_scale_for_str
 from .Worker import Worker
-from utils.QueryMessage import QueryMessage, CATEGORIES_FIELD, YEAR_FIELD, TITLE_FIELD, REVIEW_MSG_TYPE
+from utils.QueryMessage import QueryMessage, CATEGORIES_FIELD, YEAR_FIELD, TITLE_FIELD, REVIEW_MSG_TYPE, AUTHOR_FIELD
 
 class Filter(Worker):
     def __init__(self, id, next_pools, eof_to_receive, field, valid_values, droping_fields):
@@ -30,9 +30,9 @@ class Filter(Worker):
             self.client_context_storage_updates[scale] = {}
         self.client_context_storage_updates[scale][title] = (None, [])
 
-    #self.client_context_storage_updates[scale][author] = (old_value, [new_value])
     def process_message(self, client_id, msg: QueryMessage):
-        #print(f"client: {client_id}, type: {msg.msg_type}, title: {msg.title}, under batch {SeqNumGenerator.seq_num + 1}")
+        if self.field == AUTHOR_FIELD:
+            return self.split_message_by_author(msg)
         self.client_contexts[client_id] = self.client_contexts.get(client_id, set())
         if msg.msg_type == REVIEW_MSG_TYPE and msg.title in self.client_contexts[client_id]:
             return self.transform_to_result(msg)
@@ -63,3 +63,10 @@ class Filter(Worker):
 
     def get_final_results(self, _client_id):
         return []
+    
+    def split_message_by_author(self, msg: QueryMessage):
+        results = []
+        for author in msg.authors:
+            split_msg = QueryMessage(msg.msg_type, year= msg.year, title=msg.title, authors=[author])
+            results.append(split_msg)
+        return results

@@ -99,17 +99,13 @@ class DecadeByAuthorAccumulator(Accumulator):
     def accumulate(self, client_id, msg):
         if msg.authors == None:
             return None
-        results = []
-        for author in msg.authors:
-            if self.accumulate_decade_by_author(client_id, author, msg.decade()):
-                msg_aux = msg.copy_droping_fields([YEAR_FIELD])
-                msg_aux.authors = [author]
-                results.append(msg_aux)
-        return results
-    
+        if self.accumulate_decade_by_author(client_id, msg.authors[0], msg.decade()):
+            return [msg.copy_droping_fields([YEAR_FIELD])]
+        return None
+        
     def accumulate_decade_by_author(self, client_id, author, msg_decade):
         author_decades = self.client_contexts[client_id].get(author, [])
-        if len(author_decades) == self.values:
+        if len(author_decades) >= self.values:
             return False
         if msg_decade == None:
             return False
@@ -182,12 +178,11 @@ class AmountOfReviewByTitleAccumulator(Accumulator):
     def sorted_final_results(self, client_id):
         sorted_results = []
         for title, accum in sorted(self.client_contexts[client_id].items()):
-            print(f"accum: {accum}, values: {int(self.values)}")
             if accum[0] >= int(self.values):
                 authors = accum[2].split(';')
                 result = QueryMessage(msg_type=BOOK_MSG_TYPE, title=title, authors=authors, rating=accum[1] / accum[0])
                 sorted_results.append(result)
-        print("\n\n resultadpos finales  ", sorted_results)
+        #print("\n\n resultadpos finales  ", sorted_results)
         return sorted_results
     
     def get_context_storage_types(self, scale_of_update_file):
@@ -273,8 +268,9 @@ class ReviewTextByTitleAccumulator(Accumulator):
     def sorted_final_results(self, client_id):
         sorted_results = []
         for title, result in sorted(self.client_contexts[client_id].items()):
-            msp = result[1] / result[0]
-            sorted_results.append(QueryMessage(msg_type=BOOK_MSG_TYPE, title=title, mean_sentiment_polarity=msp))
+            if result[0] > 0:
+                msp = result[1] / result[0]
+                sorted_results.append(QueryMessage(msg_type=BOOK_MSG_TYPE, title=title, mean_sentiment_polarity=msp))
         return sorted_results
     
     def get_context_storage_types(self, scale_of_update_file):

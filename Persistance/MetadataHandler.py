@@ -71,11 +71,10 @@ class MetadataHandler():
 
         self.log_last_client = client_id
 
-    def dump_metadata_to_disk(self, last_received_batch, pending_eof, received_batch=None):
+    def dump_metadata_to_disk(self, last_received_batch, pending_eof, received_batch=None, a=False):
         keys = []
         old_entries = []
         new_entries = []
-
         if SeqNumGenerator.seq_num > self.log_seq_num:
             keys.append(LAST_SENT_SEQ_NUM)
             if self.log_seq_num == -1:
@@ -96,11 +95,14 @@ class MetadataHandler():
                 keys.append(CLIENT_PENDING_EOF + str(received_batch.client_id))
                 old_entries.append([pending_eof[received_batch.client_id] + 1])
                 new_entries.append([pending_eof[received_batch.client_id]])
-
+        
         if len(keys) > 0:
             self.logger.log(ChangingFile(self.filename, keys, old_entries))
             self.log_seq_num = SeqNumGenerator.seq_num
             self.storage.store_all(keys, new_entries)
+
+    def close(self):
+        self.storage.close()
 
     def delete(self):
         self.storage.delete()

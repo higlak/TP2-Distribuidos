@@ -21,12 +21,6 @@ def get_file_paths():
         print("[Client] Must receive exactly 2 parameter, first one the books filepath sencond one reviews filepath")
         return None, None
     
-    if os.getenv("A"):
-        print("\n\nTengo solo prueba\n\n")
-        return "/data/test.csv" , "/data/test.csv"
-    else:
-        print("\n\nNope\n\n")
-    
     return sys.argv[1] , sys.argv[2]
 
 class Client():
@@ -67,6 +61,7 @@ class Client():
         
         id = self.receive_id(send_socket)
         if id == None:
+            send_socket.close()
             return self.connect()
         self.id = id
         receive_socket = Client.connect_to_gateway(self.server_port, self.signal_queue, id)
@@ -76,7 +71,7 @@ class Client():
         
         return send_socket, receive_socket
 
-    def create_read_writers(self, send_socket, receive_socket):
+    def create_read_writers(self, send_socket, receive_socket, append_on_files):
         books_path, reviews_path = get_file_paths()
         book_reader = DatasetReader(books_path)
         review_reader = DatasetReader(reviews_path)
@@ -85,7 +80,7 @@ class Client():
             return None, None
         
         client_reader = ClientReader(self.id, send_socket, book_reader, review_reader, self.batch_size)
-        client_writer = ClientWriter(self.id, receive_socket, self.queries, self.query_result_path)
+        client_writer = ClientWriter(self.id, receive_socket, self.queries, self.query_result_path, append_on_files)
         return client_reader, client_writer
         
     def receive_id(self, socket):
@@ -129,29 +124,32 @@ class Client():
                     i *= 2
 
     def start(self):
-        book_reading_pos, review_reading_pos, writer_finished = (0,0, False)
-        while (book_reading_pos != None or review_reading_pos != None or not writer_finished) and not writer_finished:
+        book_reading_pos, review_reading_pos, writer_finished, append_on_file = (0,0, False, False)
+        while (book_reading_pos != None or review_reading_pos != None or not writer_finished) and not self.finished:
             previouse_id = self.id
             send_socket, receive_socket = self.connect()
             if not send_socket or not receive_socket:
                 break
             if self.id != previouse_id:
-                book_reading_pos, review_reading_pos, writer_finished = (0,0, False)
+                print(f"Previouse id: {previouse_id} self.id {self.id}")
+                book_reading_pos, review_reading_pos, writer_finished, append_on_file = (0,0, False, False)
 
-            self.client_reader, client_writer = self.create_read_writers(send_socket, receive_socket)
+            self.client_reader, client_writer = self.create_read_writers(send_socket, receive_socket, append_on_file)
             if not self.client_reader or not client_writer:
                 break 
-        
+            append_on_file = True
+
             self.writer_process = Process(target=client_writer.start)
             self.writer_process.start()
+            
             book_reading_pos, review_reading_pos = self.client_reader.start(book_reading_pos, review_reading_pos)
             if book_reading_pos != None or review_reading_pos != None:
                 print("Terminating writer")
                 self.writer_process.terminate()
             self.writer_process.join()
             print("Joined writer")
-            writer_finished = self.writer_process.exitcode
-            print(f"book_reading_pos {book_reading_pos}, review_redaing_pos {review_reading_pos}, writer_finished { writer_finished}")
+            writer_finished = self.writer_process.exitcode 
+            print(f"book_reading_pos {book_reading_pos}, review_redaing_pos {review_reading_pos}, writer_finished { writer_finished}, append_on_file {append_on_file}")
 
 def main():
     client = Client.new()

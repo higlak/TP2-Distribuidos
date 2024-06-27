@@ -19,7 +19,7 @@ LOG_FILENAME = 'log.bin'
 CLIENT_CONTEXT_FILENAME = 'client_context'
 SCALE_SEPARATOR = '_S'
 
-BATCH_SIZE = 2
+BATCH_SIZE = 512
 
 class Worker(ABC):
     def __init__(self, id, next_pools, eof_to_receive):
@@ -33,9 +33,9 @@ class Worker(ABC):
         self.last_received_batch = {}
         self.client_context_storage_updates = {} # {client{key: (old_value, new value)}}
         self.client_contexts = {} # {client {depende del accum}}
+        self.client_contexts_storage = {}
 
         self.metadata_handler = None
-        self.client_contexts_storage = {}
         self.logger = None
         signal.signal(signal.SIGTERM, self.handle_SIGTERM)
         
@@ -62,19 +62,21 @@ class Worker(ABC):
         self.client_contexts_storage[client_id][filename] = KeyValueStorage.new(
             path, str, 2**scale_of_update_file, storage_types, storage_types_size)
         previous_context = self.client_contexts_storage[client_id][filename].get_all_entries()
-        print("previouse context: ", len(previous_context))
         if not self.client_contexts_storage[client_id][filename] or previous_context == None:
             return False
         self.add_previous_context(previous_context, client_id)
         return True
     
     def load_all_context(self):
+        self.client_context_storage_updates = {}
+        self.client_contexts = {} 
+        self.client_contexts_storage = {}
         try:
             for filename in os.listdir(self.worker_dir()):
                 if filename == METADATA_FILENAME + '.bin' or filename == LOG_FILENAME:
                     continue
                 path = os.path.join(self.worker_dir(), filename)
-                if os.path.isfile(path):            
+                if os.path.isfile(path):
                     client_id, scale_of_file = info_from_filename(filename)
                     self.client_contexts_storage[client_id] = self.client_contexts_storage.get(client_id, {})
                     if not self.load_context(path, filename, client_id, scale_of_file):
@@ -173,6 +175,8 @@ class Worker(ABC):
                 if result:
                     append_extend(results, result)
         if len(results) > 0:
+            if len(results) > 65000:
+                print("\n\nBATCHES MUT GRANDES\n\n")
             result_batch = Batch.new(batch.client_id, self.id, results)
             return self.send_partial_results(result_batch)
         return True
@@ -315,11 +319,16 @@ class Worker(ABC):
                 break
             batch = Batch.from_bytes(batch_bytes)
             
+            if self.id == SenderID(2,1,1):
+                print(f"client {batch.client_id} batch {batch.seq_num}")
+            
             #if self.id == SenderID(3,1,0):
                 #print(f"\n recibo:{batch.seq_num} de: {batch.sender_id}")
                 #print(f"en metdadata:{self.last_received_batch.get(batch.sender_id, None)} de: {batch.sender_id}")
                 #print(self.client_contexts)
-
+            
+            if self.id == SenderID(2,1,1):
+                print(f"is dup")
             ########### filter dup
             if not batch or self.is_dup_batch(batch):
                 if not self.communicator.acknowledge_last_message():
@@ -327,20 +336,29 @@ class Worker(ABC):
                     break
                 continue
 
+
+            if self.id == SenderID(2,1,1):
+                print(f"proccess")
             ############ proccess batch
             if not self.process_batch(batch):
                 break
 
+            if self.id == SenderID(2,1,1):
+                print(f"dump")
             ############ bajar a disco
             if not self.dump_to_disk(batch):
                 break
             
+            if self.id == SenderID(2,1,1):
+                print(f"ack")
             ############ ack batch
             if not self.acknowledge_last_message():
                 break
-
+            
             ############ Send final results
             if self.pending_eof.get(batch.client_id, None) == 0:   #guarda con perder el client_id
+                if self.id == SenderID(2,1,1):
+                    print(f"final res")
                 if not self.proccess_final_results(batch.client_id):
                     break
                 
@@ -350,8 +368,16 @@ class Worker(ABC):
             ############ Clean Log
             self.logger.clean()
 
+    def close_files(self):
+        while len(self.client_contexts_storage) > 0:
+            client_id, storages = self.client_contexts_storage.popitem()
+            for storage in storages.values():
+                storage.close()
+        self.metadata_handler.close()
+
     def intialize_based_on_log_changing_file(self, log):
         logs = self.logger.read_while_log_type(LogType.ChangingFile)
+        print(f"\n\rollbackeando {len(logs)} logs\n\n")
         for log in logs:
             if log.filename == METADATA_FILENAME + '.bin':
                 storage = self.metadata_handler.storage
@@ -360,8 +386,11 @@ class Worker(ABC):
                 client_id, _log_scale = info_from_filename(log.filename)
                 storage = self.client_contexts_storage[client_id][log.filename]
             self.rollback(storage, client_id, log.keys, log.entries)
-        
-        return True
+        self.close_files()
+
+        if not self.load_metadata():
+            return False
+        return self.load_all_context()
 
     def send_any_ready_final_results(self):
         finished_clients = []
@@ -377,12 +406,19 @@ class Worker(ABC):
 
     def any_more_messages(self):
         worker_name = self.id.__repr__()
-        return self.communicator.pending_messages(worker_name) > 0
+        pending_messages = self.communicator.pending_messages(worker_name)
+        if pending_messages == None:
+            return None
+        return pending_messages > 0
 
     def initialize_based_on_log_finished_writing(self, log):
         #recibir un batch
         batch = None
-        if self.any_more_messages():
+        more_messages = self.any_more_messages()
+        if more_messages == None:
+            print(f"[Worker {self.id}] Disconnected from MOM, while asking pending batches")
+            return False
+        if more_messages:
             batch_bytes = self.receive_batch()
             if not batch_bytes:
                 print(f"[Worker {self.id}] Disconnected from MOM, while receiving_message")
@@ -443,10 +479,10 @@ class Worker(ABC):
             else:
                 storage.store(key, old_entry)
 
-        if client_id == None:
-            self.set_previouse_metadata()
-        else:
-            self.add_previous_context(storage.get_all_entries(), client_id)
+        #if client_id == None:
+        #    self.set_previouse_metadata()
+        #else:
+        #    self.add_previous_context(storage.get_all_entries(), client_id)
 
 def info_from_filename(filename):
     client_id, scale = filename.strip('.bin').strip(CLIENT_CONTEXT_FILENAME).split(SCALE_SEPARATOR)

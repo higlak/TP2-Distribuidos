@@ -23,12 +23,12 @@ echo ---------------test solo query 3 ejemplo chico 2 clientes---------------
 echo
 
 resultado=0
-resultado_cliente0="./data/client0/result3.csv"
-resultado_cliente1="./data/client1/result3.csv"
+resultado_cliente0="./data/client4/result2.csv"
+resultado_cliente1="./data/client5/result2.csv"
 sort "$resultado_cliente0" -o "$resultado_cliente0"
 sort "$resultado_cliente1" -o "$resultado_cliente1"
 
-if cmp -s "./test/result3.csv" "$resultado_cliente0"; then
+if cmp -s "./test/result2.csv" "$resultado_cliente0"; then
     echo
     echo -e "\e[32mSe recibio correctamente el primer cliente\e[0m"
     echo
@@ -39,7 +39,7 @@ else
     resultado=$((resultado + 1))
 fi
 
-if cmp -s "./test/result3.csv" "$resultado_cliente1"; then
+if cmp -s "./test/result2.csv" "$resultado_cliente1"; then
     echo
     echo -e "\e[32mSe recibio correctamente el segundo cliente\e[0m"
     echo
@@ -50,14 +50,24 @@ else
     resultado=$((resultado + 2))
 fi
 
-directorio="./persistance_files/"
+directorio1="./persistance_files/"
+directorio2="./persistanceGateway/"
 no_borrar1="log_type3.1.0.txt"
 no_borrar2="log_type3.0.0.txt"
 
 if [ "$resultado" -eq 0 ]; then
-    if [ -d "$directorio" ]; then
+    if [ -d "$directorio1" ]; then
         echo "Borrando persistencia "
-        find "$directorio" -type f ! -name "$no_borrar1" ! -name "$no_borrar2" -exec rm {} \;
+        find "$directorio1" -type f ! -name "$no_borrar1" ! -name "$no_borrar2" -exec rm {} \;
+    else
+        echo "No encontre persistencia"
+    fi
+fi
+
+if [ "$resultado" -eq 0 ]; then
+    if [ -d "$directorio2" ]; then
+        echo "Borrando persistencia "
+        find "$directorio2" -type f ! -name "log_type.txt" -exec rm {} \;
     else
         echo "No encontre persistencia"
     fi

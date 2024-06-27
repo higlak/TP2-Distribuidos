@@ -60,7 +60,7 @@ class LogReadWriter():
         self.file.write(byte_array)
         self.file.flush()
         self.remove_count_prepare(len(byte_array))
-        #os.fsync(self.file.fileno())
+        os.fsync(self.file.fileno())
 
     def handle_partial_logs(self, log):
         i = 0
@@ -79,7 +79,7 @@ class LogReadWriter():
             size = self.file.seek(0, END_OF_FILE_POS)
             self.file.truncate(max(0,size - i))
             self.file.flush()
-            #os.fsync(self.file.fileno())
+            os.fsync(self.file.fileno())
         
         return log
 
@@ -115,7 +115,7 @@ class LogReadWriter():
     def clean(self):
         self.file.truncate(0)
         self.file.flush()
-        #os.fsync(self.file.fileno())
+        os.fsync(self.file.fileno())
 
     def close(self):
         self.file.close()
@@ -467,9 +467,8 @@ def get_float_byte_array(num):
     return bytearray(struct.pack('f',num))
 
 def get_string_byte_array(string):
-    string = string[:2**(8*STRING_LENGTH_BYTES)]
-    byte_array = bytearray(string.encode())
-    byte_array.extend(integer_to_big_endian_byte_array(len(string), STRING_LENGTH_BYTES))
+    byte_array = bytearray(string.encode())[:2**(8*STRING_LENGTH_BYTES)]
+    byte_array.extend(integer_to_big_endian_byte_array(len(byte_array), STRING_LENGTH_BYTES))
     return byte_array
 
 def get_amount_of_entries_byte_array(l):
@@ -623,4 +622,9 @@ if __name__ == '__main__':
             file.seek(-2*log_bytes, END_OF_FILE_POS)
             file.write(FinishedSendingResults(15, 4).get_log_bytes())
             self.assertEqual(logger.read_last_log(), AckedBatch())
+
+        def test(self):
+            logger = LogReadWriter.new("./Persistance/log.bin")
+            print(logger.file.read(1000))
+            logger.read_last_log()
     unittest.main()

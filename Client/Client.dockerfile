@@ -7,4 +7,4 @@ COPY ./utils /root/utils
 COPY ./Client/Client.py /root/main.py
 COPY ./Client/ClientReadWriter /root/ClientReadWriter
 
-ENTRYPOINT ["python3", "/root/main.py", "/data/book_test.csv", "/data/review_test.csv"]
+ENTRYPOINT ["python3", "/root/main.py", "/data/books20.csv", "/data/reviews20.csv"]

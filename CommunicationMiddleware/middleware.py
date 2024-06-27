@@ -1,4 +1,5 @@
 import hashlib
+import os
 from time import sleep
 import pika
 import pika.channel, pika.connection
@@ -76,6 +77,7 @@ class Communicator():
         self.channel.basic_qos(prefetch_count=prefetch_count)
         self.set_producer_queues()
         self.channel.confirm_delivery()
+        self.closed = False
 
     @classmethod
     def new(cls, signal_queue: Queue, producer_groups={}, auto_ack = True, prefetch_count=1):
@@ -169,8 +171,12 @@ class Communicator():
             return bytearray([])
         
     def pending_messages(self, queue_name):
-        queue = self.channel.queue_declare(queue=queue_name, durable=True, passive=True)
-        return queue.method.message_count
+        try:
+            queue = self.channel.queue_declare(queue=queue_name, durable=True)
+            return queue.method.message_count
+        except MIDDLEWARE_EXCEPTIONS as e:
+            print("ERRRRRRORRRRRRRRR ", e)
+            return None
 
     def acknowledge_last_message(self):
         if self.last_delivery_tag == None:
@@ -197,8 +203,12 @@ class Communicator():
         return group in self.producer_groups.keys()
 
     def close_connection(self):
-        if not self.connection.is_closed:
+        print(f"self.closed {self.closed} pid: {os.getpid()}")
+        if not self.closed:
+            print("closing midleware")
+            self.closed = True
             self.connection.close()
+            print("closed middleware")
 
 def get_sharded_batchs(batch, shard_by, amount_of_shards):
     hashed_messages = {}

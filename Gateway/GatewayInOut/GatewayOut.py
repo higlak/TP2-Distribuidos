@@ -1,23 +1,31 @@
 from queue import Queue
+import queue
 import signal
 import time
 
 from CommunicationMiddleware.middleware import Communicator
+from GatewayInOut.GatewayOutReceiver import GatewayOutReceiverHandler
 from Persistance.MetadataHandler import MetadataHandler
 from Persistance.log import AckedBatch, FinishedSendingResults, FinishedWriting, LogReadWriter, LogType
-from utils.Batch import Batch, SeqNumGenerator
+from utils.Batch import AMOUNT_OF_CLIENT_ID_BYTES, Batch, SeqNumGenerator
 from utils.SenderID import SenderID
 from utils.auxiliar_functions import send_all
+from threading import Thread
+
+import utils.faulty
 
 GATEWAY_QUEUE_NAME = 'Gateway'
 GATEWAY_SENDER_ID = SenderID(0,0,1)
 PERSISTANCE_DIR = '/persistance_files/'
 LOG_FILENAME = 'log_out.bin'
+RECV_TIMEOUT = 0.1
+NO_CLIENT_ID = 2**(8*AMOUNT_OF_CLIENT_ID_BYTES) - 1
+TIME_FOR_RECONNECTION = 15
+UNKNOWN_CLIENT_TIMEOUT = TIME_FOR_RECONNECTION + 5
 
 class GatewayOut():
     def __init__(self, gateway_conn, eof_to_receive):
-        self.com = None
-        self.sigterm_queue = Queue()
+        self.receiver_handler = None
         self.eof_to_receive = eof_to_receive
         self.gateway_conn = gateway_conn
         self.finished = False
@@ -33,34 +41,30 @@ class GatewayOut():
 
     def handle_SIGTERM(self, _signum, _frame):
         print("\n\n [GatewayOut] SIGTERM detected\n\n")
-        self.sigterm_queue.put(True)
-        self.finished = True
         self.close()
 
     def connect(self):
-        self.com = Communicator.new(self.sigterm_queue, auto_ack=False)
-        if not self.com:
-            return False
-        return True
+        self.receiver_handler = GatewayOutReceiverHandler()
+        return self.receiver_handler.start()
 
     def close(self):
+        self.finished = True
         for socket in self.clients_sockets.values():
             if socket != None:
                 socket.close()
-        self.com.close_connection()
+        if self.receiver_handler != None:
+            self.receiver_handler.close()
 
     def start(self):
-        if not self.load_from_disk(): 
+        if not self.load_from_disk():
             return None
         if not self.connect():
-            return None
+            return False
         if not self.initialize_based_on_last_execution():
             print("[GatewayOut] Error initializing from log")
             return None
-        try:
-            self.loop()
-        except OSError as e :
-            print("[GatewayOut] Socket disconnected: {e}")
+
+        self.loop()
         print("[GatewayOut] Finishing")
         self.close()
 
@@ -71,73 +75,83 @@ class GatewayOut():
             return True
         return False
 
+    def recv_batch_and_get_clients(self):
+        while not self.finished:
+            self.get_clients()
+            try:
+                return self.receiver_handler.recv_batch(RECV_TIMEOUT)
+            except queue.Empty:
+                continue
+
     def loop(self):
         while not self.finished:
-            print("[GatewayOut] Consumir mensaje")
-            batch_bytes = self.com.consume_message(GATEWAY_QUEUE_NAME)
-            if batch_bytes == None:
+            batch = self.recv_batch_and_get_clients()
+            if not batch:
                 print(f"[GatewayOut] Disconnected from MOM")
                 break
-            batch = Batch.from_bytes(batch_bytes)
 
-            print("[GatewayOut] dup")
-            if not batch or self.is_dup_batch(batch):
-                if not self.com.acknowledge_last_message():
+            if self.is_dup_batch(batch):
+                if not self.receiver_handler.ack_batch():
                     print(f"[GatewayOut] Disconnected from MOM, while acking_message")
                     break
                 continue
 
-            print("[GatewayOut] Get until")
-            if not self.get_clients_until(batch.client_id):
+            if not self.get_clients(batch.client_id):
                 break
-
             
-            print("[GatewayOut] process")
             if not self.proccess_batch(batch):
                 break
 
-            print("[GatewayOut] dump")
             self.dump_to_disk(batch)
 
-            print("[GatewayOut] ack")
             if not self.acknowledge_last_message():
                 break
 
-            print("[GatewayOut] pending")
             if self.pending_eof.get(batch.client_id, None) == 0:
                 print("[GatewayOut] finish")
                 if not self.finished_client(batch.client_id):
                     break
             
-            print("[GatewayOut] clean")
             self.logger.clean()
 
     def add_client(self, client_id, client_socket):
         print(f"[GatewatOut] Received new client with id: {client_id}")
         self.las_client_id = max(client_id, self.las_client_id)
         if client_id not in self.clients_sockets:
-            self.pending_eof[client_id] = self.eof_to_receive
-            self.metadata_handler.dump_new_client(client_id, self.eof_to_receive)
+            print("EN ADD CLIENT: en el get ", self.pending_eof.get(client_id, "NO hay nada"))
+            self.pending_eof[client_id] = self.pending_eof.get(client_id, self.eof_to_receive)
+            self.metadata_handler.dump_new_client(client_id, self.pending_eof[client_id])
+            self.logger.clean()
         self.clients_sockets[client_id] = client_socket
+        self.gateway_conn.send(client_id)
 
-    def get_clients_until(self, client_id):
-        while not self.finished:
-            print("[GatewayOut] until")
+    def get_clients(self, until_client_id=None):
+        finish_time = time.time() + UNKNOWN_CLIENT_TIMEOUT
+        while not self.finished and finish_time < time.time():
+            #print("[GatewayOut] waiting for ", until_client_id)
             try:
                 if not self.gateway_conn.poll():
-                    if client_id in self.clients_sockets:
+                    if until_client_id == None or until_client_id in self.clients_sockets:
                         break
                     else:
-                        time.sleep(0.1)
+                        time.sleep(RECV_TIMEOUT)
                         continue
                 client_id, client_socket = self.gateway_conn.recv()
             except Exception as e:
                 print("[GatewayOut] Disconected from gateway", e)
 
             if client_socket == None:
-                self.clients_sockets[client_id] = None
+                print(f"[GatewayOut] Recibi {client_id}, {client_socket}")
+                if client_id == NO_CLIENT_ID: 
+                    self.gateway_conn.send(client_id)
+                else:
+                    self.clients_sockets[client_id] = None
+                    self.pending_eof[client_id] = self.eof_to_receive
             else:
                 self.add_client(client_id, client_socket)
+        if not self.finished:
+            self.clients_sockets[client_id] = None
+            self.pending_eof[client_id] = self.eof_to_receive
         return not self.finished
     
     def send_batch_to_client(self, client_id, batch):
@@ -150,20 +164,14 @@ class GatewayOut():
             if self.finished:
                 return False
             self.clients_sockets[client_id] = None
-            return False
         return True
 
     def proccess_batch(self, batch):
         client_id = batch.client_id
-        if not self.clients_sockets.get(client_id, None):
-            if not self.com.nack_last_message():
-                print("[GatewayOut] Disconected from communicator while nacking message")
-                return False
-            return True
             
         if batch.is_empty():
             self.pending_eof[client_id] -= 1
-            print(f"[GatewayOut] Pending EOF to receive: {self.pending_eof[client_id]}")
+            print(f"[GatewayOut] Pending EOF to receive: {self.pending_eof[client_id]} of client: {client_id}")
         else:
             batch_to_send = batch.copy_keeping_fields(GATEWAY_SENDER_ID)
             print(f"[GatewayOut] Sending result to client {client_id} with {batch.size()} elements")
@@ -176,15 +184,16 @@ class GatewayOut():
         self.logger.log(FinishedWriting())
 
     def acknowledge_last_message(self):
-        if not self.com.acknowledge_last_message():
+        if not self.receiver_handler.ack_batch():
             print(f"[GatewayOut] Disconnected from MOM, while acking_message")
             return False
         self.logger.log(AckedBatch())
         return True
 
     def remove_client(self, client_id):
-        self.clients_sockets.pop(client_id)
-        self.pending_eof.pop(client_id)
+        if self.clients_sockets[client_id] != None:
+            self.clients_sockets.pop(client_id)
+            self.pending_eof.pop(client_id)
         self.metadata_handler.remove_client(client_id)
 
     def finished_client(self, client_id):
@@ -237,33 +246,36 @@ class GatewayOut():
         if finished_client == None:
             return True
 
-        self.get_clients_until(finished_client)
+        self.get_clients(finished_client)
         if not self.finished_client(finished_client):
             return False
 
         return True
 
     def any_more_messages(self):
-        return self.com.pending_messages(GATEWAY_QUEUE_NAME) > 0
+        pending_messages = self.receiver_handler.ammount_of_messages_in_queue()
+        if pending_messages == None:
+            return None
+        return pending_messages > 0
 
     def initialize_based_on_log_finished_writing(self, log):
         #recibir un batch
         batch = None
-        if self.any_more_messages():
-            batch_bytes = self.com.consume_message(GATEWAY_QUEUE_NAME)
-            if not batch_bytes:
+        more_messages = self.any_more_messages()
+        if more_messages == None:
+            return False
+        if more_messages:
+            batch = self.receiver_handler.recv_batch()
+            if not batch:
                 print(f"[GatewayOut] Disconnected from MOM, while receiving_message")
                 return False
-            batch = Batch.from_bytes(batch_bytes)
         
-            if not batch or self.is_dup_batch(batch):
-                if not self.com.acknowledge_last_message():
+            if self.is_dup_batch(batch):
+                if not self.receiver_handler.ack_batch():
                     print(f"[GatewayOut] Disconnected from MOM, while acking_message")
                     return False
             else:
-                if not self.com.nack_last_message():
-                    print(f"[GatewayOut] Disconnected from MOM, while nacking_message")
-                    return False
+                self.receiver_handler.keep_batch(batch)
         
         self.logger.log(AckedBatch())
         return self.handle_any_finished_client()
@@ -288,7 +300,7 @@ class GatewayOut():
 
     def initialize_based_on_last_execution(self):
         last_log = self.logger.read_last_log()
-        print(last_log)
+        print("[GatewayOut] last_log", last_log)
         if not last_log:
             self.send_last_execution_clients()
             return True

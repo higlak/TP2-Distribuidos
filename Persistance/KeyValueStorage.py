@@ -112,7 +112,7 @@ class FixedU32List(StorableTypes):
         numbers = []
         len_numbers = byte_array_to_big_endian_integer(remove_bytes(byte_array, LEN_LIST_BYTES))
         leftover_nums = 0
-        while len(byte_array) > U32_BYTES:
+        while len(byte_array) >= U32_BYTES:
             if len(numbers) < len_numbers:
                 numbers.append(byte_array_to_big_endian_integer(remove_bytes(byte_array,U32_BYTES)))
             else:
@@ -197,7 +197,6 @@ class KeyValueStorage():
     def get_entry(self):
         byte_array = bytearray(self.file.read(self.entry_byte_size))
         if len(byte_array) == 0:
-            print("chau")
             return None
         if len(byte_array) < self.entry_byte_size:
             self.del_last_bytes(len(byte_array))
@@ -250,7 +249,8 @@ class KeyValueStorage():
 
     def store_all(self, keys, list_of_values):
         for key, values in zip(keys, list_of_values):
-            self.store(key, values)
+            self.store(key, values, True)
+            os.fsync(self.file.fileno())
 
     def _convert_values(self, values):
         converted_values = []
@@ -258,7 +258,7 @@ class KeyValueStorage():
             converted_values.append(value_type(value, value_size))
         return converted_values
 
-    def store(self, key, values): 
+    def store(self, key, values, store_all=False): 
         if (len(values) != len(self.value_types)) and len(values) != 0 and values != [list]:
             print(f"values: {values} , values_types: {self.value_types}")
             raise KeysMustBeEqualToValuesOr0
@@ -268,6 +268,9 @@ class KeyValueStorage():
         key = self.key_type(key, self.fixed_key_size)
         pos = self.key_pos.get(key, self.next_pos)
         self._store_in_pos(pos, key, converted_values)
+        
+        if not store_all:
+            os.fsync(self.file.fileno())
         
     def _store_in_pos(self, pos, key, values, stepping=False):
         if pos == self.next_pos:
@@ -279,7 +282,6 @@ class KeyValueStorage():
 
         self.write_values(key, values)
         self.file.flush()
-        #os.fsync(self.file.fileno())
 
     def remove(self, key):
         key = self.key_type(key, self.fixed_key_size)
@@ -304,7 +306,7 @@ class KeyValueStorage():
             self._store_in_pos(pos_to_remove, last_key, last_values, stepping=True)
         self.del_last_line()
         
-        #os.fsync(self.file.fileno())
+        os.fsync(self.file.fileno())
 
     def cross_out_key(self, key_pos):
         self.file.seek(key_pos*self.entry_byte_size, STARTING_FILE_POS)
@@ -661,5 +663,28 @@ if __name__ == '__main__':
             self.assertEqual(entries, expected_entries)
             self.assertEqual(storage.key_pos, expected_pos)
             self.assertEqual(storage.next_pos, 2)
-            
+        
+        def test(self):
+            i = 3
+            storage = KeyValueStorage.new("./Persistance/client_context0_S" + str(i) + ".bin", str, 2**i, [(list, int)], [10])
+            print(storage.get_all_entries())
+
+        def test2(self):
+            file = BytesIO(b"")
+            storage = KeyValueStorage(file, str, 8, [(list, int)], [10])
+            storage.store("holahola", [[1,2,3,4,5,6,7,8,9,10]], True)
+            file.seek(0)
+            self.assertEqual(file.read(1000), bytearray(b"holahola") + bytearray([10,0,0,0,1,0,0,0,2,0,0,0,3,0,0,0,4,0,0,0,5,0,0,0,6,0,0,0,7,0,0,0,8,0,0,0,9,0,0,0,10]))
+
+            expected_entries = {
+                "holahola": [1,2,3,4,5,6,7,8,9,10],
+            }
+            expected_pos = {
+                FixedStr("holahola", 8): 0,
+            }
+            entries = storage.get_all_entries()
+            self.assertEqual(entries, expected_entries)
+            self.assertEqual(storage.key_pos, expected_pos)
+            self.assertEqual(storage.next_pos, 1)
+
     unittest.main()
