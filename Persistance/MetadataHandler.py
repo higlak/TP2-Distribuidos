@@ -58,7 +58,7 @@ class MetadataHandler():
 
     def dump_new_client(self, client_id, eof_to_receive):
         keys = [CLIENT_PENDING_EOF + str(client_id), LAST_CLIENT_ID]
-        values = [[eof_to_receive], [client_id]]
+        values = [[eof_to_receive], [max(client_id, self.log_last_client)]]
         if self.log_last_client == -1:
             log_last_client = None
         else:
@@ -71,7 +71,7 @@ class MetadataHandler():
 
         self.log_last_client = client_id
 
-    def dump_metadata_to_disk(self, last_received_batch, pending_eof, received_batch=None, a=False):
+    def dump_metadata_to_disk(self, last_received_batch, pending_eof, received_batch=None):
         keys = []
         old_entries = []
         new_entries = []

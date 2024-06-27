@@ -18,11 +18,11 @@ NO_CLIENT_ID = 2**(8*AMOUNT_OF_CLIENT_ID_BYTES) - 1
 
 
 def get_file_paths():
-    if len(sys.argv) != 3:
-        print("[Client] Must receive exactly 2 parameter, first one the books filepath sencond one reviews filepath")
+    book_file = os.getenv("BOOK_FILE")
+    review_file = os.getenv("REVIEW_FILE")
+    if not book_file or not review_file:
         return None, None
-    
-    return sys.argv[1] , sys.argv[2]
+    return '/data/' + book_file , '/data/' + review_file
 
 class Client():
     def __init__(self, queries, query_result_path, batch_size, server_port):

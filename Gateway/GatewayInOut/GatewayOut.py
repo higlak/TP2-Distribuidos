@@ -67,6 +67,7 @@ class GatewayOut():
         self.loop()
         print("[GatewayOut] Finishing")
         self.close()
+        self.metadata_handler.close()
 
     def is_dup_batch(self, batch):
         sender_last_seq_num = self.last_received_batch.get(batch.sender_id, None)
@@ -196,7 +197,8 @@ class GatewayOut():
 
     def remove_client(self, client_id):
         if self.clients_sockets[client_id] != None:
-            self.clients_sockets.pop(client_id)
+            sock = self.clients_sockets.pop(client_id)
+            sock.close()
             self.pending_eof.pop(client_id)
         self.metadata_handler.remove_client(client_id)
 

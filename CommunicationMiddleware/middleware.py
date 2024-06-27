@@ -205,10 +205,8 @@ class Communicator():
     def close_connection(self):
         print(f"self.closed {self.closed} pid: {os.getpid()}")
         if not self.closed:
-            print("closing midleware")
             self.closed = True
             self.connection.close()
-            print("closed middleware")
 
 def get_sharded_batchs(batch, shard_by, amount_of_shards):
     hashed_messages = {}

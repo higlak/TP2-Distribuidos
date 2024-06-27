@@ -2,6 +2,9 @@ import os
 import docker
 import random
 from time import sleep
+import signal
+
+finished = False 
 
 def get_random_container():
     """
@@ -28,8 +31,15 @@ def only_one_waker_alive(containers):
         return True
     return False
 
+def handle_SIGTERM(self, _signum, _frame):
+    global finished
+    self.print('SIGTERM detected\n\n')
+    finished = True
+
 def main():
     print("[Killer] Starting killer")
+    signal.signal(signal.SIGTERM, handle_SIGTERM)
+
     try:
         kill_delay_min = int(os.getenv('KILL_DELAY_MIN'))
         kill_delay_max = int(os.getenv('KILL_DELAY_MAX'))
@@ -39,9 +49,9 @@ def main():
         print("[Killer] Invalid env variables")
         return
 
-    while True:
+    while not finished:
         containers_to_kill = random.randint(containers_to_kill_min, containers_to_kill_max)
-        print(f"[Killer] Killing {containers_to_kill} containers", flush=True)
+        #print(f"[Killer] Killing {containers_to_kill} containers", flush=True)
         for _ in range(containers_to_kill):
             try:
                 random_container = get_random_container()
@@ -56,5 +66,7 @@ def main():
         delay = random.randint(kill_delay_min, kill_delay_max)
         print(f"[Killer] Sleeping for {delay} seconds", flush=True)
         sleep(delay)
+    
+    print("[Killer] Finished")
 
 main()

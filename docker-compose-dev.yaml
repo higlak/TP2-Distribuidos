@@ -626,9 +626,9 @@ services:
       - PORT=12345
       - BOOK_QUERIES=1,2,3,5
       - REVIEW_QUERIES=3,5
-      - FORWARD_TO=5.0,1.0,3.0,2.0
-      - SHARD_BY=title,,title,
-      - NEXT_POOL_WORKERS=2,1,2,3
+      - FORWARD_TO=1.0,3.0,5.0,2.0
+      - SHARD_BY=,title,title,
+      - NEXT_POOL_WORKERS=1,2,2,3
       - EOF_TO_RECEIVE=10
     volumes:
       - persistanceGateway:/persistance_files
@@ -644,6 +644,8 @@ services:
       - QUERY_RESULTS_PATH=/data/
       - QUERIES=1,2,3,4,5
       - SERVER_PORT=12345
+      - BOOK_FILE=books20.csv
+      - REVIEW_FILE=reviews20.csv
     volumes:
       - dataVolume:/data
 
@@ -658,6 +660,8 @@ services:
       - QUERY_RESULTS_PATH=/data/
       - QUERIES=1,2,3,4,5
       - SERVER_PORT=12345
+      - BOOK_FILE=books50.csv
+      - REVIEW_FILE=reviews50.csv
     volumes:
       - dataVolume:/data
 
