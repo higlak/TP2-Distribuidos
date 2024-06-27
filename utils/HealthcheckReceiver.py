@@ -34,24 +34,24 @@ class HealthcheckReceiver():
                 self.close()
                 break        
             try:
-                print(f"[Worker {self.worker_id}] Waiting for healthcheck")
+                #print(f"[Worker {self.worker_id}] Waiting for healthcheck")
                 msg, addr = self.socket.recvfrom(BUFFER_BYTES)
                 if msg == HEARTBEAT_MSG:
-                    print(f"[Worker {self.worker_id}] Received {msg.decode()} from {addr}")
+                    #print(f"[Worker {self.worker_id}] Received {msg.decode()} from {addr}")
                     self.send_alive(addr)
             except socket.timeout:
-                print(f"[Worker {self.worker_id}] Timeout waiting for healthcheck. Retrying...")
+                #print(f"[Worker {self.worker_id}] Timeout waiting for healthcheck. Retrying...")
                 continue
             except OSError as e:
                 print(f"[Worker {self.worker_id}] Socket error: ", e)
                 break
 
     def send_alive(self, addr):
-        print(f"[Worker {self.worker_id}] Sending {ALIVE_MSG.decode()} to {addr}")
+        #print(f"[Worker {self.worker_id}] Sending {ALIVE_MSG.decode()} to {addr}")
         try:
             self.socket.sendto(ALIVE_MSG, addr)
         except OSError as e:
-            print(f"[Worker {self.worker_id}] Error sending alive to {addr}: {e}")
+            #print(f"[Worker {self.worker_id}] Error sending alive to {addr}: {e}")
             self.main_thread.terminate()
     
     def close(self):
