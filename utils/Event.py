@@ -1,19 +1,18 @@
 import time
 
-ALIVE_ATTEMPS = 0
-
 class Event():
-    def __init__(self, type, timeout, container_name=None):
+    def __init__(self, type, timeout, container_name=None, attempts=0):
         self.type = type
         self.container_name = container_name
         self.timeout = timeout
-        self.attemps = ALIVE_ATTEMPS
+        self.attemps = attempts
+        self.starting_attemps = attempts
 
     def did_timeout(self):
         return time.time() > self.timeout
     
     def restart_attemps(self):
-        self.attemps = ALIVE_ATTEMPS
+        self.attemps = self.starting_attemps
 
     def increase_timeout(self, ammount):
         self.timeout = time.time() + ammount
