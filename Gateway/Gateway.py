@@ -183,6 +183,7 @@ class Gateway():
     def reconected_too_late(self):
         return time.time() > self.starting_time + TIME_FOR_RECONNECTION
 
+    #cuando se tiran muchos nodos a la vez no se avanza porque el gateway no tiene suficiente tiempo
     def handle_last_execution_client_reconection(self):
         if not self.last_execution_clients:
             return True
@@ -198,7 +199,6 @@ class Gateway():
             self.client_handlers[NO_CLIENT_ID] = sender_handler
             
             self.last_execution_clients = []
-        #meter al sistema los eof(se la bancan los workers si es lo unico que tienen de un cliente?)
         return True
     
     def start_gateway_ins(self):
