@@ -9,6 +9,7 @@
 Para levantar los containers se brindan los siguientes scripts que deberan ser ejecutados desde el root del proyecto:
 - **run.sh** levantar los container y los ejecutara, segun esten dispuestos en el docker compose
 - **stop.sh**: frenara la ejecucion del programa con un gracefull finish y bajara los contenedores
+Se debe contar con las carpetas data, persistance_files, persistanceGateway
  
 
 El sistema presentado es configurable utilizando las herramientas provistas en la carpeta config. Habrá un archivo por query que indique las configuraciones de los workers, un archivo de configuracion para el cliente, y otro para el gateway. Luego corriendo load_docker_config.py esta configuraciones seran plasmadas en el docker-compose-dev.yaml
@@ -65,4 +66,4 @@ REVIEW_QUERIES = 3,5
 
 ### Link al informe
 
-https://docs.google.com/document/d/1vvd63Mq2xXhbs_8CsDVUTOJ195rTSJZ3rQM41h5i8pQ/edit
+https://docs.google.com/document/d/11FHmWrnTDFABLqcCNOFAavCO7b3Rbp9zdDxgD_pT-0Q/edit
